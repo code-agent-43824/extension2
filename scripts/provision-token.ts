@@ -13,13 +13,29 @@ import { standDir, userPin, venvPython } from "./setup-stand.ts";
 export const caDir = join(standDir, "ca");
 export const subjectCommonName = "Stand User";
 
+// The subject of a qualified certificate in the usual DER order, with Cyrillic, a comma and quotes
+// in values: enough to exercise how the shim formats SubjectName.
+export const subjectAttributes = [
+  { rdn: "countryName", value: "RU" },
+  { rdn: "stateOrProvinceName", value: "77 Москва" },
+  { rdn: "localityName", value: "г. Москва" },
+  { rdn: "streetAddress", value: "ул. Тестовая, д. 1" },
+  { rdn: "organizationName", value: 'ООО "Стенд"' },
+  { rdn: "surname", value: "Тестов" },
+  { rdn: "givenName", value: "Тест Тестович" },
+  { rdn: "commonName", value: subjectCommonName },
+  { rdn: "INN", value: "007700000000" },
+  { rdn: "SNILS", value: "00000000000" },
+  { rdn: "emailAddress", value: "stand@example.com" },
+];
+
 export async function provisionToken(): Promise<void> {
   const server = await servePages({ "/": blankPage });
   const context = await launchStand();
   try {
     const page = await openStandPage(context, `${server.url}/`);
     const { deviceId, csr } = await page.evaluate(
-      async ({ loadPlugin, pin, cn }) => {
+      async ({ loadPlugin, pin, subject }) => {
         const plugin = await (0, eval)(loadPlugin)();
         const [deviceId] = await plugin.enumerateDevices();
         await plugin.login(deviceId, pin);
@@ -31,16 +47,13 @@ export async function provisionToken(): Promise<void> {
         const csr = await plugin.createPkcs10(
           deviceId,
           keyId,
-          [
-            { rdn: "commonName", value: cn },
-            { rdn: "countryName", value: "RU" },
-          ],
+          subject,
           { keyUsage: ["digitalSignature", "nonRepudiation"], extKeyUsage: ["clientAuth", "emailProtection"] },
           { hashAlgorithm: plugin.HASH_TYPE_GOST3411_12_256 },
         );
         return { deviceId, csr };
       },
-      { loadPlugin: loadPluginSource, pin: userPin, cn: subjectCommonName },
+      { loadPlugin: loadPluginSource, pin: userPin, subject: subjectAttributes },
     );
 
     const csrPath = join(standDir, "user.csr.pem");

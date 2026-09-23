@@ -68,8 +68,17 @@ def explicit(n, body):
     return der(0xA0 + n, body)
 
 
+# The CA name in the usual DER order (country first), with a Cyrillic organisation.
 def name(cn):
-    return seq(der(0x31, seq(oid("2.5.4.3"), core.UTF8String(cn).dump())), der(0x31, seq(oid("2.5.4.6"), core.PrintableString("RU").dump())))
+    return seq(
+        der(0x31, seq(oid("2.5.4.6"), core.PrintableString("RU").dump())),
+        der(0x31, seq(oid("2.5.4.10"), core.UTF8String("Стенд").dump())),
+        der(0x31, seq(oid("2.5.4.3"), core.UTF8String(cn).dump())),
+    )
+
+
+def generalized_time(tag, moment):
+    return der(tag, moment.strftime("%Y%m%d%H%M%SZ").encode())
 
 
 def extension(ext_oid, value, critical=False):
@@ -163,6 +172,14 @@ def issue(ca_dir, csr_pem_path, out_path):
             # digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment, keyAgreement
             extension("2.5.29.15", core.BitString((1, 1, 1, 1, 1)).dump(), critical=True),
             extension("2.5.29.37", seq(oid("1.3.6.1.5.5.7.3.2"), oid("1.3.6.1.5.5.7.3.4"))),
+            # Private key usage period, as Russian qualified certificates carry it.
+            extension(
+                "2.5.29.16",
+                seq(
+                    generalized_time(0x80, now - datetime.timedelta(days=1)),
+                    generalized_time(0x81, now + datetime.timedelta(days=365)),
+                ),
+            ),
         ],
         ca_key,
     )
