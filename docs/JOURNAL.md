@@ -1,0 +1,69 @@
+# JOURNAL — что мы узнали
+
+Новые записи сверху.
+
+## 2026-09-23 — стенд без железа собирается из скачиваемых файлов
+
+**Гипотеза.** Настоящий Рутокен Плагин можно запустить в Linux-контейнере против fake Рутокена из SoftHSMv2,
+без USB-устройства и без установки в систему.
+
+**Что сделано.** Скачаны и разобраны файлы, из которых собирается стенд.
+
+| Файл | Откуда | SHA-256 |
+| --- | --- | --- |
+| `libnpRutokenPlugin_4.12.3-1_amd64.deb` | `download.rutoken.ru/Rutoken_Plugin/Current/Linux/` (версия 4.12.3.0 от 17.09.2026) | `784e5e13ee04c25568befed9791727b5d9a0987db3d052dac395ac0a64aefe74` |
+| `softhsm-portable-linux-x64.zip` | релиз `v2.7.0-portable.42` форка `code-agent-43824/SoftHSMv2` | `3105ea2cf6db10feeb34a3709fdcd69a47ab98b7a24914c9107204e474213936` |
+| `softhsm-testkit-linux-x64.zip` | тот же релиз | `70cf1d69376a18eb92e5d294d39a31eff854c63d06cde113dcdb3a3f98a85c03` |
+| CRX Адаптера Рутокен Плагин 1.1.0.0 | Chrome Web Store, id `ohedcglhbbfdgaogjhcclacoccbagkjg` | хеш снимается при написании скрипта: магазин отдаёт последнюю версию |
+
+**Что показала проверка.**
+
+- В deb лежат `FireWyrmNativeMessageHost`, `libnpRutokenPlugin.so` и **собственная копия** `librtpkcs11ecp.so`,
+  всё в `/opt/aktivco/rutokenplugin/`. Зависимости пакета: `libc6`, `libpcsclite1`, `pcscd`.
+- Манифест native host `ru.rutoken.firewyrmhost` пускает только три id расширений Рутокена, среди них
+  `ohedcglhbbfdgaogjhcclacoccbagkjg`. Своё расширение к хосту напрямую не подключить; адаптер на стенде нужно
+  грузить с его родным id.
+- В манифесте адаптера нет поля `key`; в `background.js` он регистрирует `inject.js` в мире страницы на всех URL
+  с `document_start`, а `inject.js` создаёт `window["C3B7563B-BF85-45B7-88FC-7CFF1BD3C2DB"]`.
+- Портируемый fake Рутокен — один `libsofthsm2.so` со статическим OpenSSL; профиль включается строкой
+  `FAKE_RUTOKEN_ECP = true` в `~/softhsm/softhsm.conf`. Тест-кит несёт библиотеки OpenSC.
+- Chromium для Playwright уже лежит в `/opt/pw-browsers`.
+
+**Вывод.** Все части стенда скачиваются без авторизации. Не проверено, что хост действительно грузит
+`librtpkcs11ecp.so` из своего каталога, что хватает `libpcsclite` без считывателей и что адаптер с ключом из
+CRX получает нужный id в headless Chromium — это проверки этапа 1 (`PLAN.md`).
+
+## 2026-09-23 — демо-страница требует атрибут, которого не умеет `sign` Рутокена
+
+**Гипотеза.** Подпись на демо-странице `cades_bes_sample.html` можно отобразить прямо на метод `sign` Рутокен
+Плагина.
+
+**Что сделано.** Прочитан `SignCadesBES_Async` из `async_code.js` страницы и опции `sign` в документации API 4.12.3.
+
+**Что показала проверка.** Страница добавляет в подписанные атрибуты время подписи и **имя документа**
+(`CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_NAME`). У `sign` есть только время подписи (`addSignTime`),
+ESS-сертификат, сведения о системе; произвольных атрибутов нет.
+
+**Вывод.** CMS и подписанные атрибуты собираем своим кодом, у токена просим `rawSign` от хеша. Порядок байт
+хеша и подписи — проверять на стенде.
+
+## 2026-09-23 — точка подмены: `window.cadesplugin` до скрипта сайта
+
+**Гипотеза.** Можно подменить КриптоПро, не трогая файлы сайта и не имея расширения КриптоПро.
+
+**Что сделано.** Прочитаны `cadesplugin_api.js` 2.4.5, копия внутри `crypto-pro` 2.5.2, `nmcades_plugin_api.js` и
+`content.js` расширения КриптоПро 1.3.17.
+
+**Что показала проверка.** `cadesplugin_api.js` 2.4.5 начинается с
+`if (window.cadesplugin && window.cadesplugin.LOG_LEVEL_DEBUG) return;`, старая копия в `crypto-pro` — с
+`if (window.cadesplugin) return;`. `nmcades_plugin_api.js` выходит, если есть `window.cpcsp_chrome_nmcades`.
+
+**Вывод.** Скрипт в мире страницы на `document_start` определяет `window.cadesplugin` целиком (Promise, константы,
+`CreateObjectAsync`, `async_spawn`, `getLastError`, `set_log_level`, `get_extension_*`) — и скрипт сайта его не
+трогает. Подробности — `ANALYSIS.md`, раздел 3.
+
+## 2026-09-23 — работа в ветке до принятия правил
+
+Анализ сначала был закоммичен в ветку `claude/analysis-cryptopro-rutoken-reuutn`. В тот же день владелец велел
+работать по `code-agent-43824/coding-rules` без веток; анализ перенесён в `main` отдельным коммитом. Ветка
+осталась на GitHub: удаление опубликованной ветки — действие с согласия владельца (§5 `AGENTS.md`).
