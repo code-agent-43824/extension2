@@ -39,7 +39,8 @@ test.beforeAll(async () => {
   context = await launchStand({
     home,
     online: [new URL(ca).hostname],
-    extensions: [stand.adapter, standExtension([`${ca}/*`])],
+    // CryptoPro's own extension too: both pages must still work through ours (with-cryptopro.spec.ts).
+    extensions: [stand.adapter, standExtension([`${ca}/*`]), stand.cryptoproExtension],
   });
   await clearSites(context);
   await enableSite(context, ca);

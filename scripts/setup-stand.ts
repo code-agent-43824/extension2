@@ -1,7 +1,7 @@
 // Builds the hardware-free test stand in stand/ from the files in vendor/:
 // the real Rutoken Plugin (native host + plugin) with its bundled PKCS #11
 // library replaced by the SoftHSMv2 fake Rutoken, a token store under a stand
-// HOME, and the Rutoken adapter unpacked under its store id. Nothing is
+// HOME, and the Rutoken adapter and CryptoPro's extension unpacked under their store ids. Nothing is
 // installed into the system; everything a browser run needs is under stand/.
 import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
@@ -15,10 +15,15 @@ export const stand = {
   home: join(standDir, "home"),
   profile: join(standDir, "profile"),
   adapter: join(standDir, "adapter"),
+  // CryptoPro's own browser extension, for checking that ours silences it on enabled sites. The
+  // CryptoPro plug-in and CSP it talks to are not on the stand.
+  cryptoproExtension: join(standDir, "cryptopro-extension"),
   pluginDir: join(standDir, "plugin", "opt", "aktivco", "rutokenplugin"),
   softhsm: join(standDir, "softhsm"),
 };
 export const adapterId = "ohedcglhbbfdgaogjhcclacoccbagkjg";
+// The Manifest V3 CryptoPro extension, one of the ids cadesplugin_api.js loads nmcades_plugin_api.js from.
+export const cryptoproExtensionId = "pfhgbfnnjiafkhfdkmpiflachepdcjod";
 export const nativeHostName = "ru.rutoken.firewyrmhost";
 // Factory PINs of a Rutoken ECP; the fake token is initialised with the same.
 export const userPin = "12345678";
@@ -58,18 +63,19 @@ function setupToken(): void {
   run(util, ["--init-token", "--slot", "0", "--label", tokenLabel, "--so-pin", soPin, "--pin", userPin], standEnv());
 }
 
-function setupAdapter(): void {
-  const crx = parseCrx(readFileSync(vendorPath("rutoken-adapter")));
+// A Chrome Web Store extension unpacked under its store id: sites and native hosts check the id.
+function setupStoreExtension(vendorName: string, id: string, dir: string): void {
+  const crx = parseCrx(readFileSync(vendorPath(vendorName)));
   const key = developerKey(crx);
-  if (extensionIdFromKey(key) !== adapterId) throw new Error("adapter CRX key does not give the store id");
-  mkdirSync(stand.adapter, { recursive: true });
-  const zip = join(standDir, "adapter.zip");
+  if (extensionIdFromKey(key) !== id) throw new Error(`${vendorName} CRX key does not give the store id`);
+  mkdirSync(dir, { recursive: true });
+  const zip = join(standDir, `${vendorName}.zip`);
   writeFileSync(zip, crx.zip);
-  run("unzip", ["-oq", zip, "-d", stand.adapter]);
+  run("unzip", ["-oq", zip, "-d", dir]);
   rmSync(zip);
   // Chrome refuses an unpacked extension that carries the store's signature metadata.
-  rmSync(join(stand.adapter, "_metadata"), { recursive: true, force: true });
-  const manifestPath = join(stand.adapter, "manifest.json");
+  rmSync(join(dir, "_metadata"), { recursive: true, force: true });
+  const manifestPath = join(dir, "manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
   manifest.key = key.toString("base64");
   delete manifest.update_url;
@@ -99,7 +105,8 @@ export function setupStand(): void {
   mkdirSync(standDir, { recursive: true });
   setupPlugin();
   setupToken();
-  setupAdapter();
+  setupStoreExtension("rutoken-adapter", adapterId, stand.adapter);
+  setupStoreExtension("cryptopro-extension", cryptoproExtensionId, stand.cryptoproExtension);
   setupNativeHost();
   setupPythonTools();
 }
