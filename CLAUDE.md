@@ -58,6 +58,14 @@ use the `chromium` channel, not the headless shell; wait for the adapter object 
   2026-09-23. Reason: a verifier must not share code with what it checks, and no maintained npm GOST signature
   library was found; these two are on PyPI and pinned by hash. Never ship them in the extension.
 
+## Versions
+
+The extension version lives only in `package.json`; the build copies it into the manifest and the page-world
+script. Until the first release it is `0.<stage>.<n>`: the minor number is the roadmap stage being built, the patch
+counts fixes within it. The CryptoPro versions the shim reports to sites (`PluginVersion`, `CSPVersion`) are
+compatibility constants, not our version; why they are what they are is in `docs/PLAN.md` of stage 2 and
+`docs/JOURNAL.md`.
+
 ## Departures from AGENTS.md
 
 None.
