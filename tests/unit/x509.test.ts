@@ -3,6 +3,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
+import { decodeTime } from "../../src/page/asn1.ts";
 import { formatName } from "../../src/page/dn.ts";
 import { sha1 } from "../../src/page/sha1.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
@@ -17,6 +18,19 @@ describe("sha1", () => {
       const data = randomBytes(length);
       expect(Buffer.from(sha1(data)).toString("hex")).toBe(createHash("sha1").update(data).digest("hex"));
     }
+  });
+});
+
+describe("decodeTime", () => {
+  const time = (tag: number, text: string) => decodeTime({ tag, der: new Uint8Array(), value: new TextEncoder().encode(text) });
+
+  it("reads UTCTime and GeneralizedTime, with fractional seconds as the Ministry's root certificate has them", () => {
+    expect(time(0x17, "491231235959Z").toISOString()).toBe("2049-12-31T23:59:59.000Z");
+    expect(time(0x17, "500101000000Z").toISOString()).toBe("1950-01-01T00:00:00.000Z");
+    expect(time(0x18, "20330101000000Z").toISOString()).toBe("2033-01-01T00:00:00.000Z");
+    expect(time(0x80, "20251217100600.876Z").toISOString()).toBe("2025-12-17T10:06:00.876Z");
+    expect(time(0x80, "20251217100600.8Z").toISOString()).toBe("2025-12-17T10:06:00.800Z");
+    expect(() => time(0x18, "20251217100600+0300")).toThrow("unsupported time");
   });
 });
 

@@ -63,13 +63,16 @@ export function hex(bytes: Uint8Array): string {
 }
 
 // UTCTime (tag 0x17; YYMMDDHHMMSSZ, years 1950–2049 as in RFC 5280) or GeneralizedTime
-// (YYYYMMDDHHMMSSZ), including implicitly tagged GeneralizedTime such as in PrivateKeyUsagePeriod.
+// (YYYYMMDDHHMMSS[.fff]Z), including implicitly tagged GeneralizedTime such as in PrivateKeyUsagePeriod.
+// RFC 5280 forbids fractional seconds in certificates, but the Ministry's root certificate
+// 9EC1A7DD438D8D647AC40976FC85C33F5D0FBA2B has them ("20251217100600.876Z").
 export function decodeTime(node: Node): Date {
   const text = new TextDecoder("latin1").decode(node.value);
   const utc = node.tag === 0x17;
-  const match = (utc ? /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/ : /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/).exec(text);
+  const match = (utc ? /^(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})Z$/ : /^(\d{4})(\d{2})(\d{2})(\d{2})(\d{2})(\d{2})(?:\.(\d{1,3}))?Z$/).exec(text);
   if (!match) throw new Error(`DER: unsupported time ${text}`);
-  const [y, mo, d, h, mi, s] = match.slice(1).map(Number) as [number, number, number, number, number, number];
+  const [y, mo, d, h, mi, s] = match.slice(1, 7).map(Number) as [number, number, number, number, number, number];
+  const ms = Number((match[7] ?? "").padEnd(3, "0"));
   const year = utc ? (y < 50 ? 2000 + y : 1900 + y) : y;
-  return new Date(Date.UTC(year, mo - 1, d, h, mi, s));
+  return new Date(Date.UTC(year, mo - 1, d, h, mi, s, ms));
 }
