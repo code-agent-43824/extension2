@@ -17,17 +17,27 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `scripts/vendor-lock.json`.
 - `npm run stand` — fetch vendor files, rebuild `stand/` from scratch (Rutoken Plugin, fake Rutoken, adapter,
   Python venv) and provision the token with a key and a test-CA certificate. Needs network (vendor files, PyPI).
-- `npm run check` — typecheck and unit tests; must pass before every commit.
-- `npm run test:stand` — Playwright tests against the built stand; `npx playwright test -g "<name>"` for one.
+- `npm run build` — build the extension into `dist/extension/` (load it unpacked in Chrome).
+- `node scripts/gen-constants.ts` — regenerate `src/page/constants.ts` after pinning a new `cadesplugin_api.js`.
+- `npm run check` — typecheck (Node code, then `src/` with DOM types) and unit tests; must pass before every commit.
+- `npm run test:stand` — build, then Playwright tests against the built stand; `npx playwright test -g "<name>"` for one.
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
 
 ## Map of the code
 
+- `src/manifest.json` — extension manifest; the build fills in the version.
+- `src/page/` — the MAIN-world content script, bundled into one `page.js`: `main.ts` (entry), `cadesplugin.ts`
+  (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers), `rutoken.ts` (waiting for the
+  Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
+  case-insensitively by ProgID), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
+  `constants.ts` (generated, do not edit).
+
 - `scripts/` — Node scripts run directly by Node's type stripping (no build step): `fetch-vendor.ts` +
-  `vendor-lock.json` (pinned third-party files), `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
+  `vendor-lock.json` (pinned third-party files), `build.ts` (esbuild), `gen-constants.ts`, `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
   PINs, paths), `provision-token.ts` (key + certificate on the fake token).
 - `tests/unit/` — Vitest unit tests (`vitest.config.ts` limits Vitest to this directory).
-- `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages.
+- `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
+  `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path.
 - `tests/tools/` — independent Python GOST tooling (`gost_ca.py`), hash-pinned in `requirements.txt`.
 
 Stand pitfalls (details in `docs/JOURNAL.md`): the native host finds the plugin only via `$HOME/.mozilla/plugins`,

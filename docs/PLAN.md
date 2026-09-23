@@ -1,6 +1,7 @@
 # PLAN — этап 2: каркас расширения и «загрузка плагина»
 
-Начат 2026-09-23 после проверки этапа 1 владельцем.
+Начат 2026-09-23 после проверки этапа 1 владельцем. Все действия выполнены 2026-09-23; этап ждёт проверки
+владельцем, затем план переписывается под этап 3.
 
 Цель этапа — из [`ROADMAP.md`](ROADMAP.md): демо-страница КриптоПро `cades_bes_sample.html` на стенде, с нашим
 расширением вместо КриптоПро, показывает «Расширение загружено», «Плагин загружен» и «Криптопровайдер загружен» со
@@ -11,28 +12,28 @@
 
 ## Действия
 
-- [ ] **1. Сборка расширения.** esbuild собирает `src/` в `dist/extension/`: манифест MV3 и один файл скрипта мира
+- [x] **1. Сборка расширения.** esbuild собирает `src/` в `dist/extension/`: манифест MV3 и один файл скрипта мира
   страницы (`content_scripts` с `world: "MAIN"`, `run_at: "document_start"`, `all_frames: true`, на всех URL).
   Версия расширения берётся из `package.json` (сейчас `0.2.0`, см. «Версии» в `CLAUDE.md`). Команда `npm run build`.
-- [ ] **2. Объект `window.cadesplugin`.** Promise с полями, как у `cadesplugin_api.js` 2.4.5: все константы,
+- [x] **2. Объект `window.cadesplugin`.** Promise с полями, как у `cadesplugin_api.js` 2.4.5: все константы,
   `JSModuleVersion`, `async_spawn`, `set_log_level`, `getLastError`, `get_extension_version`,
   `get_extension_id`, `CreateObjectAsync`, `ReleasePluginObjects`, `is_capilite_enabled`, `set`. Константы
   переносятся из `cadesplugin_api.js` скриптом-генератором, а не руками. Ответы на запросы версии и id расширения
   через `postMessage`, как у расширения КриптоПро.
-- [ ] **3. Загрузка Рутокен Плагина.** После разбора документа (`DOMContentLoaded`, чтобы колбэки сайта успели
+- [x] **3. Загрузка Рутокен Плагина.** После разбора документа (`DOMContentLoaded`, чтобы колбэки сайта успели
   определиться): `cadesplugin_extension_loaded_callback`, ожидание объекта адаптера Рутокена, `initialize`,
   `isPluginInstalled`, `loadPlugin`, затем `cadesplugin_plugin_loaded_callback` и resolve. Нет адаптера или
   плагина — reject «Плагин недоступен», как у КриптоПро; настоящая причина — в консоль. Таймаут 20 с или
   `window.cadesplugin_load_timeout`, по нему `cadesplugin_timeout_failed_callback` и reject «Истекло время ожидания
   загрузки плагина».
-- [ ] **4. `CAdESCOM.About`.** `Version`, `MajorVersion`, `MinorVersion`, `BuildVersion`, `PluginVersion`,
+- [x] **4. `CAdESCOM.About`.** `Version`, `MajorVersion`, `MinorVersion`, `BuildVersion`, `PluginVersion`,
   `CSPVersion()`, `CSPName()`; объект версии с `MajorVersion`, `MinorVersion`, `BuildVersion`, `toString()`. Свойства
   и методы асинхронные, как у настоящего плагина. Неизвестный объект в `CreateObjectAsync` — reject с понятным
   текстом, который отдаёт `getLastError`.
-- [ ] **5. Демо-страница на стенде.** Файлы демо-страницы и `cadesplugin_api.js` скачиваются в `vendor/` по
+- [x] **5. Демо-страница на стенде.** Файлы демо-страницы и `cadesplugin_api.js` скачиваются в `vendor/` по
   закреплённым SHA-256 и раздаются локальным сервером по тем же относительным путям, что на `cryptopro.ru`.
   Внешние запросы страницы (логотип, проверка обновлений на `api.cryptopro.ru`) в тесте блокируются.
-- [ ] **6. Тесты.** Модульные: константы, `async_spawn`, `getLastError`, объект версии. На стенде: демо-страница с
+- [x] **6. Тесты.** Модульные: константы, `async_spawn`, `getLastError`, объект версии. На стенде: демо-страница с
   адаптером и нашим расширением показывает три строки из цели этапа и версию плагина; без адаптера Рутокена —
   «Плагин недоступен». Сборка расширения и эти тесты — в CI.
 
@@ -51,6 +52,8 @@
   за расширение КриптоПро незачем.
 
 ## Проверки, которые этап должен закрыть
+
+Закрыты 2026-09-23, результаты — в `JOURNAL.md`.
 
 - Адаптер Рутокена разрешает `initialize` только один раз на странице. Что делать, если сайт сам работает с
   Рутокен Плагином и уже вызвал его, — проверить и записать в `JOURNAL.md`.
