@@ -85,6 +85,9 @@ function proxyOptions(): string[] {
 export async function launchStand({ extensions = [stand.adapter], profile = stand.profile, home = stand.home, online = [] }: StandOptions = {}) {
   const list = extensions.join(",");
   const network = online.length ? proxyOptions() : [];
+  // The profile outlives builds, and Chromium keeps running the service worker it cached for an unpacked
+  // extension of the same version: a rebuilt background.js would not run (docs/JOURNAL.md).
+  rmSync(join(profile, "Default", "Service Worker"), { recursive: true, force: true });
   const context = await chromium.launchPersistentContext(profile, {
     headless: true,
     // The full Chromium build: the headless shell cannot load extensions.
