@@ -71,6 +71,10 @@ use the `chromium` channel, not the headless shell; wait for the adapter object 
   is acceptable as long as an independent verifier accepts the signature. So use the Rutoken `sign` method where
   it covers the request, and write our own CMS code only where `sign` cannot produce a verifiable result.
 
+- **The extension is off by default and enabled per site.** Owner, 2026-09-23. Reason: otherwise any site can
+  trigger a signature and a real CryptoPro install is intercepted everywhere (risks 7 and 9 in `docs/ANALYSIS.md`).
+  Site access is an optional host permission requested when the user enables a site.
+
 - **Independent GOST tooling is Python (`gostcrypto`, `asn1crypto`) in `tests/tools/`, test-only.** Agent,
   2026-09-23. Reason: a verifier must not share code with what it checks, and no maintained npm GOST signature
   library was found; these two are on PyPI and pinned by hash. Never ship them in the extension.
