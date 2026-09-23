@@ -6,7 +6,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { packageVersion } from "../../scripts/build.ts";
-import { vendorDir } from "../../scripts/fetch-vendor.ts";
+import { repoRoot, vendorDir } from "../../scripts/fetch-vendor.ts";
 import { stand, standDir, userPin } from "../../scripts/setup-stand.ts";
 import {
   clearSites,
@@ -105,6 +105,20 @@ test.describe("with the Rutoken adapter", () => {
     await expect(page.locator("#pkupInfo")).toContainText("Срок действия ключа (2.5.29.16) до:");
     const from = new Date(x509.validFrom).toISOString().replace(/^(\d+)-(\d+)-(\d+)T([\d:]+).*$/, "$3.$2.$1 $4");
     await expectText(page, "from", `Выдан: ${from} UTC`);
+  });
+
+  test("tools/dump-fields.js reads the plug-in and the token certificate through the extension", async () => {
+    const x509 = new X509Certificate(readFileSync(join(standDir, "user.pem")));
+    const page = await openStandPage(context, server.url + demoPath);
+    const dump = JSON.parse(await page.evaluate(readFileSync(join(repoRoot, "tools", "dump-fields.js"), "utf8")));
+    expect(dump.about).toMatchObject({ PluginVersion: "2.0.15000", CSPVersion: "5.0.13000", CSPName: "Rutoken Plugin 4.12.3.0" });
+    expect(dump.certificates).toHaveLength(1);
+    expect(dump.certificates[0]).toMatchObject({
+      Thumbprint: x509.fingerprint.replaceAll(":", ""),
+      SubjectName: expect.stringContaining("CN=Stand User"),
+      IsValid: true,
+      PublicKey: { Algorithm: "1.2.643.7.1.1.1.1" },
+    });
   });
 
   test("signs Hello World with an attached CAdES-BES signature that verifies", async () => {

@@ -45,6 +45,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `scripts/` — Node scripts run directly by Node's type stripping (no build step): `fetch-vendor.ts` +
   `vendor-lock.json` (pinned third-party files), `build.ts` (esbuild), `package.ts` (the ZIP), `gen-constants.ts`, `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
   PINs, paths), `provision-token.ts` (key + certificate on the fake token).
+- `tools/dump-fields.js` — pasted by hand into the DevTools console on a cadesplugin page: dumps the plug-in and
+  certificate fields as JSON; `scripts/compare-fields.ts` diffs a real-CryptoPro dump against ours
+  (`docs/MANUAL-CHECK.md`, the manual install and checklist).
 - `tests/unit/` — Vitest unit tests (`vitest.config.ts` limits Vitest to this directory); `fakes.ts` holds the
   fake plugin and PIN window; `tests/fixtures/` holds copies of a stand certificate and its CA so they run without
   the stand.
