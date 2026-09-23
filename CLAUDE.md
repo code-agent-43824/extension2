@@ -15,13 +15,24 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `npm install` — dev dependencies (Playwright uses the browsers in `/opt/pw-browsers`; do not run `playwright install` there).
 - `node scripts/fetch-vendor.ts` — download third-party stand files into `vendor/`, verified against
   `scripts/vendor-lock.json`.
+- `npm run stand` — fetch vendor files, rebuild `stand/` from scratch (Rutoken Plugin, fake Rutoken, adapter,
+  Python venv) and provision the token with a key and a test-CA certificate. Needs network (vendor files, PyPI).
 - `npm run check` — typecheck and unit tests; must pass before every commit.
+- `npm run test:stand` — Playwright tests against the built stand; `npx playwright test -g "<name>"` for one.
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
 
 ## Map of the code
 
-- `scripts/` — Node scripts run directly by Node's type stripping (no build step): vendor fetching, CRX reading.
-- `tests/unit/` — Vitest unit tests.
+- `scripts/` — Node scripts run directly by Node's type stripping (no build step): `fetch-vendor.ts` +
+  `vendor-lock.json` (pinned third-party files), `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
+  PINs, paths), `provision-token.ts` (key + certificate on the fake token).
+- `tests/unit/` — Vitest unit tests (`vitest.config.ts` limits Vitest to this directory).
+- `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages.
+- `tests/tools/` — independent Python GOST tooling (`gost_ca.py`), hash-pinned in `requirements.txt`.
+
+Stand pitfalls (details in `docs/JOURNAL.md`): the native host finds the plugin only via `$HOME/.mozilla/plugins`,
+and the plugin loads `librtpkcs11ecp.so` from that same directory, so the stand runs Chromium with its own `HOME`;
+use the `chromium` channel, not the headless shell; wait for the adapter object with `openStandPage`.
 
 ## Settled decisions
 
@@ -42,6 +53,10 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   object byte for byte is not a goal; a missing field or attribute (e.g. the demo page's document-name attribute)
   is acceptable as long as an independent verifier accepts the signature. So use the Rutoken `sign` method where
   it covers the request, and write our own CMS code only where `sign` cannot produce a verifiable result.
+
+- **Independent GOST tooling is Python (`gostcrypto`, `asn1crypto`) in `tests/tools/`, test-only.** Agent,
+  2026-09-23. Reason: a verifier must not share code with what it checks, and no maintained npm GOST signature
+  library was found; these two are on PyPI and pinned by hash. Never ship them in the extension.
 
 ## Departures from AGENTS.md
 

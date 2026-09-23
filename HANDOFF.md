@@ -2,6 +2,6 @@
 
 Обновлено: 2026-09-23.
 
-В работе этап 1, действие 3 из `docs/PLAN.md` — сборка стенда.
+В работе этап 1, действие 6 из `docs/PLAN.md` — CI.
 
-**Следующий шаг:** скрипт, раскладывающий Рутокен Плагин, fake Рутокен и адаптер из `vendor/` в `stand/`.
+**Следующий шаг:** workflow GitHub Actions: `npm ci`, `npm run check`, `npm run stand`, `npm run test:stand`.

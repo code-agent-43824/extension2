@@ -9,7 +9,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "check": "npm run typecheck && npm test"
+    "check": "npm run typecheck && npm test",
+    "stand": "node scripts/fetch-vendor.ts && node scripts/setup-stand.ts && node scripts/provision-token.ts",
+    "test:stand": "playwright test"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",

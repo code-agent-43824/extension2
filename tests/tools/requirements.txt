@@ -1,0 +1,4 @@
+# Independent GOST tooling for the test stand (test CA now, signature verification later).
+# Pinned by hash; installed by scripts/setup-stand.ts into stand/venv.
+asn1crypto==1.5.1 --hash=sha256:db4e40728b728508912cbb3d44f19ce188f218e9eba635821bb4b68564f8fd67
+gostcrypto==1.2.5 --hash=sha256:5cfc8b4c33d2a110fea0cfcb693b4a5f2b021004b9cf8d6bba8b78aab23d2001

@@ -9,7 +9,13 @@
     "erasableSyntaxOnly": true,
     "verbatimModuleSyntax": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": [
+      "node"
+    ]
   },
-  "include": ["scripts", "tests"]
+  "include": [
+    "scripts",
+    "tests",
+    "*.config.ts"
+  ]
 }
