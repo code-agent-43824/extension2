@@ -52,6 +52,13 @@ describe("CAdESCOM.Store", () => {
     await expect(root.PrivateKey).rejects.toMatchObject({ number: 0x80092004 });
   });
 
+  it("finds the certificates with a key by their extended property, as markirovka.crpt.ru asks", async () => {
+    const { CAPICOM_CERTIFICATE_FIND_EXTENDED_PROPERTY: property, CAPICOM_CURRENT_USER_STORE: user } = constants;
+    expect(await (await (await openStore(fakePlugin())).Find(property, 2)).Count).toBe(1);
+    expect(await (await (await openStore(fakePlugin())).Find(property, 9)).Count).toBe(0);
+    expect(await (await (await openStoreWith(fakePlugin(), roots, user, "Root")).Find(property, 2)).Count).toBe(0);
+  });
+
   it("skips a certificate that does not parse", async () => {
     expect(await (await openStore(fakePlugin([pem, "-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----"]))).Count).toBe(1);
   });
@@ -103,6 +110,8 @@ describe("CAdESCOM.Certificate", () => {
     const key = await cert.PrivateKey;
     expect(await key.ProviderName).toBe("Rutoken Plugin 4.12.3.0");
     expect(await key.UniqueContainerName).toBe(`\\\\.\\Rutoken 1669552163\\${certId}`);
+    await key.propset_CachePin(false);
+    expect(await key.CachePin).toBe(false);
   });
 
   it("is valid only inside its validity period", async () => {

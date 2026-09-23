@@ -8,6 +8,9 @@ import type { Session } from "./session.ts";
 
 const E_INVALIDARG = 0x80070057;
 const E_NOTIMPL = 0x80004001;
+// CAPICOM_PROPID_KEY_PROV_INFO, not among cadesplugin_api.js's constants. With FIND_EXTENDED_PROPERTY it picks
+// the certificates that have a key: CryptoPro 2.0.15700 finds 1 of 1 in My and 0 of 165 in Root (docs/JOURNAL.md).
+const PROPID_KEY_PROV_INFO = 2;
 
 // Dates cross the CryptoPro async API as strings in this form (DateToUTCStr in nmcades_plugin_api.js);
 // sites pass them to new Date(). Not yet compared with a real CryptoPro installation: docs/JOURNAL.md.
@@ -64,6 +67,19 @@ class PrivateKey {
 
   get ContainerName(): Promise<string> {
     return this.UniqueContainerName;
+  }
+
+  // CryptoPro keeps an entered PIN for the key when this is on. We ask for the PIN on every signature and log
+  // out after it, so the value is only remembered (markirovka.crpt.ru turns it off before signing).
+  #cachePin = false;
+
+  get CachePin(): Promise<boolean> {
+    return Promise.resolve(this.#cachePin);
+  }
+
+  propset_CachePin(value: unknown): Promise<void> {
+    this.#cachePin = Boolean(value);
+    return Promise.resolve();
   }
 }
 
@@ -209,6 +225,9 @@ export class Certificates {
           return (await item.SubjectName).toLowerCase().includes(wanted.toLowerCase());
         case constants.CAPICOM_CERTIFICATE_FIND_ISSUER_NAME:
           return (await item.IssuerName).toLowerCase().includes(wanted.toLowerCase());
+        case constants.CAPICOM_CERTIFICATE_FIND_EXTENDED_PROPERTY:
+          // Only the key's property is known; no certificate here carries any other.
+          return Number(criteria) === PROPID_KEY_PROV_INFO && (await item.HasPrivateKey());
         default:
           throw new CadesError(`Поиск сертификатов вида ${findType} не поддерживается`, E_NOTIMPL);
       }
