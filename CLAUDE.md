@@ -28,6 +28,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   testgost2012.cryptopro.ru (internet through the environment proxy); leaves screenshots in `stand/testgost/`.
 - `STAND_ONLINE=1 npx playwright test tests/stand/nalog.spec.ts` — after a build: the opt-in experiment on the FNS
   personal accounts (lkfl2.nalog.ru, lkip2.nalog.ru) with testgost2012 certificates; screenshots in `stand/nalog/`.
+- `STAND_ONLINE=1 npx playwright test tests/stand/crpt.spec.ts` — after a build: the opt-in experiment on Честный знак
+  (markirovka.crpt.ru) with a testgost2012 certificate, the CryptoPro way; screenshots in `stand/crpt/`.
 - `node scripts/setup-cryptopro-csp.ts <dir with .deb files>` (root), then
   `STAND_CRYPTOPRO_CSP=1 npx playwright test tests/stand/with-cryptopro-csp.spec.ts` — the opt-in local experiment with
   the real CryptoPro CSP and plug-in installed into the machine; the packages are licensed, never commit them.
@@ -69,7 +71,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
   `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `testgost.spec.ts`
   (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `nalog.spec.ts` (opt-in,
-  online) signs in by certificate on the FNS personal accounts up to the server refusing the CA; `with-cryptopro.spec.ts`
+  online) signs in by certificate on the FNS personal accounts up to the server refusing the CA; `crpt.spec.ts`
+  (opt-in, online) does the same on Честный знак; `testgost-certs.ts` issues their certificates; `with-cryptopro.spec.ts`
   loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `roots.spec.ts` drives the root store
   on the options page; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `verify.ts` runs the

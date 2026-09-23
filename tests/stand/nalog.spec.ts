@@ -5,25 +5,17 @@
 // and having the server refuse the certificate. Opt-in, since it needs the internet and outside services:
 // STAND_ONLINE=1 npx playwright test tests/stand/nalog.spec.ts
 // It runs on its own copy of the stand HOME and leaves screenshots in stand/nalog/.
-import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { expect, test, type BrowserContext } from "@playwright/test";
 import { cpSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { stand, standDir, userPin } from "../../scripts/setup-stand.ts";
+import { stand, standDir } from "../../scripts/setup-stand.ts";
 import { clearSites, enableSite, launchStand, openStandPage, standExtension } from "./harness.ts";
+import { enterPin, individual, issueTestgost, pinDialog, soleTrader, testgostCa as ca } from "./testgost-certs.ts";
 
-const ca = "https://testgost2012.cryptopro.ru";
 const lkfl = "https://lkfl2.nalog.ru";
 const lkip = "https://lkip2.nalog.ru";
 const outDir = join(standDir, "nalog");
 const home = join(outDir, "home");
-
-// The cabinets read the taxpayer from the certificate: an INN (and SNILS) for an individual, an OGRNIP too for
-// a sole trader. The numbers are made up, with valid check digits.
-const individual = { commonName: "Тестов Физлицо Тестович", dn: 'SN="Тестов";G="Физлицо Тестович";INN="770700000190";SNILS="11223344595";' };
-const soleTrader = {
-  commonName: "ИП Тестов Предприниматель Тестович",
-  dn: 'SN="Тестов";G="Предприниматель Тестович";INN="770700000264";SNILS="12345678964";OGRNIP="326770000000016";',
-};
 
 test.skip(!process.env.STAND_ONLINE, "needs the internet: set STAND_ONLINE=1");
 test.describe.configure({ mode: "serial" });
@@ -48,44 +40,10 @@ test.afterAll(async () => {
   await context?.close();
 });
 
-const pinDialog = (page: Page) => page.locator("#rutoken-cades-bridge-pin [role=dialog]");
-
-async function enterPin(page: Page) {
-  await pinDialog(page).locator("input[name=pin]").fill(userPin);
-  await pinDialog(page).locator("button[name=confirm]").click();
-}
-
-// The CA's form has no fields for INN, SNILS or OGRNIP; they are added to the name the page passes to
-// X500DistinguishedName.Encode, which our extension turns into the request on the token.
-async function issue({ commonName, dn }: { commonName: string; dn: string }) {
-  const page = await openStandPage(context, `${ca}/certsrv/certrqma.asp`);
-  page.on("dialog", (dialog) => dialog.accept());
-  await expect(page.locator("select[name=lbCSP] option").first()).toHaveText("Rutoken Plugin 4.12.3.0", { timeout: 60_000 });
-  await page.locator("select[name=lbCSP]").selectOption("80");
-  await page.locator("input[name=tbCommonName]").fill(commonName);
-  await page.locator("input[name=tbEmail]").fill("rutoken@example.ru");
-  await page.locator("input[name=tbCountry]").fill("RU");
-  await page.evaluate((extra) => {
-    const win = window as unknown as { BuildDistinguishedName: () => string };
-    const original = win.BuildDistinguishedName;
-    win.BuildDistinguishedName = () => original() + extra;
-  }, dn);
-  await page.locator("input[name=btnSubmit]").click();
-  await expect(pinDialog(page)).toContainText(`Владелец: ${commonName}`, { timeout: 30_000 });
-  await enterPin(page);
-  await page.waitForURL(/certfnsh\.asp/i, { timeout: 60_000 });
-  await expect(page.locator("#locInstallCert1")).toBeVisible({ timeout: 60_000 });
-  await page.locator("#locInstallCert1").click();
-  await expect(pinDialog(page)).toContainText(`Сертификат: ${commonName}`, { timeout: 30_000 });
-  await enterPin(page);
-  await expect(page.locator("body")).toContainText("Новый сертификат успешно установлен.", { timeout: 60_000 });
-  await page.close();
-}
-
 test("the test CA issues 256-bit certificates with an INN for an individual and a sole trader", async () => {
   test.setTimeout(300_000);
-  await issue(individual);
-  await issue(soleTrader);
+  await issueTestgost(context, individual);
+  await issueTestgost(context, soleTrader);
 });
 
 test("lkfl2: the page lists the certificate, the Rutoken signs, and the server refuses the CA", async () => {
