@@ -27,7 +27,7 @@
 - [x] **5. Дымовой тест стенда.** Playwright поднимает Chromium с адаптером, открывает локальную страницу-пробник:
   `rutoken.ready` → `loadPlugin` → `enumerateDevices` → `enumerateCertificates` → `login` → `sign` → `verify`.
   Тест зелёный локально.
-- [~] **6. CI.** GitHub Actions: сборка стенда и дымовой тест на каждый push в `main`.
+- [~] **6. CI.** GitHub Actions: сборка стенда и дымовой тест на каждый push в `main` (`.github/workflows/ci.yml`).
 
 ## Проверки, которые этап должен закрыть
 

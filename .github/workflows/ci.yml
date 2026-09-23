@@ -1,0 +1,34 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck and unit tests (before the stand exists, stand-only tests skip)
+        run: npm run check
+      - name: Install Chromium for Playwright
+        run: npx playwright install chromium
+      - name: Build the stand (vendor files pinned by SHA-256)
+        run: npm run stand
+      - name: Unit tests with vendor files present
+        run: npm test
+      - name: Stand tests
+        run: npm run test:stand
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-results
+          path: test-results/
+          if-no-files-found: ignore
