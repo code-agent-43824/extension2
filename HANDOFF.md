@@ -2,6 +2,8 @@
 
 Обновлено: 2026-09-23.
 
-В работе этап 1, действие 6 из `docs/PLAN.md` — CI.
+Незаконченной работы нет. Этап 1 выполнен и ждёт проверки владельцем (§13 `AGENTS.md`).
 
-**Следующий шаг:** workflow GitHub Actions: `npm ci`, `npm run check`, `npm run stand`, `npm run test:stand`.
+**Следующий шаг** после его ответа: переписать `docs/PLAN.md` под этап 2 из `docs/ROADMAP.md` — каркас расширения
+(esbuild, MV3, shim `window.cadesplugin` в мире страницы) и демо-страница `cades_bes_sample.html` на стенде,
+показывающая «Плагин загружен».
