@@ -8,6 +8,7 @@
   },
   "scripts": {
     "build": "node scripts/build.ts",
+    "package": "node scripts/package.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p src && tsc --noEmit -p src/extension",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",

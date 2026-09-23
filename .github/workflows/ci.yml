@@ -26,6 +26,13 @@ jobs:
         run: npm test
       - name: Stand tests
         run: npm run test:stand
+      - name: Package the extension for installing by hand
+        run: npm run package
+      - uses: actions/upload-artifact@v6
+        with:
+          name: cryptopro-via-rutoken
+          path: dist/cryptopro-via-rutoken-*.zip
+          if-no-files-found: error
       - uses: actions/upload-artifact@v6
         if: failure()
         with:
