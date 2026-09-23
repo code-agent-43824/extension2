@@ -21,7 +21,8 @@ export interface PageServer {
 }
 
 // Content scripts do not run on file:// pages by default, so pages are served over local HTTP.
-export async function servePages(routes: Record<string, Route>): Promise<PageServer> {
+// A fixed port is for a site listed somewhere by its origin (CryptoPro's trusted sites); otherwise any free one.
+export async function servePages(routes: Record<string, Route>, port = 0): Promise<PageServer> {
   const server: Server = createServer((req, res) => {
     const route = routes[new URL(req.url ?? "/", "http://x").pathname];
     if (!route) {
@@ -32,10 +33,9 @@ export async function servePages(routes: Record<string, Route>): Promise<PageSer
     res.setHeader("content-type", route.type);
     res.end(route.body);
   });
-  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
-  const { port } = server.address() as AddressInfo;
+  await new Promise<void>((resolve) => server.listen(port, "127.0.0.1", resolve));
   return {
-    url: `http://127.0.0.1:${port}`,
+    url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`,
     close: () => new Promise((resolve) => server.close(() => resolve())),
   };
 }

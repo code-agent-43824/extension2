@@ -26,6 +26,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `npm run test:stand` — build, then Playwright tests against the built stand; `npx playwright test -g "<name>"` for one.
 - `STAND_ONLINE=1 npx playwright test tests/stand/testgost.spec.ts` — after a build: the opt-in experiment against
   testgost2012.cryptopro.ru (internet through the environment proxy); leaves screenshots in `stand/testgost/`.
+- `node scripts/setup-cryptopro-csp.ts <dir with .deb files>` (root), then
+  `STAND_CRYPTOPRO_CSP=1 npx playwright test tests/stand/with-cryptopro-csp.spec.ts` — the opt-in local experiment with
+  the real CryptoPro CSP and plug-in installed into the machine; the packages are licensed, never commit them.
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
 
 ## Map of the code
@@ -48,7 +51,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 
 - `scripts/` — Node scripts run directly by Node's type stripping (no build step): `fetch-vendor.ts` +
   `vendor-lock.json` (pinned third-party files), `build.ts` (esbuild), `package.ts` (the ZIP), `gen-constants.ts`, `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
-  PINs, paths), `provision-token.ts` (key + certificate on the fake token).
+  PINs, paths), `provision-token.ts` (key + certificate on the fake token), `setup-cryptopro-csp.ts` (the real
+  CryptoPro CSP + plug-in, a key in a CryptoPro file container, a stand profile copy with CryptoPro's native host).
 - `tools/dump-fields.js` — pasted by hand into the DevTools console on a cadesplugin page: dumps the plug-in and
   certificate fields as JSON; `scripts/compare-fields.ts` diffs a real-CryptoPro dump against ours
   (`docs/MANUAL-CHECK.md`, the manual install and checklist).
@@ -58,7 +62,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
   `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `testgost.spec.ts`
   (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `with-cryptopro.spec.ts`
-  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `verify.ts` runs the
+  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `with-cryptopro-csp.spec.ts` (opt-in)
+  does the same with the real CryptoPro plug-in behind it; `verify.ts` runs the
   independent verifier on a signature.
 - `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier),
   hash-pinned in `requirements.txt`.
