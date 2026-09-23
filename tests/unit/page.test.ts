@@ -190,6 +190,18 @@ describe("loadRutokenPlugin", () => {
     await failed;
   });
 
+  it("says the Rutoken Plugin is not installed when the adapter's host found none", async () => {
+    const clock = new FakeClock();
+    // Like the real adapter then: initialize() leaves only isPluginInstalled, answering false.
+    const real: Record<string, unknown> = { initializePromise: {}, isPluginInstalled: async () => false };
+    const loading = loadRutokenPlugin({ [ADAPTER_KEY]: real }, 3000, clock);
+    const failed = expect(loading).rejects.toThrow("не установлен");
+    await clock.advance(200);
+    delete real.initializePromise;
+    await clock.advance(100);
+    await failed;
+  });
+
   it("fails when the Rutoken Plugin is not installed", async () => {
     const win = { [ADAPTER_KEY]: adapter({ isPluginInstalled: async () => false }) };
     await expect(loadRutokenPlugin(win, 3000, new FakeClock())).rejects.toThrow("не установлен");

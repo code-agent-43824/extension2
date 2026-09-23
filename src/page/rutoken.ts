@@ -136,8 +136,13 @@ export async function loadRutokenPlugin(
     await pending;
     adapter.initialize ??= () => Promise.resolve();
   }
+  // Done initialising: loadPlugin is there, or, when the adapter's native host found no Rutoken Plugin, only
+  // isPluginInstalled (answering false) is.
+  const done = () =>
+    typeof adapter.loadPlugin === "function" ||
+    (typeof adapter.isPluginInstalled === "function" && adapter.initialize === undefined && adapter.initializePromise === undefined);
   const ready = await waitFor(
-    () => (typeof adapter.loadPlugin === "function" ? adapter : undefined),
+    () => (done() ? adapter : undefined),
     deadline,
     clock,
     "Адаптер Рутокен Плагин не завершил инициализацию",
