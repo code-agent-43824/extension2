@@ -1,14 +1,15 @@
 import { X509Certificate, createHash, randomBytes } from "node:crypto";
-import { existsSync, readFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { standDir } from "../../scripts/setup-stand.ts";
+import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { formatName } from "../../src/page/dn.ts";
 import { sha1 } from "../../src/page/sha1.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
 
-const userPem = join(standDir, "user.pem");
-const caPem = join(standDir, "ca", "ca.pem");
+// Copies of a stand certificate and its CA (public data), so the tests do not need the stand.
+const userPem = join(repoRoot, "tests", "fixtures", "stand-user.pem");
+const caPem = join(repoRoot, "tests", "fixtures", "stand-ca.pem");
 
 describe("sha1", () => {
   it("matches Node's SHA-1 at block-boundary lengths", () => {
@@ -43,7 +44,7 @@ describe("formatName", () => {
   });
 });
 
-describe.skipIf(!existsSync(userPem))("parseCertificate on the stand certificate", () => {
+describe("parseCertificate on a stand certificate", () => {
   const pem = readFileSync(userPem, "utf8");
   const cert = parseCertificate(pemToDer(pem));
   const node = new X509Certificate(pem);
@@ -77,7 +78,7 @@ describe.skipIf(!existsSync(userPem))("parseCertificate on the stand certificate
   });
 });
 
-describe.skipIf(!existsSync(caPem))("parseCertificate on the stand CA", () => {
+describe("parseCertificate on the stand CA", () => {
   it("has no private key usage period", () => {
     const cert = parseCertificate(pemToDer(readFileSync(caPem, "utf8")));
     expect(cert.privateKeyNotBefore).toBeNull();

@@ -4,10 +4,16 @@
 
 export const ADAPTER_KEY = "C3B7563B-BF85-45B7-88FC-7CFF1BD3C2DB";
 
-// The part of the Rutoken Plugin API 4.12 the shim uses; every member is asynchronous.
+// The part of the Rutoken Plugin API 4.12 the shim uses. Every member is asynchronous, constants
+// included: plugin.CERT_CATEGORY_USER is a thenable, so it is awaited before use.
 export interface RutokenPlugin {
-  readonly version: Promise<string>;
-  [member: string]: unknown;
+  readonly version: PromiseLike<string>;
+  readonly CERT_CATEGORY_USER: PromiseLike<number>;
+  readonly TOKEN_INFO_SERIAL: PromiseLike<number>;
+  enumerateDevices(): Promise<number[]>;
+  enumerateCertificates(deviceId: number, category: number): Promise<string[]>;
+  getCertificate(deviceId: number, certId: string): Promise<string>;
+  getDeviceInfo(deviceId: number, option: number): Promise<unknown>;
 }
 
 interface Adapter {

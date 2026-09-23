@@ -35,7 +35,8 @@ class FakeClock implements Clock {
   }
 }
 
-const plugin: RutokenPlugin = { version: Promise.resolve("4.12.3.0") };
+// Only what About and the loader touch.
+const plugin = { version: Promise.resolve("4.12.3.0") } as unknown as RutokenPlugin;
 
 function adapter(overrides: Record<string, unknown> = {}) {
   return {
