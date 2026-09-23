@@ -7,15 +7,17 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "typecheck": "tsc --noEmit",
+    "build": "node scripts/build.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",
     "stand": "node scripts/fetch-vendor.ts && node scripts/setup-stand.ts && node scripts/provision-token.ts",
-    "test:stand": "playwright test"
+    "test:stand": "npm run build && playwright test"
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
     "@types/node": "22.20.4",
+    "esbuild": "0.28.2",
     "typescript": "5.9.3",
     "vitest": "5.0.1"
   }

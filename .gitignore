@@ -1,6 +1,7 @@
 node_modules/
 /vendor/
 /stand/
+/dist/
 test-results/
 playwright-report/
 __pycache__/

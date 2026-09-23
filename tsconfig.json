@@ -16,6 +16,7 @@
   "include": [
     "scripts",
     "tests",
-    "*.config.ts"
+    "*.config.ts",
+    "src/page/globals.d.ts"
   ]
 }
