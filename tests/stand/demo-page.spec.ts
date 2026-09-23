@@ -1,12 +1,13 @@
 // CryptoPro's own demo page (cades_bes_sample.html), served locally from vendor/, with our extension
 // in place of CryptoPro's extension, plug-in and CSP.
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { mkdtempSync, rmSync } from "node:fs";
+import { X509Certificate } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { extensionDir, packageVersion } from "../../scripts/build.ts";
 import { vendorDir } from "../../scripts/fetch-vendor.ts";
-import { stand } from "../../scripts/setup-stand.ts";
+import { stand, standDir } from "../../scripts/setup-stand.ts";
 import { directoryRoutes, launchStand, openStandPage, servePages, type PageServer } from "./harness.ts";
 
 // Same path as on www.cryptopro.ru, so the page's relative links (../cadesplugin_api.js) resolve.
@@ -46,6 +47,29 @@ test.describe("with the Rutoken adapter", () => {
     await expectText(page, "CSPVersionTxt", "Версия криптопровайдера: 5.0.13000");
     await expectText(page, "CSPNameTxt", "Криптопровайдер: Rutoken Plugin 4.12.3.0");
     await expectText(page, "ExtVersionTxt", `Версия расширения: ${packageVersion()}`);
+  });
+
+  test("lists the token certificate and shows its card", async () => {
+    // The page prints names as they come, "CN=" included. Checked against Node's own parsing of the certificate the stand put on the token.
+    const x509 = new X509Certificate(readFileSync(join(standDir, "user.pem")));
+    const page = await openStandPage(context, server.url + demoPath);
+    await expectText(page, "ObjectsLoadedTxt", "Перечисление объектов плагина завершено");
+    await expectText(page, "CertificatesCountTxt", "Сертификаты My:1, Cont:0");
+    const list = page.locator("#CertListBox");
+    await expect(list.locator("option")).toHaveCount(1);
+    await expect(list.locator("option")).toContainText("CN=Stand User; Выдан: ");
+    await list.selectOption({ index: 0 });
+    await expectText(page, "subject", "Владелец: CN=Stand User");
+    await expectText(page, "issuer", "Издатель: CN=Stand Test CA");
+    await expectText(page, "thumbprint", `Отпечаток: ${x509.fingerprint.replaceAll(":", "")}`);
+    await expectText(page, "algorithm", "Алгоритм ключа: ГОСТ Р 34.10-2012 256 бит");
+    await expectText(page, "provname", "Криптопровайдер: Rutoken Plugin 4.12.3.0");
+    await expectText(page, "privateKeyLink", /^Ссылка на закрытый ключ: \\\\\.\\Rutoken \d+\\[0-9a-f:]+$/);
+    await expectText(page, "status", "Статус: Действителен");
+    await expectText(page, "location", "Установлен в хранилище: Да");
+    await expect(page.locator("#pkupInfo")).toContainText("Срок действия ключа (2.5.29.16) до:");
+    const from = new Date(x509.validFrom).toISOString().replace(/^(\d+)-(\d+)-(\d+)T([\d:]+).*$/, "$3.$2.$1 $4");
+    await expectText(page, "from", `Выдан: ${from} UTC`);
   });
 });
 
