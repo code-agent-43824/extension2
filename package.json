@@ -8,7 +8,7 @@
   },
   "scripts": {
     "build": "node scripts/build.ts",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p src",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p src && tsc --noEmit -p src/extension",
     "test": "vitest run",
     "check": "npm run typecheck && npm test",
     "stand": "node scripts/fetch-vendor.ts && node scripts/setup-stand.ts && node scripts/provision-token.ts",
@@ -16,6 +16,7 @@
   },
   "devDependencies": {
     "@playwright/test": "1.56.1",
+    "@types/chrome": "0.3.0",
     "@types/node": "22.20.4",
     "esbuild": "0.28.2",
     "typescript": "5.9.3",

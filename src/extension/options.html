@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>КриптоПро через Рутокен — сайты</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body class="options">
+  <h1>Сайты, на которых работает расширение</h1>
+  <p class="note">На остальных сайтах расширение ничего не делает: сайт видит компьютер без КриптоПро или работает
+    с настоящим КриптоПро, если он установлен.</p>
+  <ul id="sites"></ul>
+  <p id="empty" class="note" hidden>Пока ни одного сайта.</p>
+  <form id="add">
+    <label>Адрес сайта <input name="site" type="url" placeholder="https://example.ru" required></label>
+    <button type="submit">Включить</button>
+  </form>
+  <p id="error" class="error" role="alert"></p>
+  <script src="options.js"></script>
+</body>
+</html>

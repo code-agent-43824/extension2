@@ -5,10 +5,19 @@ import { X509Certificate } from "node:crypto";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { extensionDir, packageVersion } from "../../scripts/build.ts";
+import { packageVersion } from "../../scripts/build.ts";
 import { vendorDir } from "../../scripts/fetch-vendor.ts";
 import { stand, standDir, userPin } from "../../scripts/setup-stand.ts";
-import { directoryRoutes, launchStand, openStandPage, servePages, type PageServer } from "./harness.ts";
+import {
+  clearSites,
+  directoryRoutes,
+  enableSite,
+  launchStand,
+  openStandPage,
+  servePages,
+  standExtension,
+  type PageServer,
+} from "./harness.ts";
 import { verifyCms } from "./verify.ts";
 
 // Same path as on www.cryptopro.ru, so the page's relative links (../cadesplugin_api.js) resolve.
@@ -55,7 +64,9 @@ test.describe("with the Rutoken adapter", () => {
   let context: BrowserContext;
 
   test.beforeAll(async () => {
-    context = await launchStand({ extensions: [stand.adapter, extensionDir] });
+    context = await launchStand({ extensions: [stand.adapter, standExtension()] });
+    await clearSites(context);
+    await enableSite(context, server.url);
   });
 
   test.afterAll(async () => {
@@ -171,7 +182,8 @@ test.describe("without the Rutoken adapter", () => {
 
   test.beforeAll(async () => {
     profile = mkdtempSync(join(tmpdir(), "stand-no-adapter-"));
-    context = await launchStand({ extensions: [extensionDir], profile });
+    context = await launchStand({ extensions: [standExtension()], profile });
+    await enableSite(context, server.url);
   });
 
   test.afterAll(async () => {

@@ -1,0 +1,10 @@
+body { font: 14px/1.4 system-ui, sans-serif; color: #1b1b1b; margin: 16px; }
+body.popup { width: 300px; margin: 12px; }
+h1 { font-size: 16px; margin: 0 0 12px; }
+.site { font-weight: 600; word-break: break-all; }
+.note { color: #555; }
+.error { color: #b00020; min-height: 1.4em; }
+ul { padding: 0; list-style: none; }
+li { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 6px 0; border-bottom: 1px solid #ddd; max-width: 640px; }
+input[type="url"] { width: 320px; margin: 0 8px; }
+button { font: inherit; padding: 4px 12px; }

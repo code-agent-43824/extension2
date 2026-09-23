@@ -19,13 +19,18 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   Python venv) and provision the token with a key and a test-CA certificate. Needs network (vendor files, PyPI).
 - `npm run build` — build the extension into `dist/extension/` (load it unpacked in Chrome).
 - `node scripts/gen-constants.ts` — regenerate `src/page/constants.ts` after pinning a new `cadesplugin_api.js`.
-- `npm run check` — typecheck (Node code, then `src/` with DOM types) and unit tests; must pass before every commit.
+- `npm run check` — typecheck (Node code, then `src/page/` with DOM types, then `src/extension/` with Chrome types)
+  and unit tests; must pass before every commit.
 - `npm run test:stand` — build, then Playwright tests against the built stand; `npx playwright test -g "<name>"` for one.
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
 
 ## Map of the code
 
-- `src/manifest.json` — extension manifest; the build fills in the version.
+- `src/manifest.json` — extension manifest; the build fills in the version. No static content script: page.js is
+  registered at run time for the enabled sites only.
+- `src/extension/` — the extension's own side, with Chrome types (`src/extension/tsconfig.json`): `sites.ts` (the
+  enabled-site list in `chrome.storage.local`, optional host permissions, registering page.js), `background.ts`
+  (service worker keeping the registration in sync), `popup.*` (the button's window), `options.*` (site list).
 - `src/page/` — the MAIN-world content script, bundled into one `page.js`: `main.ts` (entry), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
@@ -49,7 +54,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 
 Stand pitfalls (details in `docs/JOURNAL.md`): the native host finds the plugin only via `$HOME/.mozilla/plugins`,
 and the plugin loads `librtpkcs11ecp.so` from that same directory, so the stand runs Chromium with its own `HOME`;
-use the `chromium` channel, not the headless shell; wait for the adapter object with `openStandPage`.
+use the `chromium` channel, not the headless shell; wait for the adapter object with `openStandPage`. Tests load
+`standExtension()` (the build with the stand's host access pre-granted, since Chrome's permission prompt cannot be
+clicked) and turn sites on with `enableSite`, through the options page.
 
 ## Settled decisions
 
