@@ -57,7 +57,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   the stand.
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
   `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `testgost.spec.ts`
-  (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `verify.ts` runs the
+  (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `with-cryptopro.spec.ts`
+  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `verify.ts` runs the
   independent verifier on a signature.
 - `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier),
   hash-pinned in `requirements.txt`.
