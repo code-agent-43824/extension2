@@ -8,6 +8,7 @@ import { createObject } from "../../src/page/objects/index.ts";
 import { CadesVersion } from "../../src/page/objects/version.ts";
 import { ADAPTER_KEY, loadRutokenPlugin, type Clock, type RutokenPlugin } from "../../src/page/rutoken.ts";
 import { asyncSpawn } from "../../src/page/spawn.ts";
+import { fakeSession } from "./fakes.ts";
 
 // A clock whose timers fire only when the test advances it.
 class FakeClock implements Clock {
@@ -101,7 +102,7 @@ describe("CAdESCOM objects", () => {
   });
 
   it("About reports the compatibility versions and names the Rutoken Plugin", async () => {
-    const about = createObject("CADESCOM.ABOUT", { plugin }) as import("../../src/page/objects/about.ts").About;
+    const about = createObject("CADESCOM.ABOUT", fakeSession(plugin)) as import("../../src/page/objects/about.ts").About;
     expect(await (await about.PluginVersion).toString()).toBe("2.0.15000");
     const csp = await about.CSPVersion("", 80);
     expect(`${await csp.MajorVersion}.${await csp.MinorVersion}.${await csp.BuildVersion}`).toBe("5.0.13000");
@@ -109,7 +110,7 @@ describe("CAdESCOM objects", () => {
   });
 
   it("unknown objects fail with a class-not-registered error", () => {
-    expect(() => createObject("CAdESCOM.CPLicense", { plugin })).toThrow(CadesError);
+    expect(() => createObject("CAdESCOM.CPLicense", fakeSession(plugin))).toThrow(CadesError);
   });
 });
 

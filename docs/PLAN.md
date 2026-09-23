@@ -11,21 +11,21 @@
 
 ## Действия
 
-- [ ] **1. Независимый проверяльщик.** `tests/tools/verify_cms.py` на `asn1crypto` и `gostcrypto`: разбирает CMS,
+- [x] **1. Независимый проверяльщик.** `tests/tools/verify_cms.py` на `asn1crypto` и `gostcrypto`: разбирает CMS,
   сверяет хеш содержимого с атрибутом `messageDigest`, проверяет подпись подписанных атрибутов открытым ключом
   сертификата и подпись сертификата ключом тестового УЦ; печатает найденные атрибуты. Проверка самого
   проверяльщика — на подписях, которые уже умеет делать дымовой тест стенда, и на испорченной подписи.
-- [ ] **2. Окно PIN и подтверждения.** Показывается поверх страницы перед каждой подписью: сайт (origin), владелец
+- [x] **2. Окно PIN и подтверждения.** Показывается поверх страницы перед каждой подписью: сайт (origin), владелец
   сертификата, объём данных, поле PIN, кнопки «Подписать» и «Отмена». Неверный PIN — сообщение в окне и повторный
   ввод; заблокированный PIN или отмена — отказ `SignCades` с кодом, как у КриптоПро при отмене пользователем
   (`0x8010006E`).
-- [ ] **3. `CAdESCOM.CPSigner`, `CADESCOM.CPAttribute`.** `Certificate`, `CheckCertificate`, `Options`,
+- [x] **3. `CAdESCOM.CPSigner`, `CADESCOM.CPAttribute`.** `Certificate`, `CheckCertificate`, `Options`,
   `AuthenticatedAttributes2` (`Add`, `Count`, `Item`, `Clear`); атрибут — `Name`, `Value`.
-- [ ] **4. `CAdESCOM.CadesSignedData`.** `ContentEncoding` (`CADESCOM_STRING_TO_UCS2LE` по умолчанию, как у
+- [x] **4. `CAdESCOM.CadesSignedData`.** `ContentEncoding` (`CADESCOM_STRING_TO_UCS2LE` по умолчанию, как у
   КриптоПро, и `CADESCOM_BASE64_TO_BINARY`), `Content`, `DisplayData`, `SignCades(signer, type, detached)` →
   Base64. Подпись делает `sign` Рутокен Плагина (`addEssCert`, `addSignTime`, `addUserCertificate`) после
   `login`; после подписи — `logout`. Тип, кроме CAdES-BES, — отказ с понятным текстом (CAdES-T и X Long — этап 6).
-- [ ] **5. Тесты на стенде.** Демо-страница: выбор сертификата, «Подписать», PIN в окне → «Подпись сформирована
+- [~] **5. Тесты на стенде.** Демо-страница: выбор сертификата, «Подписать», PIN в окне → «Подпись сформирована
   успешно:», подпись проходит `verify_cms.py`, в том числе отсоединённая против «Hello World». Отдельно: отмена,
   неверный PIN с повторным вводом, кодировка UCS-2LE по умолчанию (подписаны байты UTF-16LE). В CI.
 

@@ -1,0 +1,79 @@
+// Test doubles shared by the unit tests: a Rutoken Plugin with one token holding the stand's
+// user certificate, and a PIN window that answers from a script.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "../../scripts/fetch-vendor.ts";
+import type { Session } from "../../src/page/objects/session.ts";
+import type { PinDialog, SignRequest } from "../../src/page/pin-dialog.ts";
+import type { RutokenPlugin, SignOptions } from "../../src/page/rutoken.ts";
+
+export const pem = readFileSync(join(repoRoot, "tests", "fixtures", "stand-user.pem"), "utf8");
+export const certId = "cd:ea:7e:ab:5b:e6:b1:67:f2:2b:71:3b:f3:76:e9:b2:8a:db:14:a3";
+export const tokenSerial = "1669552163";
+export const userPin = "12345678";
+
+export interface SignCall {
+  deviceId: number;
+  certId: string;
+  data: string;
+  format: number;
+  options: SignOptions;
+}
+
+export type FakePlugin = RutokenPlugin & { calls: { login: string[]; logout: number; sign: SignCall[] } };
+
+// Constants are thenables, as in the real plugin. Errors are Error objects whose message is the
+// Rutoken error code, as the plugin rejects.
+export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}): FakePlugin {
+  const thenable = (value: number) => ({ then: (resolve: (v: number) => unknown) => resolve(value) }) as PromiseLike<number>;
+  const calls: FakePlugin["calls"] = { login: [], logout: 0, sign: [] };
+  return {
+    calls,
+    version: Promise.resolve("4.12.3.0"),
+    CERT_CATEGORY_USER: thenable(1),
+    TOKEN_INFO_SERIAL: thenable(2),
+    DATA_FORMAT_BASE64: thenable(1),
+    enumerateDevices: async () => [0],
+    enumerateCertificates: async (_device, category) => (category === 1 ? certs.map((_, i) => `${certId}${i || ""}`) : []),
+    getCertificate: async (_device, id) => certs[Number(id.slice(certId.length) || 0)]!,
+    getDeviceInfo: async (_device, option) => (option === 2 ? tokenSerial : null),
+    login: async (_device, pin) => {
+      calls.login.push(pin);
+      if (pin !== userPin) throw new Error("17");
+    },
+    logout: async () => {
+      calls.logout++;
+    },
+    sign: async (deviceId, id, data, format, options) => {
+      calls.sign.push({ deviceId, certId: id, data, format, options });
+      return "MIIsignature";
+    },
+    ...overrides,
+  };
+}
+
+// Answers ask() with the next scripted PIN (null = cancel) and records what it was shown.
+export class FakePinDialog implements PinDialog {
+  requests: SignRequest[] = [];
+  errors: (string | undefined)[] = [];
+  closed = 0;
+  private readonly answers: (string | null)[];
+  constructor(answers: (string | null)[]) {
+    this.answers = answers;
+  }
+  open = (request: SignRequest): PinDialog => {
+    this.requests.push(request);
+    return this;
+  };
+  async ask(error?: string) {
+    this.errors.push(error);
+    return this.answers.shift() ?? null;
+  }
+  close() {
+    this.closed++;
+  }
+}
+
+export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([])): Session {
+  return { plugin, origin: "https://site.example", pinDialog: dialog.open };
+}

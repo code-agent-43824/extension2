@@ -11,6 +11,15 @@ export interface TokenCertificate {
   x509: X509;
 }
 
+// The current deviceId of the token with this serial number: ids change when tokens are reconnected.
+export async function findDevice(plugin: RutokenPlugin, serial: string): Promise<number | undefined> {
+  const serialInfo = await plugin.TOKEN_INFO_SERIAL;
+  for (const deviceId of await plugin.enumerateDevices()) {
+    if (String(await plugin.getDeviceInfo(deviceId, serialInfo)) === serial) return deviceId;
+  }
+  return undefined;
+}
+
 // User-category certificates of every connected token, in token order. A certificate that fails to
 // parse is skipped rather than hiding the others.
 export async function userCertificates(plugin: RutokenPlugin): Promise<TokenCertificate[]> {

@@ -83,6 +83,14 @@ class CertificateStatus {
   }
 }
 
+// Which token certificate an emulated Certificate stands for; sites hand these objects back to us,
+// e.g. in CPSigner.propset_Certificate, and must not be able to forge one.
+const tokens = new WeakMap<object, TokenCertificate>();
+
+export function tokenOf(certificate: unknown): TokenCertificate | undefined {
+  return typeof certificate === "object" && certificate !== null ? tokens.get(certificate) : undefined;
+}
+
 // CAdESCOM.Certificate for a certificate on a Rutoken.
 export class Certificate {
   readonly #session: Session;
@@ -91,6 +99,7 @@ export class Certificate {
   constructor(session: Session, token: TokenCertificate) {
     this.#session = session;
     this.#token = token;
+    tokens.set(this, token);
   }
 
   get SubjectName(): Promise<string> {

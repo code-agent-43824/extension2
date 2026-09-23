@@ -10,10 +10,34 @@ export interface RutokenPlugin {
   readonly version: PromiseLike<string>;
   readonly CERT_CATEGORY_USER: PromiseLike<number>;
   readonly TOKEN_INFO_SERIAL: PromiseLike<number>;
+  readonly DATA_FORMAT_BASE64: PromiseLike<number>;
   enumerateDevices(): Promise<number[]>;
   enumerateCertificates(deviceId: number, category: number): Promise<string[]>;
   getCertificate(deviceId: number, certId: string): Promise<string>;
   getDeviceInfo(deviceId: number, option: number): Promise<unknown>;
+  login(deviceId: number, pin: string): Promise<void>;
+  logout(deviceId: number): Promise<void>;
+  sign(deviceId: number, certId: string, data: string, dataFormat: number, options: SignOptions): Promise<string>;
+}
+
+export interface SignOptions {
+  detached: boolean;
+  addUserCertificate: boolean;
+  addEssCert: boolean;
+  addSignTime: boolean;
+}
+
+// Error codes the plugin rejects with (as the error message), from the Rutoken Plugin 4.12 documentation.
+export const RutokenError = {
+  PIN_LENGTH_INVALID: 16,
+  PIN_INCORRECT: 17,
+  PIN_LOCKED: 18,
+  ALREADY_LOGGED_IN: 93,
+} as const;
+
+export function rutokenErrorCode(error: unknown): number | undefined {
+  const code = Number((error as { message?: unknown } | null)?.message);
+  return Number.isInteger(code) ? code : undefined;
 }
 
 interface Adapter {

@@ -1,33 +1,13 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { constants } from "../../src/page/constants.ts";
 import type { Certificate, Certificates } from "../../src/page/objects/certificate.ts";
 import { createObject } from "../../src/page/objects/index.ts";
 import type { Store } from "../../src/page/objects/store.ts";
 import type { RutokenPlugin } from "../../src/page/rutoken.ts";
-
-const pem = readFileSync(join(repoRoot, "tests", "fixtures", "stand-user.pem"), "utf8");
-const certId = "cd:ea:7e:ab:5b:e6:b1:67:f2:2b:71:3b:f3:76:e9:b2:8a:db:14:a3";
-
-// A Rutoken Plugin with one token holding the fixture certificate. Constants are thenables, as in
-// the real plugin.
-function fakePlugin(certs = [pem]): RutokenPlugin {
-  const thenable = (value: number) => ({ then: (resolve: (v: number) => unknown) => resolve(value) }) as PromiseLike<number>;
-  return {
-    version: Promise.resolve("4.12.3.0"),
-    CERT_CATEGORY_USER: thenable(1),
-    TOKEN_INFO_SERIAL: thenable(2),
-    enumerateDevices: async () => [0],
-    enumerateCertificates: async (_device, category) => (category === 1 ? certs.map((_, i) => `${certId}${i || ""}`) : []),
-    getCertificate: async (_device, id) => certs[Number(id.slice(certId.length) || 0)]!,
-    getDeviceInfo: async (_device, option) => (option === 2 ? "1669552163" : null),
-  };
-}
+import { certId, fakePlugin, fakeSession, pem } from "./fakes.ts";
 
 async function openStore(plugin: RutokenPlugin, ...args: unknown[]): Promise<Certificates> {
-  const store = createObject("CAdESCOM.Store", { plugin }) as Store;
+  const store = createObject("CAdESCOM.Store", fakeSession(plugin)) as Store;
   await (store.Open as (...a: unknown[]) => Promise<void>)(...args);
   return store.Certificates;
 }
