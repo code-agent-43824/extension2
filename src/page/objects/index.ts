@@ -26,6 +26,8 @@ const factories = new Map<string, Factory>([
   ["cadescom.cpattribute", () => new CPAttribute()],
   ["cadescom.cpsigner", () => new CPSigner()],
   ["cadescom.store", (session) => new Store(session)],
+  // The real plug-in also answers to CAPICOM's name for it (checked with 2.0.15700); lkfl2.nalog.ru uses it.
+  ["capicom.store", (session) => new Store(session)],
   ["x509enrollment.ccspinformation", () => new CspInformation()],
   ["x509enrollment.ccspinformations", (session) => new CspInformations(session)],
   ["x509enrollment.cobjectid", () => new ObjectId()],

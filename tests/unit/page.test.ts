@@ -1,3 +1,4 @@
+import { Store } from "../../src/page/objects/store.ts";
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { vendorPath } from "../../scripts/fetch-vendor.ts";
@@ -109,6 +110,11 @@ describe("CAdESCOM objects", () => {
     const csp = await about.CSPVersion("", 80);
     expect(`${await csp.MajorVersion}.${await csp.MinorVersion}.${await csp.BuildVersion}`).toBe("5.0.13000");
     expect(await about.CSPName(80)).toBe("Rutoken Plugin 4.12.3.0");
+    expect(await about.ProviderVersion("", 80)).toBe("5.0.13000");
+  });
+
+  it("CAPICOM.Store is the same store as CAdESCOM.Store", () => {
+    expect(createObject("CAPICOM.Store", fakeSession(plugin))).toBeInstanceOf(Store);
   });
 
   it("unknown objects fail with a class-not-registered error", () => {
@@ -133,6 +139,31 @@ describe("loadRutokenPlugin", () => {
     await clock.advance(100);
     expect(await loading).toBe(plugin);
     expect(initialized).toBe(1);
+  });
+
+  it("lets the site call initialize() while ours is still running", async () => {
+    const clock = new FakeClock();
+    const real: Record<string, unknown> = adapter({ loadPlugin: undefined });
+    let finish!: () => void;
+    // Like the real adapter: a second call before the first finishes throws.
+    real.initialize = () => {
+      if (real.initializePromise) throw "initialise has already been called";
+      real.initializePromise = {};
+      return new Promise<void>((resolve) => (finish = resolve));
+    };
+    const loading = loadRutokenPlugin({ [ADAPTER_KEY]: real }, 3000, clock);
+    await clock.advance(10);
+    expect(real.initializePromise).toBeDefined();
+    const site = (real.initialize as () => Promise<void>)();
+    real.loadPlugin = async () => plugin;
+    delete real.initialize;
+    delete real.initializePromise;
+    finish();
+    await site;
+    await clock.advance(100);
+    expect(await loading).toBe(plugin);
+    // A site library that initialises only now still finds the method.
+    await expect((real.initialize as () => Promise<void>)()).resolves.toBeUndefined();
   });
 
   it("does not initialise twice when the site already did", async () => {

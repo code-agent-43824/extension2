@@ -24,6 +24,12 @@ export function pemToDer(pem: string): Uint8Array {
   return Uint8Array.from(atob(body), (char) => char.charCodeAt(0));
 }
 
+export function derToBase64(der: Uint8Array): string {
+  let binary = "";
+  for (const byte of der) binary += String.fromCharCode(byte);
+  return btoa(binary);
+}
+
 function privateKeyUsagePeriod(extensions: ReturnType<typeof read> | undefined): [Date | null, Date | null] {
   if (!extensions) return [null, null];
   for (const extension of children(expectTag(children(extensions)[0], 0x30, "Extensions"))) {

@@ -1,10 +1,13 @@
 import { CadesError } from "../errors.ts";
 import { About } from "./about.ts";
+import { constants } from "../constants.ts";
 import { formatName } from "../dn.ts";
+import { derToBase64 } from "../x509.ts";
 import type { TokenCertificate } from "../token.ts";
 import type { Session } from "./session.ts";
 
 const E_INVALIDARG = 0x80070057;
+const E_NOTIMPL = 0x80004001;
 
 // Dates cross the CryptoPro async API as strings in this form (DateToUTCStr in nmcades_plugin_api.js);
 // sites pass them to new Date(). Not yet compared with a real CryptoPro installation: docs/JOURNAL.md.
@@ -155,6 +158,14 @@ export class Certificate {
     return Promise.resolve(new PublicKey(this.#token.x509.publicKeyAlgorithm));
   }
 
+  // Only base64, as the real plug-in: 64-column lines, each ending in LF (2.0.15700 on the stand, docs/JOURNAL.md);
+  // it refuses binary with E_INVALIDARG. lkfl2.nalog.ru reads it for every certificate it lists.
+  Export(encoding: number): Promise<string> {
+    if (encoding !== constants.CADESCOM_ENCODE_BASE64) throw new CadesError(`Неподдерживаемая кодировка: ${encoding}`, E_INVALIDARG);
+    const text = derToBase64(this.#token.x509.der);
+    return Promise.resolve((text.match(/.{1,64}/g) ?? []).map((line) => `${line}\n`).join(""));
+  }
+
   // Only the validity period is checked so far; chain building is a later task (docs/PLAN.md, stage 3).
   IsValid(): Promise<CertificateStatus> {
     const now = Date.now();
@@ -179,5 +190,28 @@ export class Certificates {
     const item = this.#items[Number(index) - 1];
     if (!item) throw new CadesError("Неверный индекс сертификата", E_INVALIDARG);
     return item;
+  }
+
+  // CAPICOM's search, for the kinds sites use (lkfl2.nalog.ru looks up the certificate to sign with by its
+  // SHA-1): by thumbprint, or by a piece of the subject or issuer name, ignoring case.
+  async Find(findType: number, criteria: unknown, validOnly = false): Promise<Certificates> {
+    const wanted = String(criteria ?? "");
+    const matches = async (item: Certificate): Promise<boolean> => {
+      switch (Number(findType)) {
+        case constants.CAPICOM_CERTIFICATE_FIND_SHA1_HASH:
+          return (await item.Thumbprint).toLowerCase() === wanted.replace(/\s+/g, "").toLowerCase();
+        case constants.CAPICOM_CERTIFICATE_FIND_SUBJECT_NAME:
+          return (await item.SubjectName).toLowerCase().includes(wanted.toLowerCase());
+        case constants.CAPICOM_CERTIFICATE_FIND_ISSUER_NAME:
+          return (await item.IssuerName).toLowerCase().includes(wanted.toLowerCase());
+        default:
+          throw new CadesError(`Поиск сертификатов вида ${findType} не поддерживается`, E_NOTIMPL);
+      }
+    };
+    const found: Certificate[] = [];
+    for (const item of this.#items) {
+      if ((await matches(item)) && (!validOnly || (await (await item.IsValid()).Result))) found.push(item);
+    }
+    return new Certificates(found);
   }
 }

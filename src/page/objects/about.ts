@@ -36,6 +36,12 @@ export class About {
     return Promise.resolve(new CadesVersion(CSP_VERSION));
   }
 
+  // The same version as a string: CryptoPro 5.0.13800 answers "5.0.13800" with or without arguments
+  // (checked on the stand, docs/JOURNAL.md). lkfl2.nalog.ru decides from it whether a plug-in is installed.
+  ProviderVersion(_providerName?: string, _providerType?: number): Promise<string> {
+    return Promise.resolve(CSP_VERSION);
+  }
+
   async CSPName(_providerType?: number): Promise<string> {
     return `Rutoken Plugin ${await this.#session.plugin.version}`;
   }

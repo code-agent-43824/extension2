@@ -127,7 +127,14 @@ export async function loadRutokenPlugin(
   );
   // initialize() may be called only once per page; if the site already called it, wait for it to finish.
   if (typeof adapter.loadPlugin !== "function" && adapter.initialize && adapter.initializePromise === undefined) {
-    await adapter.initialize();
+    const pending = adapter.initialize();
+    // Sites that also use the Rutoken Plugin themselves call initialize() too, unconditionally (Rutoken's
+    // rutoken.js, on lkfl2.nalog.ru): the adapter would throw while ours runs and has deleted the method
+    // once it is done. So the object stays as such a site expects to find it: a call shares ours, and
+    // after it, resolves at once.
+    adapter.initialize = () => pending;
+    await pending;
+    adapter.initialize ??= () => Promise.resolve();
   }
   const ready = await waitFor(
     () => (typeof adapter.loadPlugin === "function" ? adapter : undefined),

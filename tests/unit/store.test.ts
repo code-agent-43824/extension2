@@ -46,6 +46,25 @@ describe("CAdESCOM.Certificate", () => {
     return (await openStore(fakePlugin())).Item(1);
   }
 
+  it("finds certificates by thumbprint in any case and by a piece of the subject name", async () => {
+    const all = await openStore(fakePlugin());
+    const byHash = await all.Find(constants.CAPICOM_CERTIFICATE_FIND_SHA1_HASH, "cdea7eab5be6b167f22b713bf376e9b28adb14a3");
+    expect(await byHash.Count).toBe(1);
+    expect(await (await byHash.Item(1)).Thumbprint).toBe("CDEA7EAB5BE6B167F22B713BF376E9B28ADB14A3");
+    expect(await (await all.Find(constants.CAPICOM_CERTIFICATE_FIND_SUBJECT_NAME, "stand user")).Count).toBe(1);
+    expect(await (await all.Find(constants.CAPICOM_CERTIFICATE_FIND_SHA1_HASH, "00")).Count).toBe(0);
+    await expect(all.Find(constants.CAPICOM_CERTIFICATE_FIND_KEY_USAGE, 0)).rejects.toThrow("0x80004001");
+  });
+
+  it("exports itself as base64 in 64-column LF lines, and refuses binary", async () => {
+    const cert = await certificate();
+    const text = await cert.Export(constants.CADESCOM_ENCODE_BASE64);
+    expect(text.replace(/\n/g, "")).toBe(pem.replace(/-----[^-]+-----|\s/g, ""));
+    expect(text.split("\n").slice(0, -2).every((line) => line.length === 64)).toBe(true);
+    expect(text.endsWith("\n")).toBe(true);
+    expect(() => cert.Export(constants.CADESCOM_ENCODE_BINARY)).toThrow("0x80070057");
+  });
+
   it("reports what the demo page's certificate card reads", async () => {
     const cert = await certificate();
     expect(await cert.Thumbprint).toBe("CDEA7EAB5BE6B167F22B713BF376E9B28ADB14A3");

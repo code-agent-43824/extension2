@@ -9,7 +9,7 @@ import { CadesError } from "../errors.ts";
 import { RutokenError, rutokenErrorCode, type RutokenPlugin, type SubjectAttribute } from "../rutoken.ts";
 import { certificateLines, commonName } from "../signing.ts";
 import { singleDevice, withLogin } from "../token-login.ts";
-import { parseCertificate, pemToDer, type X509 } from "../x509.ts";
+import { derToBase64 as base64, parseCertificate, pemToDer, type X509 } from "../x509.ts";
 import { About } from "./about.ts";
 import type { Session } from "./session.ts";
 
@@ -344,12 +344,6 @@ const rdnNames = new Map<string, string>([
 
 function subjectAttributes(subject: Attribute[]): SubjectAttribute[] {
   return subject.map(({ oid, value }) => ({ rdn: rdnNames.get(oid) ?? oid, value }));
-}
-
-function base64(der: Uint8Array): string {
-  let binary = "";
-  for (const byte of der) binary += String.fromCharCode(byte);
-  return btoa(binary);
 }
 
 // CryptBinaryToString layout: 64-column lines ending in CRLF.
