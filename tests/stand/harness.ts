@@ -63,6 +63,8 @@ export interface StandOptions {
   extensions?: string[];
   // Chromium profile; the stand profile holds the native host manifest.
   profile?: string;
+  // HOME for the native host and the plugin; a copy of the stand HOME keeps its own token.
+  home?: string;
   // Internet hosts the stand may reach (for experiments with real sites); everything else stays offline.
   online?: string[];
 }
@@ -71,23 +73,24 @@ export interface StandOptions {
 // (by its public key), the way every other tool here is pointed at the proxy's CA bundle.
 const proxyCa = process.env.STAND_PROXY_CA ?? "/root/.ccr/agent-proxy-ca.crt";
 
-function proxyOptions(): { proxy?: { server: string }; args: string[] } {
+function proxyOptions(): string[] {
   const server = process.env.HTTPS_PROXY;
-  if (!server || !existsSync(proxyCa)) return { args: [] };
+  if (!server || !existsSync(proxyCa)) return [];
   const spki = new X509Certificate(readFileSync(proxyCa)).publicKey.export({ type: "spki", format: "der" });
-  return { proxy: { server }, args: [`--ignore-certificate-errors-spki-list=${createHash("sha256").update(spki).digest("base64")}`] };
+  // Chromium's own flag rather than Playwright's proxy option, which sends loopback (the stand's pages)
+  // through the proxy too.
+  return [`--proxy-server=${server}`, `--ignore-certificate-errors-spki-list=${createHash("sha256").update(spki).digest("base64")}`];
 }
 
-export async function launchStand({ extensions = [stand.adapter], profile = stand.profile, online = [] }: StandOptions = {}) {
+export async function launchStand({ extensions = [stand.adapter], profile = stand.profile, home = stand.home, online = [] }: StandOptions = {}) {
   const list = extensions.join(",");
-  const network = online.length ? proxyOptions() : { args: [] };
+  const network = online.length ? proxyOptions() : [];
   const context = await chromium.launchPersistentContext(profile, {
     headless: true,
     // The full Chromium build: the headless shell cannot load extensions.
     channel: "chromium",
-    args: [`--disable-extensions-except=${list}`, `--load-extension=${list}`, ...network.args],
-    ...(network.proxy ? { proxy: network.proxy } : {}),
-    env: standEnv() as Record<string, string>,
+    args: [`--disable-extensions-except=${list}`, `--load-extension=${list}`, ...network],
+    env: { ...standEnv(), HOME: home } as Record<string, string>,
   });
   // Stand tests stay offline: pages get only what the local server serves, plus the hosts asked for.
   await context.route(

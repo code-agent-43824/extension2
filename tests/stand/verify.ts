@@ -15,12 +15,13 @@ export interface VerifyReport {
   checks: Record<string, boolean>;
 }
 
-export function verifyCms(cmsBase64: string, content?: Uint8Array): VerifyReport {
+// caPem defaults to the stand's test CA; the testgost experiment passes CryptoPro's test CA.
+export function verifyCms(cmsBase64: string, content?: Uint8Array, caPem = join(caDir, "ca.pem")): VerifyReport {
   const dir = mkdtempSync(join(tmpdir(), "verify-cms-"));
   try {
     const cmsPath = join(dir, "cms.b64");
     writeFileSync(cmsPath, cmsBase64);
-    const args = [join(repoRoot, "tests", "tools", "verify_cms.py"), cmsPath, join(caDir, "ca.pem")];
+    const args = [join(repoRoot, "tests", "tools", "verify_cms.py"), cmsPath, caPem];
     if (content) {
       writeFileSync(join(dir, "content"), content);
       args.push(join(dir, "content"));

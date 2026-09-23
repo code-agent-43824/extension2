@@ -1,11 +1,13 @@
-"""Independent verifier for GOST R 34.10-2012/256 CMS signatures made on the stand.
+"""Independent verifier for GOST R 34.10-2012 (256 and 512 bit) CMS signatures.
 
 Shares no code with the extension or the Rutoken stack: its own DER walk, Streebog and
 GOST signatures from gostcrypto. Checks that
-- the Streebog-256 digest of the content equals the messageDigest signed attribute;
+- the Streebog digest of the content equals the messageDigest signed attribute;
 - the signature over the signed attributes verifies with the signer certificate's key;
 - the signer certificate is signed by the given CA.
-Byte-order conventions are the ones in gost_ca.py.
+Byte-order conventions are the ones in gost_ca.py. Each key's curve comes from its
+SubjectPublicKeyInfo parameters, so certificates of other CAs (a CryptoPro test CA with a
+512-bit key) verify too.
 
 Usage: verify_cms.py CMS_BASE64_FILE CA_PEM [CONTENT_FILE]
 CONTENT_FILE is required for a detached signature. Prints a JSON report; exits 0 only
@@ -18,7 +20,7 @@ import sys
 
 from gostcrypto import gosthash, gostsignature
 
-from gost_ca import CURVE, unpem
+from gost_ca import unpem
 
 OID_SIGNED_DATA = "1.2.840.113549.1.7.2"
 OID_CONTENT_TYPE = "1.2.840.113549.1.9.3"
@@ -65,20 +67,44 @@ def decode_oid(value):
     return ".".join(map(str, arcs))
 
 
-def streebog(data):
-    return bytes(gosthash.new("streebog256", data=data).digest())
+DIGEST_SIZES = {"1.2.643.7.1.1.2.2": 32, "1.2.643.7.1.1.2.3": 64}
+
+# Parameter set OIDs (RFC 4357, RFC 7836) by the names gostcrypto gives the curves.
+_CURVES = gostsignature.CURVES_R_1323565_1_024_2019
+PARAMSETS = {
+    "1.2.643.7.1.2.1.1.1": _CURVES["id-tc26-gost-3410-2012-256-paramSetA"],
+    "1.2.643.7.1.2.1.1.2": _CURVES["id-tc26-gost-3410-2012-256-paramSetB"],
+    "1.2.643.2.2.35.1": _CURVES["id-tc26-gost-3410-2012-256-paramSetB"],  # CryptoPro-A
+    "1.2.643.2.2.36.0": _CURVES["id-tc26-gost-3410-2012-256-paramSetB"],  # CryptoPro-XchA
+    "1.2.643.7.1.2.1.1.3": _CURVES["id-tc26-gost-3410-2012-256-paramSetC"],
+    "1.2.643.2.2.35.2": _CURVES["id-tc26-gost-3410-2012-256-paramSetC"],  # CryptoPro-B
+    "1.2.643.7.1.2.1.1.4": _CURVES["id-tc26-gost-3410-2012-256-paramSetD"],
+    "1.2.643.2.2.35.3": _CURVES["id-tc26-gost-3410-2012-256-paramSetD"],  # CryptoPro-C
+    "1.2.643.2.2.36.1": _CURVES["id-tc26-gost-3410-2012-256-paramSetD"],  # CryptoPro-XchB
+    "1.2.643.7.1.2.1.2.1": _CURVES["id-tc26-gost-3410-12-512-paramSetA"],
+    "1.2.643.7.1.2.1.2.2": _CURVES["id-tc26-gost-3410-12-512-paramSetB"],
+    "1.2.643.7.1.2.1.2.3": _CURVES["id-tc26-gost-3410-2012-512-paramSetC"],
+}
 
 
-def gost_verify(point_le, data, signature):
-    """point_le is the SubjectPublicKeyInfo point (x||y, each little-endian)."""
-    public_key = point_le[:32][::-1] + point_le[32:][::-1]
-    raw = signature[32:] + signature[:32]
-    verifier = gostsignature.new(gostsignature.MODE_256, CURVE)
-    return verifier.verify(bytearray(public_key), bytearray(streebog(data)[::-1]), bytearray(raw))
+def streebog(data, size=32):
+    return bytes(gosthash.new("streebog256" if size == 32 else "streebog512", data=data).digest())
+
+
+def gost_verify(key, data, signature):
+    """key is (paramset OID, SubjectPublicKeyInfo point: x||y, each little-endian). The hash is
+    Streebog of the key's size, as GOST R 34.10-2012 signatures pair them."""
+    paramset, point_le = key
+    size = len(point_le) // 2
+    public_key = point_le[:size][::-1] + point_le[size:][::-1]
+    raw = signature[size:] + signature[:size]
+    mode = gostsignature.MODE_256 if size == 32 else gostsignature.MODE_512
+    verifier = gostsignature.new(mode, PARAMSETS[paramset])
+    return verifier.verify(bytearray(public_key), bytearray(streebog(data, size)[::-1]), bytearray(raw))
 
 
 def certificate_parts(cert_der):
-    """Returns (tbs_der, signature, serial, public_key_point) of an X.509 certificate."""
+    """Returns (tbs_der, signature, serial, (paramset OID, public key point)) of an X.509 certificate."""
     _, cert, _ = tlv(cert_der)
     (_, tbs_value, tbs_der), _, (_, sig_bits, _) = items(cert)
     fields = items(tbs_value)
@@ -86,8 +112,10 @@ def certificate_parts(cert_der):
         fields = fields[1:]
     serial = fields[0][1]
     spki = items(fields[5][1])
+    algorithm = items(spki[0][1])
+    paramset = decode_oid(items(algorithm[1][1])[0][1])
     _, point_octets, _ = tlv(spki[1][1][1:])  # BIT STRING: unused-bits byte, then OCTET STRING
-    return tbs_der, sig_bits[1:], serial, point_octets
+    return tbs_der, sig_bits[1:], serial, (paramset, point_octets)
 
 
 def verify(cms_b64, ca_pem, content=None):
@@ -135,7 +163,8 @@ def verify(cms_b64, ca_pem, content=None):
     _, _, _, ca_point = certificate_parts(unpem(ca_pem))
 
     checks = report["checks"]
-    checks["message_digest"] = message_digest == streebog(content)
+    digest_oid = decode_oid(items(signer[2][1])[0][1])
+    checks["message_digest"] = message_digest == streebog(content, DIGEST_SIZES[digest_oid])
     # The signature covers the signed attributes re-encoded as a SET (tag 0x31 instead of [0]).
     checks["signature"] = gost_verify(point, b"\x31" + attrs_raw[1:], signature)
     checks["certificate_by_ca"] = gost_verify(ca_point, cert_tbs, cert_signature)
