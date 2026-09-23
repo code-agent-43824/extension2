@@ -66,6 +66,10 @@ export async function signWithToken(session: Session, job: SignJob): Promise<str
     return await session.plugin.sign(deviceId, job.token.certId, job.content, format, job.options);
   } finally {
     // Leave no login behind for the page to reuse.
-    await session.plugin.logout(deviceId).catch(() => {});
+    try {
+      await session.plugin.logout(deviceId);
+    } catch {
+      // The token may have been removed; nothing is left logged in then.
+    }
   }
 }

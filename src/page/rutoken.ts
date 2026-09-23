@@ -5,19 +5,20 @@
 export const ADAPTER_KEY = "C3B7563B-BF85-45B7-88FC-7CFF1BD3C2DB";
 
 // The part of the Rutoken Plugin API 4.12 the shim uses. Every member is asynchronous, constants
-// included: plugin.CERT_CATEGORY_USER is a thenable, so it is awaited before use.
+// included: plugin.CERT_CATEGORY_USER is a thenable, so it is awaited before use. Methods return
+// thenables too, not Promises: no .catch() or .finally() on them.
 export interface RutokenPlugin {
   readonly version: PromiseLike<string>;
   readonly CERT_CATEGORY_USER: PromiseLike<number>;
   readonly TOKEN_INFO_SERIAL: PromiseLike<number>;
   readonly DATA_FORMAT_BASE64: PromiseLike<number>;
-  enumerateDevices(): Promise<number[]>;
-  enumerateCertificates(deviceId: number, category: number): Promise<string[]>;
-  getCertificate(deviceId: number, certId: string): Promise<string>;
-  getDeviceInfo(deviceId: number, option: number): Promise<unknown>;
-  login(deviceId: number, pin: string): Promise<void>;
-  logout(deviceId: number): Promise<void>;
-  sign(deviceId: number, certId: string, data: string, dataFormat: number, options: SignOptions): Promise<string>;
+  enumerateDevices(): PromiseLike<number[]>;
+  enumerateCertificates(deviceId: number, category: number): PromiseLike<string[]>;
+  getCertificate(deviceId: number, certId: string): PromiseLike<string>;
+  getDeviceInfo(deviceId: number, option: number): PromiseLike<unknown>;
+  login(deviceId: number, pin: string): PromiseLike<void>;
+  logout(deviceId: number): PromiseLike<void>;
+  sign(deviceId: number, certId: string, data: string, dataFormat: number, options: SignOptions): PromiseLike<string>;
 }
 
 export interface SignOptions {

@@ -31,16 +31,21 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
   case-insensitively by ProgID), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
-  `dn.ts` + `sha1.ts` (certificate parsing; `dn.ts` holds the CryptoPro name format sites match with regexes).
+  `dn.ts` + `sha1.ts` (certificate parsing; `dn.ts` holds the CryptoPro name format sites match with regexes),
+  `signing.ts` (PIN, login, the plugin's `sign`, logout) + `pin-dialog.ts` (the PIN window, in a shadow root).
+  Rutoken Plugin methods return thenables, not Promises: `await` them, never `.catch()`.
 
 - `scripts/` — Node scripts run directly by Node's type stripping (no build step): `fetch-vendor.ts` +
   `vendor-lock.json` (pinned third-party files), `build.ts` (esbuild), `gen-constants.ts`, `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
   PINs, paths), `provision-token.ts` (key + certificate on the fake token).
-- `tests/unit/` — Vitest unit tests (`vitest.config.ts` limits Vitest to this directory); `tests/fixtures/` holds
-  copies of a stand certificate and its CA so they run without the stand.
+- `tests/unit/` — Vitest unit tests (`vitest.config.ts` limits Vitest to this directory); `fakes.ts` holds the
+  fake plugin and PIN window; `tests/fixtures/` holds copies of a stand certificate and its CA so they run without
+  the stand.
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
-  `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path.
-- `tests/tools/` — independent Python GOST tooling (`gost_ca.py`), hash-pinned in `requirements.txt`.
+  `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `verify.ts` runs
+  the independent verifier on a signature.
+- `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier),
+  hash-pinned in `requirements.txt`.
 
 Stand pitfalls (details in `docs/JOURNAL.md`): the native host finds the plugin only via `$HOME/.mozilla/plugins`,
 and the plugin loads `librtpkcs11ecp.so` from that same directory, so the stand runs Chromium with its own `HOME`;
