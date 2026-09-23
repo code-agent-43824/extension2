@@ -24,6 +24,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `npm run check` — typecheck (Node code, then `src/page/` with DOM types, then `src/extension/` with Chrome types)
   and unit tests; must pass before every commit.
 - `npm run test:stand` — build, then Playwright tests against the built stand; `npx playwright test -g "<name>"` for one.
+- `STAND_ONLINE=1 npx playwright test tests/stand/testgost.spec.ts` — after a build: the opt-in experiment against
+  testgost2012.cryptopro.ru (internet through the environment proxy); leaves screenshots in `stand/testgost/`.
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
 
 ## Map of the code
@@ -39,7 +41,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   case-insensitively by ProgID), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing; `dn.ts` holds the CryptoPro name format sites match with regexes),
-  `signing.ts` (PIN, login, the plugin's `sign`, logout) + `pin-dialog.ts` (the PIN window, in a shadow root).
+  `signing.ts` (the plugin's `sign`) + `token-login.ts` (PIN window, login, logout, the single connected token) +
+  `pin-dialog.ts` (the PIN window, in a shadow root), `objects/enrollment.ts` (X509Enrollment for CA pages:
+  key and PKCS#10 request on the token, installing the issued certificate).
   Rutoken Plugin methods return thenables, not Promises: `await` them, never `.catch()`.
 
 - `scripts/` — Node scripts run directly by Node's type stripping (no build step): `fetch-vendor.ts` +
@@ -52,8 +56,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   fake plugin and PIN window; `tests/fixtures/` holds copies of a stand certificate and its CA so they run without
   the stand.
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
-  `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `verify.ts` runs
-  the independent verifier on a signature.
+  `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `testgost.spec.ts`
+  (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `verify.ts` runs the
+  independent verifier on a signature.
 - `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier),
   hash-pinned in `requirements.txt`.
 
