@@ -1,6 +1,7 @@
-// Downloads the third-party files the test stand needs into vendor/ and checks
-// each against the SHA-256 pinned in vendor-lock.json. A mismatch is an error:
-// an upstream update must be reviewed and pinned by hand, never taken silently.
+// Downloads the third-party files the test stand needs (Rutoken binaries, the fake Rutoken,
+// the CryptoPro demo page) into vendor/ and checks each against the SHA-256 pinned in
+// vendor-lock.json. A mismatch is an error: an upstream update must be reviewed and pinned
+// by hand, never taken silently.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync } from "node:fs";
@@ -36,6 +37,7 @@ function fetchEntry(name: string, entry: VendorEntry): void {
     console.log(`ok       ${name}: ${entry.file}`);
     return;
   }
+  mkdirSync(dirname(target), { recursive: true });
   const partial = `${target}.part`;
   rmSync(partial, { force: true });
   // curl honours HTTPS_PROXY and the system CA store; Node's fetch does not.

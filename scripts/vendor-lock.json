@@ -18,5 +18,55 @@
     "file": "softhsm-testkit-linux-x64.zip",
     "url": "https://github.com/code-agent-43824/SoftHSMv2/releases/download/v2.7.0-portable.42/softhsm-testkit-linux-x64.zip",
     "sha256": "70cf1d69376a18eb92e5d294d39a31eff854c63d06cde113dcdb3a3f98a85c03"
+  },
+  "cryptopro-cadesplugin_api-js": {
+    "file": "cryptopro/products/cades/cadesplugin_api.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/cadesplugin_api.js",
+    "sha256": "d54cfe9186c4b6dbe9ed73d83f289d31da7b50000b48ba3e7c278e820578086b"
+  },
+  "cryptopro-es6-promise-min-js": {
+    "file": "cryptopro/products/cades/es6-promise.min.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/es6-promise.min.js",
+    "sha256": "a927eb2caacdc72f62d6b85920554cdbc96b3fb12c39e2cb70d78598cff7f0e6"
+  },
+  "cryptopro-demopage-cades_bes_sample-html": {
+    "file": "cryptopro/products/cades/demopage/cades_bes_sample.html",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/cades_bes_sample.html",
+    "sha256": "f20087b23309746ad16bf09d07c3ceb69298657ded156f85e4fed1254ce426b4"
+  },
+  "cryptopro-demopage-code-js": {
+    "file": "cryptopro/products/cades/demopage/Code.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/Code.js",
+    "sha256": "1c0ec040c0b45b911eeea4bc688fa1551b5a3cc7e2d5ced9bfdbec2d91680f23"
+  },
+  "cryptopro-demopage-async_code-js": {
+    "file": "cryptopro/products/cades/demopage/async_code.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/async_code.js",
+    "sha256": "36ce468107a9194d8bfaf25507feb846a655f6c31f71d49adaa154ecc1856cbc"
+  },
+  "cryptopro-demopage-load_extension-js": {
+    "file": "cryptopro/products/cades/demopage/load_extension.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/load_extension.js",
+    "sha256": "208e55d5599c173ece98cc798fc49ed41bbd74c8ee38a23e5d9c8728d535bb64"
+  },
+  "cryptopro-demopage-lights-js": {
+    "file": "cryptopro/products/cades/demopage/lights.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/lights.js",
+    "sha256": "fa72832f1136cacff6c4de7087dfccdcb5b69bd8f9467492214eccc939204735"
+  },
+  "cryptopro-demopage-highlight-js": {
+    "file": "cryptopro/products/cades/demopage/highlight.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/highlight.js",
+    "sha256": "5488a6925bd368787da80e06fa92e62f65ecae05b4447c571bdfc893a1b7a369"
+  },
+  "cryptopro-demopage-ie_eventlistner_polyfill-js": {
+    "file": "cryptopro/products/cades/demopage/ie_eventlistner_polyfill.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/ie_eventlistner_polyfill.js",
+    "sha256": "b2e919f5fb7e05f520d871db48512b038ba95eb177b8dbe671612c8ce18ea1bd"
+  },
+  "cryptopro-demopage-demopage-css": {
+    "file": "cryptopro/products/cades/demopage/demopage.css",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/demopage.css",
+    "sha256": "25d474fbf403718e72a8292ae7d48bc2a645cde55056280a17960cf5b16dcff8"
   }
 }
