@@ -8,7 +8,7 @@
 
 ## Действия
 
-- [ ] **1. Каркас Node-проекта.** `package.json`, TypeScript, esbuild, Vitest, Playwright (Chromium из
+- [~] **1. Каркас Node-проекта.** `package.json`, TypeScript, esbuild, Vitest, Playwright (Chromium из
   `/opt/pw-browsers`, без скачивания), `.gitignore` для `vendor/` и сборки. Команды сборки и тестов — в `CLAUDE.md`.
 - [ ] **2. Получение вендорских файлов.** Скрипт скачивает в `vendor/` (вне git) и проверяет по SHA-256:
   Рутокен Плагин 4.12.3 deb для amd64, CRX Адаптера Рутокен Плагин, портируемый fake Рутокен и тест-кит

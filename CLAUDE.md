@@ -25,8 +25,10 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   stringly-typed, types catch mismatched property names; a MAIN-world content script must ship as one bundled file.
 - **Interception: define `window.cadesplugin` from a MAIN-world content script at `document_start`.** The site's
   `cadesplugin_api.js` returns early when the object exists. Evidence in `docs/JOURNAL.md`.
-- **CMS is assembled by our code; the token only signs the hash (`rawSign`).** The Rutoken `sign` method cannot add
-  arbitrary signed attributes, and the target page adds a document-name attribute. Evidence in `docs/JOURNAL.md`.
+- **Signatures are judged by one criterion: they verify.** Owner, 2026-09-23. Reproducing CryptoPro's signed
+  object byte for byte is not a goal; a missing field or attribute (e.g. the demo page's document-name attribute)
+  is acceptable as long as an independent verifier accepts the signature. So use the Rutoken `sign` method where
+  it covers the request, and write our own CMS code only where `sign` cannot produce a verifiable result.
 
 ## Departures from AGENTS.md
 

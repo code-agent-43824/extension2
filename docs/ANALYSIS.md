@@ -112,10 +112,8 @@ window["C3B7563B-BF85-45B7-88FC-7CFF1BD3C2DB"] = { initialize(), затем isPl
       CreateObjectAsync("CAdESCOM.CadesSignedData") → propset_Content(data) → SignCades(signer, CADES_BES)
 наш shim:  Store      → enumerateDevices + enumerateCertificates(USER) + getCertificate на каждом токене
            Certificate→ наш объект поверх PEM (Thumbprint = SHA-1 от DER, SubjectName в формате КриптоПро, ...)
-           SignCades  → окно PIN (если не залогинены) → подтверждение → login
-                        → свой код собирает SignedData и подписанные атрибуты (как КриптоПро)
-                        → digest(ГОСТ 34.11-2012) от атрибутов → rawSign(deviceId, keyId, хеш) → подпись в CMS
-                        (простой путь через sign(...) не умеет атрибут «имя документа», см. раздел 9)
+           SignCades  → окно PIN (если не залогинены) → подтверждение → login → sign(deviceId, certId,
+                        base64(данные), DATA_FORMAT_BASE64, {detached, addEssCert:true, addSignTime:true})
            результат  → Base64 в том же виде, что отдаёт КриптоПро
 ```
 
@@ -251,6 +249,5 @@ Chromium (Playwright) ── наше расширение
 `CAdESCOM.CadesSignedData` → `propset_ContentEncoding(CADESCOM_BASE64_TO_BINARY)`, `propset_Content(base64)`,
 по флажку `propset_DisplayData(1)`, `SignCades(signer, CADESCOM_CADES_BES | CADES_USE_OCSP_AUTHORIZED_POLICY, detached)`.
 
-Отсюда следствие для подписи: метод `sign` Рутокен Плагина не умеет добавлять атрибут «имя документа», поэтому
-подписанные атрибуты придётся собирать своим кодом, а у токена просить только подпись хеша (`rawSign`). По журналу
-проекта SoftHSMv2 сам Рутокен Плагин устроен так же: CMS он строит сам, а токен лишь подписывает 32 байта.
+Метод `sign` Рутокен Плагина атрибут «имя документа» добавить не умеет. Владелец решил (2026-09-23), что это
+допустимо: критерий подписи — «проверяется независимым средством», а не совпадение с объектом КриптоПро поле в поле.
