@@ -2,7 +2,7 @@ import { CadesError } from "../errors.ts";
 import { About } from "./about.ts";
 import { constants } from "../constants.ts";
 import { formatName } from "../dn.ts";
-import { algorithmName, derToBase64 } from "../x509.ts";
+import { algorithmName, derToBase64, type X509 } from "../x509.ts";
 import type { TokenCertificate } from "../token.ts";
 import type { Session } from "./session.ts";
 
@@ -87,82 +87,94 @@ export function tokenOf(certificate: unknown): TokenCertificate | undefined {
   return typeof certificate === "object" && certificate !== null ? tokens.get(certificate) : undefined;
 }
 
-// CAdESCOM.Certificate for a certificate on a Rutoken.
+const CRYPT_E_NOT_FOUND = 0x80092004;
+
+// CAdESCOM.Certificate: a certificate on a Rutoken, with its key, or one from the root store, without.
 export class Certificate {
   readonly #session: Session;
-  readonly #token: TokenCertificate;
+  readonly #x509: X509;
+  readonly #token: TokenCertificate | undefined;
 
-  constructor(session: Session, token: TokenCertificate) {
+  constructor(session: Session, certificate: TokenCertificate | X509) {
     this.#session = session;
-    this.#token = token;
-    tokens.set(this, token);
+    if ("x509" in certificate) {
+      this.#token = certificate;
+      this.#x509 = certificate.x509;
+      tokens.set(this, certificate);
+    } else {
+      this.#token = undefined;
+      this.#x509 = certificate;
+    }
   }
 
   get SubjectName(): Promise<string> {
-    return Promise.resolve(formatName(this.#token.x509.subject));
+    return Promise.resolve(formatName(this.#x509.subject));
   }
 
   get IssuerName(): Promise<string> {
-    return Promise.resolve(formatName(this.#token.x509.issuer));
+    return Promise.resolve(formatName(this.#x509.issuer));
   }
 
   get SerialNumber(): Promise<string> {
-    return Promise.resolve(this.#token.x509.serialNumber);
+    return Promise.resolve(this.#x509.serialNumber);
   }
 
   get Thumbprint(): Promise<string> {
-    return Promise.resolve(this.#token.x509.thumbprint);
+    return Promise.resolve(this.#x509.thumbprint);
   }
 
   get Version(): Promise<number> {
-    return Promise.resolve(this.#token.x509.version);
+    return Promise.resolve(this.#x509.version);
   }
 
   get ValidFromDate(): Promise<string> {
-    return Promise.resolve(dateString(this.#token.x509.notBefore));
+    return Promise.resolve(dateString(this.#x509.notBefore));
   }
 
   get ValidToDate(): Promise<string> {
-    return Promise.resolve(dateString(this.#token.x509.notAfter));
+    return Promise.resolve(dateString(this.#x509.notAfter));
   }
 
   // null when the certificate has no 2.5.29.16 extension, as the demo page expects.
   get PrivateKeyUsagePeriodFrom(): Promise<string | null> {
-    const date = this.#token.x509.privateKeyNotBefore;
+    const date = this.#x509.privateKeyNotBefore;
     return Promise.resolve(date && dateString(date));
   }
 
   get PrivateKeyUsagePeriodTo(): Promise<string | null> {
-    const date = this.#token.x509.privateKeyNotAfter;
+    const date = this.#x509.privateKeyNotAfter;
     return Promise.resolve(date && dateString(date));
   }
 
   // Knowing for sure needs getKeyByCertificate, which needs the PIN; user-category certificates on a
   // Rutoken come with their key. The real check happens when signing. Chosen in docs/PLAN.md, stage 3.
+  // A root store certificate has no key: false, and PrivateKey fails with CRYPT_E_NOT_FOUND, as CryptoPro
+  // 2.0.15700 answers for its Root store (checked on the stand, docs/JOURNAL.md).
   HasPrivateKey(): Promise<boolean> {
-    return Promise.resolve(true);
+    return Promise.resolve(this.#token !== undefined);
   }
 
   get PrivateKey(): Promise<PrivateKey> {
+    if (!this.#token) return Promise.reject(new CadesError("Cannot find object or property.", CRYPT_E_NOT_FOUND));
     return Promise.resolve(new PrivateKey(this.#session, this.#token));
   }
 
   PublicKey(): Promise<PublicKey> {
-    return Promise.resolve(new PublicKey(this.#token.x509.publicKeyAlgorithm));
+    return Promise.resolve(new PublicKey(this.#x509.publicKeyAlgorithm));
   }
 
   // Only base64, as the real plug-in: 64-column lines, each ending in LF (2.0.15700 on the stand, docs/JOURNAL.md);
   // it refuses binary with E_INVALIDARG. lkfl2.nalog.ru reads it for every certificate it lists.
   Export(encoding: number): Promise<string> {
     if (encoding !== constants.CADESCOM_ENCODE_BASE64) throw new CadesError(`Неподдерживаемая кодировка: ${encoding}`, E_INVALIDARG);
-    const text = derToBase64(this.#token.x509.der);
+    const text = derToBase64(this.#x509.der);
     return Promise.resolve((text.match(/.{1,64}/g) ?? []).map((line) => `${line}\n`).join(""));
   }
 
   // Only the validity period is checked so far; chain building is a later task (docs/PLAN.md, stage 3).
   IsValid(): Promise<CertificateStatus> {
     const now = Date.now();
-    const { notBefore, notAfter } = this.#token.x509;
+    const { notBefore, notAfter } = this.#x509;
     return Promise.resolve(new CertificateStatus(notBefore.getTime() <= now && now <= notAfter.getTime()));
   }
 }

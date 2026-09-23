@@ -1,6 +1,7 @@
 /// <reference types="chrome" />
-// The root certificate store on the options page (docs/PLAN.md of stage 5, action 12): the built-in roots as
-// cards, switched one by one, all at once and as a whole store, removed and added from DER and PEM files.
+// The root certificate store (docs/PLAN.md of stage 5, actions 12 and 13): on the options page, the built-in
+// roots as cards, switched one by one, all at once and as a whole store, removed and added from DER and PEM
+// files; on an enabled site, the enabled ones as CryptoPro's Root store.
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,7 +10,8 @@ import { standDir } from "../../scripts/setup-stand.ts";
 import { BUILTIN_ROOTS } from "../../src/extension/builtin-roots.ts";
 import { base64ToDer } from "../../src/extension/roots.ts";
 import { parseCertificate } from "../../src/page/x509.ts";
-import { clearSites, extensionOrigin, launchStand, standExtension } from "./harness.ts";
+import { stand } from "../../scripts/setup-stand.ts";
+import { clearSites, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 
 const outDir = join(standDir, "roots");
 const headCa = "8CAE88BBFD404A7A53630864F9033606E1DC45E2";
@@ -17,14 +19,17 @@ const headCaDer = base64ToDer(BUILTIN_ROOTS.find((der) => parseCertificate(base6
 const caPem = readFileSync(join(repoRoot, "tests", "fixtures", "stand-ca.pem"));
 
 let context: BrowserContext;
+let server: PageServer;
 
 test.beforeAll(async () => {
   mkdirSync(outDir, { recursive: true });
-  context = await launchStand({ extensions: [standExtension()] });
+  server = await servePages({ "/": { type: "text/html; charset=utf-8", body: Buffer.from("<!doctype html><title>roots</title>") } });
+  context = await launchStand({ extensions: [stand.adapter, standExtension()] });
 });
 
 test.afterAll(async () => {
   await context?.close();
+  await server?.close();
 });
 
 test.beforeEach(async () => {
@@ -111,4 +116,36 @@ test("a certificate is removed, and added back from DER, another from PEM; other
   page.once("dialog", (dialog) => void dialog.dismiss());
   await cardOf(page, headCa).locator("button[name=remove]").click();
   await expect(cards(page)).toHaveCount(all + 1);
+});
+
+// What lkip2.nalog.ru's conditions check does (docs/JOURNAL.md): open Root, find the head CA by SHA-1.
+async function rootStoreOnSite(page: Page) {
+  return page.evaluate(async (thumbprint) => {
+    const cadesplugin = (window as unknown as { cadesplugin: Promise<void> & { CreateObjectAsync(name: string): Promise<any> } }).cadesplugin;
+    await cadesplugin;
+    const store = await cadesplugin.CreateObjectAsync("CAPICOM.Store");
+    await store.Open(2, "Root", 2);
+    const certificates = await store.Certificates;
+    const found = await certificates.Find(0, thumbprint);
+    const result = { count: await certificates.Count, found: await found.Count };
+    await store.Close();
+    return result;
+  }, headCa);
+}
+
+test("an enabled site sees the enabled certificates as CryptoPro's Root store", async () => {
+  await enableSite(context, server.url);
+  const site = await openStandPage(context, `${server.url}/`);
+  expect(await rootStoreOnSite(site)).toEqual({ count: BUILTIN_ROOTS.length, found: 1 });
+
+  const options = await optionsPage();
+  await cardOf(options, headCa).locator("input[name=enabled]").uncheck();
+  await expect(count(options)).toHaveText(`Включено ${BUILTIN_ROOTS.length - 1} из ${BUILTIN_ROOTS.length}`);
+  await site.reload();
+  expect(await rootStoreOnSite(site)).toEqual({ count: BUILTIN_ROOTS.length - 1, found: 0 });
+
+  await options.locator("input[name=roots-enabled]").uncheck();
+  await expect(count(options)).toContainText("хранилище выключено");
+  await site.reload();
+  expect(await rootStoreOnSite(site)).toEqual({ count: 0, found: 0 });
 });

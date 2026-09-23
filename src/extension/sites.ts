@@ -4,6 +4,8 @@
 // us (docs/PLAN.md of stage 5).
 
 export const SCRIPT_ID = "cades-shim";
+// The isolated-world script handing page.js the root store (roots-bridge.ts).
+export const BRIDGE_ID = "cades-roots";
 export const STORAGE_KEY = "sites";
 
 type Api = typeof chrome;
@@ -62,19 +64,14 @@ export async function pruneSites(api: Api = chrome): Promise<void> {
 export async function syncContentScript(api: Api = chrome): Promise<string[]> {
   const matches: string[] = [];
   for (const site of await enabledSites(api)) if (await hasAccess(site, api)) matches.push(matchPattern(site));
-  const registered = await api.scripting.getRegisteredContentScripts({ ids: [SCRIPT_ID] });
-  if (registered.length) await api.scripting.unregisterContentScripts({ ids: [SCRIPT_ID] });
+  const ids = [SCRIPT_ID, BRIDGE_ID];
+  const registered = await api.scripting.getRegisteredContentScripts({ ids });
+  if (registered.length) await api.scripting.unregisterContentScripts({ ids: registered.map((script) => script.id) });
   if (matches.length) {
+    const common = { matches, runAt: "document_start", allFrames: true, persistAcrossSessions: true } as const;
     await api.scripting.registerContentScripts([
-      {
-        id: SCRIPT_ID,
-        matches,
-        js: ["page.js"],
-        world: "MAIN",
-        runAt: "document_start",
-        allFrames: true,
-        persistAcrossSessions: true,
-      },
+      { id: SCRIPT_ID, js: ["page.js"], world: "MAIN", ...common },
+      { id: BRIDGE_ID, js: ["roots-bridge.js"], world: "ISOLATED", ...common },
     ]);
   }
   return matches;

@@ -6,8 +6,11 @@ import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { formatName } from "../../src/page/dn.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
 import { BUILTIN_ROOTS } from "../../src/extension/builtin-roots.ts";
+import { rootCertificates, ROOTS_REQUEST, ROOTS_RESPONSE, ROOTS_WAIT_MS } from "../../src/page/roots.ts";
+import type { Clock } from "../../src/page/rutoken.ts";
 import {
   addRoots,
+  enabledRoots,
   base64ToDer,
   certificateOf,
   isBuiltin,
@@ -124,5 +127,66 @@ describe("root store", () => {
       await expect(addRoots(bytes, api)).rejects.toThrow("не похож на сертификат X.509");
     }
     expect(await thumbprints(api)).toHaveLength(12);
+  });
+});
+
+describe("what sites see", () => {
+  it("is the enabled certificates, none with the store off, and the built-in ones before anything is saved", async () => {
+    const chrome = fakeChrome();
+    expect(await enabledRoots(chrome.api)).toEqual(BUILTIN_ROOTS);
+    expect(chrome.store[ROOTS_KEY]).toBeUndefined();
+    await setRootEnabled(headCa, false, chrome.api);
+    const rest = await enabledRoots(chrome.api);
+    expect(rest).toHaveLength(11);
+    expect(rest.map((der) => parseCertificate(base64ToDer(der)).thumbprint)).not.toContain(headCa);
+    await setStoreEnabled(false, chrome.api);
+    expect(await enabledRoots(chrome.api)).toEqual([]);
+  });
+});
+
+// A window as far as postMessage goes: messages are delivered asynchronously with the window as source.
+function fakeWindow() {
+  const target = new EventTarget();
+  const win = Object.assign(target, {
+    postMessage(data: unknown) {
+      setTimeout(() => target.dispatchEvent(Object.assign(new Event("message"), { data, source: win })));
+    },
+  });
+  return win as unknown as Window;
+}
+
+class ManualClock implements Clock {
+  timers: (() => void)[] = [];
+  setTimeout(callback: () => void) {
+    this.timers.push(callback);
+  }
+  now() {
+    return 0;
+  }
+}
+
+describe("page.js asking for the roots", () => {
+  it("gets them from the bridge's answer to its own request", async () => {
+    const win = fakeWindow();
+    win.addEventListener("message", (event) => {
+      const { data } = event as MessageEvent;
+      if (data?.type !== ROOTS_REQUEST) return;
+      // An answer to another request, then a broken certificate among good ones: both are ignored.
+      win.postMessage({ type: ROOTS_RESPONSE, id: "other", certificates: [] }, "*");
+      win.postMessage({ type: ROOTS_RESPONSE, id: data.id, certificates: [BUILTIN_ROOTS[0], "AAAA", BUILTIN_ROOTS[1]] }, "*");
+    });
+    const roots = await rootCertificates(win, new ManualClock());
+    expect(roots.map((certificate) => certificate.thumbprint)).toEqual(
+      BUILTIN_ROOTS.slice(0, 2).map((der) => parseCertificate(base64ToDer(der)).thumbprint),
+    );
+  });
+
+  it("sees an empty store when nothing answers in time", async () => {
+    const clock = new ManualClock();
+    const pending = rootCertificates(fakeWindow(), clock);
+    expect(clock.timers).toHaveLength(1);
+    clock.timers[0]!();
+    expect(await pending).toEqual([]);
+    expect(ROOTS_WAIT_MS).toBeGreaterThan(0);
   });
 });

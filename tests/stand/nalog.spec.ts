@@ -89,9 +89,15 @@ test("the test CA issues 256-bit certificates with an INN for an individual and 
 });
 
 test("lkfl2: the page lists the certificate, the Rutoken signs, and the server refuses the CA", async () => {
-  test.setTimeout(180_000);
+  test.setTimeout(300_000);
   const page = await openStandPage(context, `${lkfl}/lkfl/`, 60_000);
-  await page.getByText("Войти с помощью ЭП").first().click({ timeout: 60_000 });
+  // lkfl2 answers 502 now and then; the page is up when it offers the sign-in with a signature.
+  const signIn = page.getByText("Войти с помощью ЭП").first();
+  await expect(async () => {
+    if (!(await signIn.isVisible())) await page.reload();
+    await expect(signIn).toBeVisible({ timeout: 20_000 });
+  }).toPass({ timeout: 120_000 });
+  await signIn.click();
   const dialog = page.locator("[role=dialog]").last();
   await dialog.locator("[aria-haspopup=listbox]").click({ timeout: 60_000 });
   await page.locator("[role=option]", { hasText: `CN=${individual.commonName}` }).click();
@@ -113,10 +119,10 @@ test("lkfl2: the page lists the certificate, the Rutoken signs, and the server r
 
 // The sole trader's sign-in itself is on lkipgost2.nalog.ru, which speaks only GOST TLS, out of reach for
 // Chrome. What lkip2 offers without it is its check of the conditions for signing in, which ends with a
-// signature and the server's verdict on the certificate. Two of its steps are not about our extension and
-// are got past: it tells a GOST browser by the user agent alone, and it looks for the root certificates of
-// the FNS's own CA and of the Ministry in the Root store, which our extension does not have (docs/JOURNAL.md).
-test("lkip2: the conditions check finds the plug-in, the CSP and the certificate, signs, and the server refuses the CA", async () => {
+// signature and the server's verdict on the certificate. Its browser step is not about our extension and is
+// got past: it tells a GOST browser by the user agent alone. Its root certificate step finds the head CA and
+// the Ministry in the Root store, which is the extension's built-in root store (docs/JOURNAL.md).
+test("lkip2: the conditions check finds the plug-in, the CSP, the roots and the certificate, signs, and the server refuses the CA", async () => {
   test.setTimeout(180_000);
   const page = await context.newPage();
   const cdp = await context.newCDPSession(page);
@@ -124,19 +130,15 @@ test("lkip2: the conditions check finds the plug-in, the CSP and the certificate
   await cdp.send("Emulation.setUserAgentOverride", { userAgent: `${userAgent} Chromium GOST` });
   await page.goto(`${lkip}/lk#/certificate/requirements`);
   await expect(page.getByText("Начать проверку")).toBeVisible({ timeout: 60_000 });
-  await page.evaluate(() => {
-    const checker = (window as unknown as { checker: Record<string, unknown> }).checker;
-    checker.checkCA = function (this: { currentResult: unknown; afterCheckStep: (step: string, result: boolean, next: boolean) => void }) {
-      this.currentResult = true;
-      this.afterCheckStep("checkCA", true, true);
-    };
-  });
   const verdict = page.waitForResponse((response) => response.url().endsWith("/api/certificate/checkAuthority"));
   await page.getByText("Начать проверку").click();
   const list = page.locator(".certificate-list__fancy");
   await expect(list).toBeVisible({ timeout: 60_000 });
   await page.screenshot({ path: join(outDir, "lkip-1-certificates.png"), fullPage: true });
   const item = list.locator("div").filter({ hasText: "326770000000016" }).filter({ has: page.getByText("Выбрать", { exact: true }) }).last();
+  // The page takes a choice made in the first second after the list opens as the end of the check, without
+  // a signature: its poll (every second) has to clear processLoaded first. A person does not click that fast.
+  await page.waitForFunction(() => (window as unknown as { checker: { processLoaded: boolean } }).checker.processLoaded === false);
   await item.getByText("Выбрать", { exact: true }).click();
   await expect(pinDialog(page)).toContainText(`Сертификат: ${soleTrader.commonName}`, { timeout: 60_000 });
   await page.screenshot({ path: join(outDir, "lkip-2-pin.png") });
@@ -150,6 +152,7 @@ test("lkip2: the conditions check finds the plug-in, the CSP and the certificate
   expect(state.userInfo).toMatchObject({
     plugin: { status: true },
     CryptoproCSP: { status: true },
+    ca: { store: { created: true, opened: true }, gnivc: true },
     signature: { CPSigner: { created: true }, CadesSignedData: { created: true }, SignCades: { created: true } },
   });
   await page.screenshot({ path: join(outDir, "lkip-3-refused.png"), fullPage: true });

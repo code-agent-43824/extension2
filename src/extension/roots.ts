@@ -1,6 +1,7 @@
 // The extension's own root certificate store, kept in chrome.storage.local and edited on the options page.
-// It starts with the root certificates CryptoPro CSP installs (builtin-roots.ts). Nothing reads it yet: sites
-// and the Rutoken Plugin do not see it (docs/PLAN.md of stage 5, action 12).
+// It starts with the root certificates CryptoPro CSP installs (builtin-roots.ts). Enabled sites see its enabled
+// certificates as CryptoPro's "Root" store (roots-bridge.ts, src/page/roots.ts); the Rutoken Plugin does not
+// (docs/PLAN.md of stage 5, actions 12 and 13).
 import { read } from "../page/asn1.ts";
 import { derToBase64, parseCertificate, pemToDer, type X509 } from "../page/x509.ts";
 import { BUILTIN_ROOTS } from "./builtin-roots.ts";
@@ -40,6 +41,13 @@ export async function rootStore(api: Api = chrome): Promise<RootStore> {
   const store = builtinStore();
   await api.storage.local.set({ [ROOTS_KEY]: store });
   return store;
+}
+
+// What sites see: the enabled certificates, none when the store is off. Read only, so content scripts can call it.
+export async function enabledRoots(api: Api = chrome): Promise<string[]> {
+  const stored = (await api.storage.local.get(ROOTS_KEY))[ROOTS_KEY];
+  const store = isStore(stored) ? stored : builtinStore();
+  return store.enabled ? store.certificates.filter((root) => root.enabled).map((root) => root.der) : [];
 }
 
 async function update(change: (store: RootStore) => RootStore, api: Api): Promise<RootStore> {

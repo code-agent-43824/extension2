@@ -6,6 +6,7 @@ import {
   enableSite,
   matchPattern,
   pruneSites,
+  BRIDGE_ID,
   SCRIPT_ID,
   siteOf,
   syncContentScript,
@@ -73,20 +74,15 @@ describe("site list", () => {
     expect(await enableSite("https://a.example", chrome.api)).toBe(true);
     expect(await enabledSites(chrome.api)).toEqual(["https://a.example", "https://b.example"]);
     expect(await syncContentScript(chrome.api)).toEqual(["https://a.example/*", "https://b.example/*"]);
+    const common = { matches: ["https://a.example/*", "https://b.example/*"], runAt: "document_start", allFrames: true, persistAcrossSessions: true };
+    // page.js in the page's world, and beside it the bridge that hands it the root store.
     expect(chrome.scripts()).toEqual([
-      {
-        id: SCRIPT_ID,
-        matches: ["https://a.example/*", "https://b.example/*"],
-        js: ["page.js"],
-        world: "MAIN",
-        runAt: "document_start",
-        allFrames: true,
-        persistAcrossSessions: true,
-      },
+      { id: SCRIPT_ID, js: ["page.js"], world: "MAIN", ...common },
+      { id: BRIDGE_ID, js: ["roots-bridge.js"], world: "ISOLATED", ...common },
     ]);
     // A second sync replaces the registration instead of failing on the duplicate id.
     await syncContentScript(chrome.api);
-    expect(chrome.scripts()).toHaveLength(1);
+    expect(chrome.scripts()).toHaveLength(2);
   });
 
   it("does not list a site when the user refuses access", async () => {

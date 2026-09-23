@@ -4,10 +4,19 @@ import type { Certificate, Certificates } from "../../src/page/objects/certifica
 import { createObject } from "../../src/page/objects/index.ts";
 import type { Store } from "../../src/page/objects/store.ts";
 import type { RutokenPlugin } from "../../src/page/rutoken.ts";
-import { certId, fakePlugin, fakeSession, pem } from "./fakes.ts";
+import { base64ToDer } from "../../src/extension/roots.ts";
+import { BUILTIN_ROOTS } from "../../src/extension/builtin-roots.ts";
+import { parseCertificate, type X509 } from "../../src/page/x509.ts";
+import { certId, fakePlugin, FakePinDialog, fakeSession, pem } from "./fakes.ts";
+
+const roots = BUILTIN_ROOTS.map((der) => parseCertificate(base64ToDer(der)));
 
 async function openStore(plugin: RutokenPlugin, ...args: unknown[]): Promise<Certificates> {
-  const store = createObject("CAdESCOM.Store", fakeSession(plugin)) as Store;
+  return openStoreWith(plugin, [], ...args);
+}
+
+async function openStoreWith(plugin: RutokenPlugin, rootStore: X509[], ...args: unknown[]): Promise<Certificates> {
+  const store = createObject("CAdESCOM.Store", fakeSession(plugin, new FakePinDialog([]), rootStore)) as Store;
   await (store.Open as (...a: unknown[]) => Promise<void>)(...args);
   return store.Certificates;
 }
@@ -24,9 +33,23 @@ describe("CAdESCOM.Store", () => {
     }
   });
 
-  it("keeps Root and CA empty", async () => {
-    expect(await (await openStore(fakePlugin(), constants.CAPICOM_CURRENT_USER_STORE, "Root")).Count).toBe(0);
-    expect(await (await openStore(fakePlugin(), constants.CAPICOM_CURRENT_USER_STORE, "CA")).Count).toBe(0);
+  it("lists the root store in Root, in either location and any case, and keeps CA empty", async () => {
+    const { CAPICOM_CURRENT_USER_STORE: user, CAPICOM_LOCAL_MACHINE_STORE: machine } = constants;
+    for (const [location, name] of [[user, "Root"], [machine, "Root"], [user, "root"]] as const) {
+      expect(await (await openStoreWith(fakePlugin(), roots, location, name)).Count).toBe(roots.length);
+    }
+    expect(await (await openStore(fakePlugin(), user, "Root")).Count).toBe(0);
+    expect(await (await openStoreWith(fakePlugin(), roots, user, "CA")).Count).toBe(0);
+  });
+
+  it("finds a root by SHA-1 as lkip2.nalog.ru does, without a key, as CryptoPro answers for its Root store", async () => {
+    const certs = await openStoreWith(fakePlugin(), roots, constants.CAPICOM_CURRENT_USER_STORE, "Root", constants.CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED);
+    const found = await certs.Find(constants.CAPICOM_CERTIFICATE_FIND_SHA1_HASH, "8CAE88BBFD404A7A53630864F9033606E1DC45E2");
+    expect(await found.Count).toBe(1);
+    const root = await found.Item(1);
+    expect(await root.SubjectName).toContain("CN=Головной удостоверяющий центр");
+    expect(await root.HasPrivateKey()).toBe(false);
+    await expect(root.PrivateKey).rejects.toMatchObject({ number: 0x80092004 });
   });
 
   it("skips a certificate that does not parse", async () => {

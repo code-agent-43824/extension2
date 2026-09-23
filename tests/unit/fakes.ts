@@ -6,6 +6,7 @@ import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import type { Session } from "../../src/page/objects/session.ts";
 import type { PinDialog, PinRequest } from "../../src/page/pin-dialog.ts";
 import type { RutokenPlugin, SignOptions } from "../../src/page/rutoken.ts";
+import type { X509 } from "../../src/page/x509.ts";
 
 export const pem = readFileSync(join(repoRoot, "tests", "fixtures", "stand-user.pem"), "utf8");
 export const certId = "cd:ea:7e:ab:5b:e6:b1:67:f2:2b:71:3b:f3:76:e9:b2:8a:db:14:a3";
@@ -122,6 +123,6 @@ export class FakePinDialog implements PinDialog {
   }
 }
 
-export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([])): Session {
-  return { plugin, origin: "https://site.example", pinDialog: dialog.open };
+export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]), roots: X509[] = []): Session {
+  return { plugin, origin: "https://site.example", pinDialog: dialog.open, rootCertificates: async () => roots };
 }

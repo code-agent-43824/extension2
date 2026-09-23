@@ -32,7 +32,7 @@ export async function buildExtension(): Promise<void> {
   });
   const extension = join(repoRoot, "src", "extension");
   await build({
-    entryPoints: ["background", "popup", "options"].map((name) => join(extension, `${name}.ts`)),
+    entryPoints: ["background", "popup", "options", "roots-bridge"].map((name) => join(extension, `${name}.ts`)),
     outdir: extensionDir,
     bundle: true,
     format: "iife",
