@@ -1,4 +1,6 @@
-// The options page: every enabled site, with a way to turn it off or to add one by address.
+// The options page: every enabled site, with a way to turn it off or to add one by address; below it, the
+// root certificate store (roots-view.ts).
+import { setupRoots } from "./roots-view.ts";
 import { disableSite, enabledSites, enableSite, siteOf, STORAGE_KEY } from "./sites.ts";
 
 const byId = (id: string) => document.getElementById(id)!;
@@ -41,3 +43,4 @@ chrome.storage.onChanged.addListener((changes, area) => {
   if (area === "local" && STORAGE_KEY in changes) void render();
 });
 void render();
+setupRoots();

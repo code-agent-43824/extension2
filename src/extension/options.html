@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>КриптоПро через Рутокен — сайты</title>
+  <title>КриптоПро через Рутокен — настройки</title>
   <link rel="stylesheet" href="ui.css">
 </head>
 <body class="options">
@@ -16,6 +16,26 @@
     <button type="submit">Включить</button>
   </form>
   <p id="error" class="error" role="alert"></p>
+
+  <section id="roots-section">
+    <h1>Хранилище корневых сертификатов</h1>
+    <p class="note">Корневые сертификаты удостоверяющих центров. Сайтам и Рутокен Плагину хранилище пока не
+      передаётся.</p>
+    <div class="toolbar">
+      <label><input type="checkbox" name="roots-enabled"> Хранилище включено</label>
+      <span id="roots-count" class="note"></span>
+      <button type="button" id="roots-all-on">Включить все</button>
+      <button type="button" id="roots-all-off">Выключить все</button>
+    </div>
+    <form id="roots-add" class="toolbar">
+      <label>Добавить из файла (DER или PEM)
+        <input name="files" type="file" accept=".cer,.crt,.der,.pem,application/pkix-cert,application/x-x509-ca-cert" multiple required></label>
+      <button type="submit">Добавить</button>
+    </form>
+    <p id="roots-message" class="note" role="status"></p>
+    <ul id="roots" class="cards"></ul>
+    <p id="roots-empty" class="note" hidden>В хранилище нет сертификатов.</p>
+  </section>
   <script src="options.js"></script>
 </body>
 </html>

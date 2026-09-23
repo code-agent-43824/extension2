@@ -2,7 +2,7 @@ import { CadesError } from "../errors.ts";
 import { About } from "./about.ts";
 import { constants } from "../constants.ts";
 import { formatName } from "../dn.ts";
-import { derToBase64 } from "../x509.ts";
+import { algorithmName, derToBase64 } from "../x509.ts";
 import type { TokenCertificate } from "../token.ts";
 import type { Session } from "./session.ts";
 
@@ -14,13 +14,6 @@ const E_NOTIMPL = 0x80004001;
 function dateString(date: Date): string {
   return date.toISOString();
 }
-
-// Friendly names CryptoPro gives the GOST public key algorithms; other algorithms show their OID.
-const algorithmNames = new Map<string, string>([
-  ["1.2.643.2.2.19", "ГОСТ Р 34.10-2001"],
-  ["1.2.643.7.1.1.1.1", "ГОСТ Р 34.10-2012 256 бит"],
-  ["1.2.643.7.1.1.1.2", "ГОСТ Р 34.10-2012 512 бит"],
-]);
 
 class Oid {
   readonly #value: string;
@@ -34,7 +27,7 @@ class Oid {
   }
 
   get FriendlyName(): Promise<string> {
-    return Promise.resolve(algorithmNames.get(this.#value) ?? this.#value);
+    return Promise.resolve(algorithmName(this.#value));
   }
 }
 

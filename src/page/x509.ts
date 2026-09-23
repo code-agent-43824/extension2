@@ -19,6 +19,17 @@ export interface X509 {
   thumbprint: string;
 }
 
+// Friendly names CryptoPro gives the GOST public key algorithms; other algorithms show their OID.
+const algorithmNames = new Map<string, string>([
+  ["1.2.643.2.2.19", "ГОСТ Р 34.10-2001"],
+  ["1.2.643.7.1.1.1.1", "ГОСТ Р 34.10-2012 256 бит"],
+  ["1.2.643.7.1.1.1.2", "ГОСТ Р 34.10-2012 512 бит"],
+]);
+
+export function algorithmName(oid: string): string {
+  return algorithmNames.get(oid) ?? oid;
+}
+
 export function pemToDer(pem: string): Uint8Array {
   const body = pem.replace(/-----(BEGIN|END) [A-Z ]+-----/g, "").replace(/\s+/g, "");
   return Uint8Array.from(atob(body), (char) => char.charCodeAt(0));
