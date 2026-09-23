@@ -10,6 +10,19 @@ A Chrome extension that makes sites written for the CryptoPro CAdES Browser plug
 the Rutoken Plugin, its browser adapter and a Rutoken ECP 2.0/3.0 device instead. The approach, the interception
 point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages in `docs/ROADMAP.md`.
 
+## Commands
+
+- `npm install` — dev dependencies (Playwright uses the browsers in `/opt/pw-browsers`; do not run `playwright install` there).
+- `node scripts/fetch-vendor.ts` — download third-party stand files into `vendor/`, verified against
+  `scripts/vendor-lock.json`.
+- `npm run check` — typecheck and unit tests; must pass before every commit.
+- `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
+
+## Map of the code
+
+- `scripts/` — Node scripts run directly by Node's type stripping (no build step): vendor fetching, CRX reading.
+- `tests/unit/` — Vitest unit tests.
+
 ## Settled decisions
 
 - **Chrome first; other browsers later.** Owner, 2026-09-23. Do not add Firefox/Safari code paths before the

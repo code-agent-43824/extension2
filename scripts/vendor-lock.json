@@ -1,0 +1,22 @@
+{
+  "rutoken-plugin": {
+    "file": "libnpRutokenPlugin_4.12.3-1_amd64.deb",
+    "url": "https://download.rutoken.ru/Rutoken_Plugin/Current/Linux/libnpRutokenPlugin_4.12.3-1_amd64.deb",
+    "sha256": "784e5e13ee04c25568befed9791727b5d9a0987db3d052dac395ac0a64aefe74"
+  },
+  "rutoken-adapter": {
+    "file": "rutoken-adapter-1.1.0.0.crx",
+    "url": "https://clients2.google.com/service/update2/crx?response=redirect&prodversion=130.0&acceptformat=crx2,crx3&x=id%3Dohedcglhbbfdgaogjhcclacoccbagkjg%26uc",
+    "sha256": "7003ce8fdd134dbac855cf479f6ea53c01dce89a2cb5507af02342f2de5a67f6"
+  },
+  "softhsm-portable": {
+    "file": "softhsm-portable-linux-x64.zip",
+    "url": "https://github.com/code-agent-43824/SoftHSMv2/releases/download/v2.7.0-portable.42/softhsm-portable-linux-x64.zip",
+    "sha256": "3105ea2cf6db10feeb34a3709fdcd69a47ab98b7a24914c9107204e474213936"
+  },
+  "softhsm-testkit": {
+    "file": "softhsm-testkit-linux-x64.zip",
+    "url": "https://github.com/code-agent-43824/SoftHSMv2/releases/download/v2.7.0-portable.42/softhsm-testkit-linux-x64.zip",
+    "sha256": "70cf1d69376a18eb92e5d294d39a31eff854c63d06cde113dcdb3a3f98a85c03"
+  }
+}
