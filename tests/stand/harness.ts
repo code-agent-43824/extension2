@@ -2,7 +2,8 @@
 // Drives Chromium on the test stand: the Rutoken adapter loaded under its store
 // id, the native host and the fake Rutoken found through the stand HOME.
 import { chromium, type BrowserContext, type Page } from "@playwright/test";
-import { cpSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash, X509Certificate } from "node:crypto";
+import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { extname, join, relative } from "node:path";
@@ -62,19 +63,37 @@ export interface StandOptions {
   extensions?: string[];
   // Chromium profile; the stand profile holds the native host manifest.
   profile?: string;
+  // Internet hosts the stand may reach (for experiments with real sites); everything else stays offline.
+  online?: string[];
 }
 
-export async function launchStand({ extensions = [stand.adapter], profile = stand.profile }: StandOptions = {}) {
+// The environment's HTTPS proxy re-signs TLS with its own CA. Chromium is told to trust exactly that CA
+// (by its public key), the way every other tool here is pointed at the proxy's CA bundle.
+const proxyCa = process.env.STAND_PROXY_CA ?? "/root/.ccr/agent-proxy-ca.crt";
+
+function proxyOptions(): { proxy?: { server: string }; args: string[] } {
+  const server = process.env.HTTPS_PROXY;
+  if (!server || !existsSync(proxyCa)) return { args: [] };
+  const spki = new X509Certificate(readFileSync(proxyCa)).publicKey.export({ type: "spki", format: "der" });
+  return { proxy: { server }, args: [`--ignore-certificate-errors-spki-list=${createHash("sha256").update(spki).digest("base64")}`] };
+}
+
+export async function launchStand({ extensions = [stand.adapter], profile = stand.profile, online = [] }: StandOptions = {}) {
   const list = extensions.join(",");
+  const network = online.length ? proxyOptions() : { args: [] };
   const context = await chromium.launchPersistentContext(profile, {
     headless: true,
     // The full Chromium build: the headless shell cannot load extensions.
     channel: "chromium",
-    args: [`--disable-extensions-except=${list}`, `--load-extension=${list}`],
+    args: [`--disable-extensions-except=${list}`, `--load-extension=${list}`, ...network.args],
+    ...(network.proxy ? { proxy: network.proxy } : {}),
     env: standEnv() as Record<string, string>,
   });
-  // Stand tests stay offline: pages get only what the local server serves.
-  await context.route(/^https?:\/\/(?!127\.0\.0\.1[:/])/, (route) => route.abort());
+  // Stand tests stay offline: pages get only what the local server serves, plus the hosts asked for.
+  await context.route(
+    (url) => url.protocol.startsWith("http") && url.hostname !== "127.0.0.1" && !online.includes(url.hostname),
+    (route) => route.abort(),
+  );
   return context;
 }
 
@@ -106,13 +125,13 @@ export const loadPluginSource = `async () => {
 // The built extension with access to the stand's pages granted in advance, as if the user had allowed
 // it when enabling a site: Chrome's permission prompt is browser UI a test cannot click. Enabling and
 // disabling a site still go through the extension's own options page.
-export function standExtension(): string {
+export function standExtension(hosts: string[] = []): string {
   const dir = join(standDir, "extension");
   rmSync(dir, { recursive: true, force: true });
   cpSync(extensionDir, dir, { recursive: true });
   const manifestPath = join(dir, "manifest.json");
   const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
-  manifest.host_permissions = ["http://127.0.0.1/*"];
+  manifest.host_permissions = ["http://127.0.0.1/*", ...hosts];
   writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
   return dir;
 }

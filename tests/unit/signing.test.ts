@@ -63,11 +63,9 @@ describe("signing through the Rutoken Plugin", () => {
     expect(dialog.requests).toEqual([
       {
         origin: "https://site.example",
-        owner: "Stand User",
-        issuer: "Stand Test CA",
-        validTo: expect.any(Date),
-        dataSize: 11,
-        detached: true,
+        action: "просит подписать данные.",
+        details: ["11 байт, отсоединённая подпись.", "Сертификат: Stand User", expect.stringMatching(/^Выдан: Stand Test CA, действует до \d\d\.\d\d\.\d{4}$/)],
+        confirm: "Подписать",
       },
     ]);
     expect(dialog.closed).toBe(1);

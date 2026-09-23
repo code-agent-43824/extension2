@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import type { Session } from "../../src/page/objects/session.ts";
-import type { PinDialog, SignRequest } from "../../src/page/pin-dialog.ts";
+import type { PinDialog, PinRequest } from "../../src/page/pin-dialog.ts";
 import type { RutokenPlugin, SignOptions } from "../../src/page/rutoken.ts";
 
 export const pem = readFileSync(join(repoRoot, "tests", "fixtures", "stand-user.pem"), "utf8");
@@ -20,19 +20,48 @@ export interface SignCall {
   options: SignOptions;
 }
 
-export type FakePlugin = RutokenPlugin & { calls: { login: string[]; logout: number; sign: SignCall[] } };
+export interface FakeCalls {
+  login: string[];
+  logout: number;
+  sign: SignCall[];
+  generateKeyPair: unknown[][];
+  createPkcs10: unknown[][];
+  deleteKeyPair: string[];
+  importCertificate: string[];
+  deleteCertificate: string[];
+}
+
+export type FakePlugin = RutokenPlugin & { calls: FakeCalls };
+
+// A PKCS#10 request as the plugin returns it; the body is not a real request.
+export const requestPem = "-----BEGIN CERTIFICATE REQUEST-----\nMIIBAA==\n-----END CERTIFICATE REQUEST-----\n";
 
 // Constants are thenables, as in the real plugin. Errors are Error objects whose message is the
 // Rutoken error code, as the plugin rejects.
 export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}): FakePlugin {
   const thenable = (value: number) => ({ then: (resolve: (v: number) => unknown) => resolve(value) }) as PromiseLike<number>;
-  const calls: FakePlugin["calls"] = { login: [], logout: 0, sign: [] };
+  const calls: FakeCalls = {
+    login: [],
+    logout: 0,
+    sign: [],
+    generateKeyPair: [],
+    createPkcs10: [],
+    deleteKeyPair: [],
+    importCertificate: [],
+    deleteCertificate: [],
+  };
   return {
     calls,
     version: Promise.resolve("4.12.3.0"),
     CERT_CATEGORY_USER: thenable(1),
     TOKEN_INFO_SERIAL: thenable(2),
     DATA_FORMAT_BASE64: thenable(1),
+    PUBLIC_KEY_ALGORITHM_GOST3410_2012_256: thenable(3),
+    PUBLIC_KEY_ALGORITHM_GOST3410_2012_512: thenable(4),
+    HASH_TYPE_GOST3411_12_256: thenable(5),
+    HASH_TYPE_GOST3411_12_512: thenable(6),
+    KEY_SPEC_SIGN: thenable(7),
+    KEY_SPEC_SIGN_AND_EXCHANGE: thenable(8),
     enumerateDevices: async () => [0],
     enumerateCertificates: async (_device, category) => (category === 1 ? certs.map((_, i) => `${certId}${i || ""}`) : []),
     getCertificate: async (_device, id) => certs[Number(id.slice(certId.length) || 0)]!,
@@ -48,20 +77,39 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
       calls.sign.push({ deviceId, certId: id, data, format, options });
       return "MIIsignature";
     },
+    generateKeyPair: async (...args) => {
+      calls.generateKeyPair.push(args);
+      return "ke:y1";
+    },
+    deleteKeyPair: async (_device, keyId) => {
+      calls.deleteKeyPair.push(keyId);
+    },
+    createPkcs10: async (...args) => {
+      calls.createPkcs10.push(args);
+      return requestPem;
+    },
+    importCertificate: async (_device, certificate) => {
+      calls.importCertificate.push(certificate);
+      return "ne:w1";
+    },
+    getKeyByCertificate: async () => "ke:y1",
+    deleteCertificate: async (_device, id) => {
+      calls.deleteCertificate.push(id);
+    },
     ...overrides,
   };
 }
 
 // Answers ask() with the next scripted PIN (null = cancel) and records what it was shown.
 export class FakePinDialog implements PinDialog {
-  requests: SignRequest[] = [];
+  requests: PinRequest[] = [];
   errors: (string | undefined)[] = [];
   closed = 0;
   private readonly answers: (string | null)[];
   constructor(answers: (string | null)[]) {
     this.answers = answers;
   }
-  open = (request: SignRequest): PinDialog => {
+  open = (request: PinRequest): PinDialog => {
     this.requests.push(request);
     return this;
   };

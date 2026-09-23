@@ -1,6 +1,17 @@
 import { CadesError, REGDB_E_CLASSNOTREG } from "../errors.ts";
 import { About } from "./about.ts";
 import { CspInformation } from "./csp-information.ts";
+import {
+  CertificateRequestPkcs10,
+  CspInformations,
+  DistinguishedName,
+  Enrollment,
+  ExtensionEnhancedKeyUsage,
+  ExtensionKeyUsage,
+  ObjectId,
+  ObjectIds,
+  PrivateKey,
+} from "./enrollment.ts";
 import { CadesSignedData } from "./signed-data.ts";
 import { CPAttribute, CPSigner } from "./signer.ts";
 import { Store } from "./store.ts";
@@ -16,6 +27,15 @@ const factories = new Map<string, Factory>([
   ["cadescom.cpsigner", () => new CPSigner()],
   ["cadescom.store", (session) => new Store(session)],
   ["x509enrollment.ccspinformation", () => new CspInformation()],
+  ["x509enrollment.ccspinformations", (session) => new CspInformations(session)],
+  ["x509enrollment.cobjectid", () => new ObjectId()],
+  ["x509enrollment.cobjectids", () => new ObjectIds()],
+  ["x509enrollment.cx500distinguishedname", () => new DistinguishedName()],
+  ["x509enrollment.cx509certificaterequestpkcs10", (session) => new CertificateRequestPkcs10(session)],
+  ["x509enrollment.cx509enrollment", (session) => new Enrollment(session)],
+  ["x509enrollment.cx509extensionenhancedkeyusage", () => new ExtensionEnhancedKeyUsage()],
+  ["x509enrollment.cx509extensionkeyusage", () => new ExtensionKeyUsage()],
+  ["x509enrollment.cx509privatekey", () => new PrivateKey()],
 ]);
 
 export function createObject(name: string, session: Session): object {

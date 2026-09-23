@@ -1,15 +1,16 @@
-// The window shown before every signature: which site asks, with which certificate, what is signed,
-// and the PIN field. It lives in the page, in the shadow DOM of our own element: the PIN reaches the
+// The window shown before every operation that needs the token's PIN (a signature, a new key, writing a
+// certificate): which site asks, what it asks for, and the PIN field. It lives in the page, in the shadow DOM of our own element: the PIN reaches the
 // Rutoken Plugin through the adapter's postMessage in the page world anyway, so a window isolated
 // from the page would not hide it (docs/PLAN.md of stage 4).
 
-export interface SignRequest {
+export interface PinRequest {
   origin: string;
-  owner: string;
-  issuer: string;
-  validTo: Date;
-  dataSize: number;
-  detached: boolean;
+  // Completes "Сайт <origin> …", e.g. "просит подписать данные."
+  action: string;
+  // One paragraph each: what is signed, with which certificate, on which token.
+  details: string[];
+  // The confirming button, e.g. "Подписать".
+  confirm: string;
 }
 
 export interface PinDialog {
@@ -28,13 +29,13 @@ const style = `
     box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3); }
   h2 { font-size: 17px; margin: 0 0 12px; }
   p { margin: 0 0 8px; }
-  .origin, .owner { font-weight: 600; word-break: break-all; }
+  .origin { font-weight: 600; word-break: break-all; }
   label { display: block; margin: 12px 0 4px; }
   input { box-sizing: border-box; width: 100%; font: inherit; padding: 6px 8px; border: 1px solid #888; border-radius: 4px; }
   .error { color: #b00020; min-height: 1.4em; margin: 6px 0 0; }
   .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
   button { font: inherit; padding: 6px 16px; border-radius: 4px; border: 1px solid #888; background: #f3f3f3; cursor: pointer; }
-  button[name="sign"] { background: #1a5fb4; border-color: #1a5fb4; color: #fff; }
+  button[name="confirm"] { background: #1a5fb4; border-color: #1a5fb4; color: #fff; }
 `;
 
 function element<K extends keyof HTMLElementTagNameMap>(
@@ -48,33 +49,27 @@ function element<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-function bytes(count: number): string {
-  return count < 1024 ? `${count} байт` : `${(count / 1024).toFixed(1)} КБ`;
-}
-
-export function openPinDialog(doc: Document, request: SignRequest): PinDialog {
+export function openPinDialog(doc: Document, request: PinRequest): PinDialog {
   const host = element(doc, "div", { id: HOST_ID });
   const root = host.attachShadow({ mode: "open" });
   const pin = element(doc, "input", { type: "password", name: "pin", autocomplete: "off" });
   const error = element(doc, "p", { className: "error" });
   error.setAttribute("role", "alert");
-  const sign = element(doc, "button", { type: "submit", name: "sign" }, "Подписать");
+  const confirm = element(doc, "button", { type: "submit", name: "confirm" }, request.confirm);
   const cancel = element(doc, "button", { type: "button", name: "cancel" }, "Отмена");
   const form = element(
     doc,
     "form",
     { className: "dialog" },
-    element(doc, "h2", {}, "Подпись через Рутокен"),
-    element(doc, "p", {}, "Сайт ", element(doc, "span", { className: "origin" }, request.origin), " просит подписать данные."),
-    element(doc, "p", {}, `${bytes(request.dataSize)}, ${request.detached ? "отсоединённая" : "присоединённая"} подпись.`),
-    element(doc, "p", {}, "Сертификат: ", element(doc, "span", { className: "owner" }, request.owner)),
-    element(doc, "p", {}, `Выдан: ${request.issuer}, действует до ${request.validTo.toLocaleDateString("ru-RU")}`),
+    element(doc, "h2", {}, "Рутокен вместо КриптоПро"),
+    element(doc, "p", {}, "Сайт ", element(doc, "span", { className: "origin" }, request.origin), ` ${request.action}`),
+    ...request.details.map((line) => element(doc, "p", {}, line)),
     element(doc, "label", {}, "PIN-код Рутокена", pin),
     error,
-    element(doc, "div", { className: "buttons" }, cancel, sign),
+    element(doc, "div", { className: "buttons" }, cancel, confirm),
   );
   form.setAttribute("role", "dialog");
-  form.setAttribute("aria-label", "Подпись через Рутокен");
+  form.setAttribute("aria-label", "PIN-код Рутокена");
   root.append(element(doc, "style", {}, style), element(doc, "div", { className: "backdrop" }, form));
   (doc.body ?? doc.documentElement).append(host);
 
@@ -97,11 +92,11 @@ export function openPinDialog(doc: Document, request: SignRequest): PinDialog {
     ask(message = "") {
       error.textContent = message;
       pin.value = "";
-      sign.disabled = false;
+      confirm.disabled = false;
       pin.focus();
       return new Promise((resolve) => {
         answer = (value) => {
-          sign.disabled = true;
+          confirm.disabled = true;
           resolve(value);
         };
       });

@@ -79,3 +79,66 @@ export function formatName(name: Name): string {
     .map((rdn) => rdn.map(({ oid, value }) => `${names.get(oid) ?? `OID.${oid}`}=${quote(value)}`).join(" + "))
     .join(", ");
 }
+
+// Other spellings sites use for the same attributes in X.500 strings (CX500DistinguishedName.Encode).
+const aliases = new Map<string, string>([
+  ["ST", "2.5.4.8"],
+  ["GN", "2.5.4.42"],
+  ["EMAIL", "1.2.840.113549.1.9.1"],
+  ["INN", "1.2.643.3.131.1.1"],
+  ["OGRN", "1.2.643.100.1"],
+  ["SNILS", "1.2.643.100.3"],
+  ["INNLE", "1.2.643.100.4"],
+  ["OGRNIP", "1.2.643.100.5"],
+]);
+
+const oids = new Map([...[...names].map(([oid, name]) => [name.toUpperCase(), oid] as const), ...aliases]);
+
+// The OID an X.500 string names with `key`: a short name (case-insensitive), "OID.1.2.3" or "1.2.3".
+export function attributeOid(key: string): string | undefined {
+  const name = key.trim();
+  const dotted = /^(?:OID\.)?(\d+(?:\.\d+)+)$/i.exec(name);
+  return dotted ? dotted[1] : oids.get(name.toUpperCase());
+}
+
+// Parses 'C="RU";CN="Иван ""Ваня""";E=a@b.ru' as CertStrToName does with semicolons or commas between
+// attributes: DER order is the order written. Multi-valued RDNs ("+") are not supported.
+export function parseNameString(text: string): Attribute[] {
+  const result: Attribute[] = [];
+  let i = 0;
+  const skipSpaces = () => {
+    while (i < text.length && /\s/.test(text[i]!)) i++;
+  };
+  for (;;) {
+    skipSpaces();
+    if (i >= text.length) return result;
+    const equals = text.indexOf("=", i);
+    if (equals < 0) throw new Error(`нет "=" после «${text.slice(i)}»`);
+    const key = text.slice(i, equals);
+    const oid = attributeOid(key);
+    if (!oid) throw new Error(`неизвестный атрибут «${key.trim()}»`);
+    i = equals + 1;
+    skipSpaces();
+    let value = "";
+    if (text[i] === '"') {
+      for (i++; ; i++) {
+        if (i >= text.length) throw new Error("незакрытая кавычка");
+        if (text[i] === '"') {
+          if (text[i + 1] !== '"') break;
+          i++;
+        }
+        value += text[i];
+      }
+      i++;
+      skipSpaces();
+    } else {
+      const end = text.slice(i).search(/[;,+]/);
+      value = (end < 0 ? text.slice(i) : text.slice(i, i + end)).trim();
+      i = end < 0 ? text.length : i + end;
+    }
+    if (text[i] === "+") throw new Error("составные RDN не поддерживаются");
+    if (i < text.length && text[i] !== ";" && text[i] !== ",") throw new Error(`лишние символы после значения ${key.trim()}`);
+    i++;
+    result.push({ oid, value });
+  }
+}

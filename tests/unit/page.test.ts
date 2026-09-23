@@ -89,6 +89,8 @@ describe("getLastError", () => {
   it("formats like cadesplugin_api.js", () => {
     expect(getLastError(new CadesError("Нет объекта", 0x80040154))).toBe("Нет объекта (0x80040154)");
     expect(getLastError(new CadesError("Нет объекта", -2147221164))).toBe("Нет объекта (0x80040154)");
+    expect(getLastError(Object.assign(new Error("Нет объекта"), { number: 0x80040154 }))).toBe("Нет объекта (0x80040154)");
+    expect(new CadesError("Нет объекта", 0x80040154).message).toBe("Нет объекта (0x80040154)");
     expect(getLastError(new Error("просто текст"))).toBe("просто текст");
     expect(getLastError("строка")).toBe("строка");
   });

@@ -43,7 +43,7 @@ const pinDialog = (page: Page) => page.locator("#rutoken-cades-bridge-pin [role=
 async function enterPin(page: Page, pin: string) {
   const dialog = pinDialog(page);
   await dialog.locator("input[name=pin]").fill(pin);
-  await dialog.locator("button[name=sign]").click();
+  await dialog.locator("button[name=confirm]").click();
 }
 
 async function demoPageWithCertificate(context: BrowserContext): Promise<Page> {

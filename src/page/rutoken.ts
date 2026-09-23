@@ -12,6 +12,12 @@ export interface RutokenPlugin {
   readonly CERT_CATEGORY_USER: PromiseLike<number>;
   readonly TOKEN_INFO_SERIAL: PromiseLike<number>;
   readonly DATA_FORMAT_BASE64: PromiseLike<number>;
+  readonly PUBLIC_KEY_ALGORITHM_GOST3410_2012_256: PromiseLike<number>;
+  readonly PUBLIC_KEY_ALGORITHM_GOST3410_2012_512: PromiseLike<number>;
+  readonly HASH_TYPE_GOST3411_12_256: PromiseLike<number>;
+  readonly HASH_TYPE_GOST3411_12_512: PromiseLike<number>;
+  readonly KEY_SPEC_SIGN: PromiseLike<number>;
+  readonly KEY_SPEC_SIGN_AND_EXCHANGE: PromiseLike<number>;
   enumerateDevices(): PromiseLike<number[]>;
   enumerateCertificates(deviceId: number, category: number): PromiseLike<string[]>;
   getCertificate(deviceId: number, certId: string): PromiseLike<string>;
@@ -19,6 +25,38 @@ export interface RutokenPlugin {
   login(deviceId: number, pin: string): PromiseLike<void>;
   logout(deviceId: number): PromiseLike<void>;
   sign(deviceId: number, certId: string, data: string, dataFormat: number, options: SignOptions): PromiseLike<string>;
+  // Returns the key id (hex). `reserved` must be undefined.
+  generateKeyPair(deviceId: number, reserved: undefined, marker: string, options: KeyPairOptions): PromiseLike<string>;
+  deleteKeyPair(deviceId: number, keyId: string): PromiseLike<void>;
+  // Returns the request as PEM ("-----BEGIN CERTIFICATE REQUEST-----").
+  createPkcs10(deviceId: number, keyId: string, subject: SubjectAttribute[], extensions: RequestExtensions, options: RequestOptions): PromiseLike<string>;
+  // Takes PEM; returns the new certificate id.
+  importCertificate(deviceId: number, certificate: string, category: number): PromiseLike<string>;
+  getKeyByCertificate(deviceId: number, certId: string): PromiseLike<string>;
+  deleteCertificate(deviceId: number, certId: string): PromiseLike<void>;
+}
+
+export interface KeyPairOptions {
+  publicKeyAlgorithm: number;
+  signatureSize: number;
+  keySpec: number;
+}
+
+// `rdn` is a name from the plugin's list (commonName, organizationalUnitName, …) or a dotted OID;
+// both were checked on the stand (docs/JOURNAL.md).
+export interface SubjectAttribute {
+  rdn: string;
+  value: string;
+}
+
+export interface RequestExtensions {
+  keyUsage?: string[];
+  // Dotted OIDs.
+  extKeyUsage?: string[];
+}
+
+export interface RequestOptions {
+  hashAlgorithm: number;
 }
 
 export interface SignOptions {
@@ -33,6 +71,8 @@ export const RutokenError = {
   PIN_LENGTH_INVALID: 16,
   PIN_INCORRECT: 17,
   PIN_LOCKED: 18,
+  CERTIFICATE_EXISTS: 6,
+  KEY_NOT_FOUND: 20,
   ALREADY_LOGGED_IN: 93,
 } as const;
 
