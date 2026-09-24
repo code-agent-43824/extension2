@@ -52,7 +52,11 @@ function element<K extends keyof HTMLElementTagNameMap>(
 export function openPinDialog(doc: Document, request: PinRequest): PinDialog {
   const host = element(doc, "div", { id: HOST_ID });
   const root = host.attachShadow({ mode: "open" });
-  const pin = element(doc, "input", { type: "password", name: "pin", autocomplete: "off" });
+  // Browsers ignore "off" on a password field and offer saved passwords; "one-time-code" they leave alone, and
+  // the data- attributes keep the common password managers out too.
+  const pin = element(doc, "input", { type: "password", name: "pin", autocomplete: "one-time-code" });
+  for (const attribute of ["data-lpignore", "data-1p-ignore", "data-bwignore"]) pin.setAttribute(attribute, "true");
+  pin.setAttribute("data-form-type", "other");
   const error = element(doc, "p", { className: "error" });
   error.setAttribute("role", "alert");
   const confirm = element(doc, "button", { type: "submit", name: "confirm" }, request.confirm);

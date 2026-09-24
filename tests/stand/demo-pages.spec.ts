@@ -49,6 +49,8 @@ async function sign(page: Page): Promise<string> {
   await page.locator("[name=SignatureTitle]").evaluate((element) => (element.innerHTML = ""));
   await page.locator("#SignBtn").click();
   await expect(pinDialog(page)).toBeVisible({ timeout: 30_000 });
+  // Browsers offer saved passwords for "off", not for a one-time code.
+  await expect(pinDialog(page).locator("input[name=pin]")).toHaveAttribute("autocomplete", "one-time-code");
   await enterPin(page);
   await expect(page.locator("[name=SignatureTitle]")).toHaveText("Подпись сформирована успешно:", { timeout: 30_000 });
   return (await page.locator("#SignatureTxtBox").inputValue()).trim();
