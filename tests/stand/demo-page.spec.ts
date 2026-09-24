@@ -84,6 +84,18 @@ test.describe("with the Rutoken adapter", () => {
     await expectText(page, "ExtVersionTxt", `Версия расширения: ${packageVersion()}`);
   });
 
+  test("raises no errors in the page while it loads and lists the certificate", async () => {
+    // Errors are listened to from the second load on: the first waits for the Rutoken adapter (openStandPage).
+    const page = await openStandPage(context, server.url + demoPath);
+    const errors: string[] = [];
+    page.on("pageerror", (error) => errors.push(error.message));
+    await page.reload();
+    await expectText(page, "CertificatesCountTxt", "Сертификаты My:1, Cont:0");
+    await expectText(page, "ObjectsLoadedTxt", "Перечисление объектов плагина завершено");
+    expect(errors).toEqual([]);
+    await page.close();
+  });
+
   test("lists the token certificate and shows its card", async () => {
     // The page prints names as they come, "CN=" included. Checked against Node's own parsing of the certificate the stand put on the token.
     const x509 = new X509Certificate(readFileSync(join(standDir, "user.pem")));

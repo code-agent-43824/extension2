@@ -52,7 +52,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `src/page/` — the MAIN-world content script, bundled into one `page.js`: `main.ts` (entry), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
-  case-insensitively by ProgID; `objects/hashed-data.ts` hashes in the page; `objects/signed-xml.ts`
+  case-insensitively by ProgID; `objects/cades-tools.ts` the demo pages' Android check; `objects/hashed-data.ts` hashes in the page; `objects/signed-xml.ts`
   makes XMLDSig with xmldsigjs' canonicalizer and `rawSign`, and verifies it; `objects/signers.ts` the signers a
   verification found), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +

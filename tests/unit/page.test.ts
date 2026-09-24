@@ -117,6 +117,12 @@ describe("CAdESCOM objects", () => {
     expect(createObject("CAPICOM.Store", fakeSession(plugin))).toBeInstanceOf(Store);
   });
 
+  it("CadesTools.PackageManager answers the demo page's Android check with an empty name, never \"-\"", async () => {
+    const tools = createObject("CAdESCOM.CadesTools", fakeSession(plugin)) as import("../../src/page/objects/cades-tools.ts").CadesTools;
+    expect(await tools.PackageManager()).toBe("");
+    await expect(tools.PackageManager("x")).rejects.toMatchObject({ number: 0x80070057 });
+  });
+
   it("unknown objects fail with a class-not-registered error", () => {
     expect(() => createObject("CAdESCOM.CPLicense", fakeSession(plugin))).toThrow(CadesError);
   });
