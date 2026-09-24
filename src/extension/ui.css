@@ -25,3 +25,9 @@ ul.cards .actions { display: flex; justify-content: space-between; align-items: 
 .badge.other { background: #eef6e8; color: #2f5d12; }
 .badge.bad { background: #fde7e9; color: #b00020; }
 ul.cards li.off, ul.cards.off li { opacity: 0.55; }
+body.confirm { max-width: 480px; }
+body.confirm dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; }
+body.confirm dt { color: #555; }
+body.confirm dd { margin: 0; word-break: break-word; }
+body.confirm .toolbar { justify-content: flex-end; }
+body.confirm button[name="install"] { background: #1a5fb4; border: 1px solid #1a5fb4; color: #fff; border-radius: 4px; }

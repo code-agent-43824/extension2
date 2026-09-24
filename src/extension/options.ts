@@ -1,5 +1,6 @@
 // The options page: every enabled site, with a way to turn it off or to add one by address; below it, the
-// root certificate store (roots-view.ts).
+// extended validity switch and the certificate stores (roots-view.ts).
+import { EXTENDED_VALIDITY_KEY, extendedValidity, setExtendedValidity } from "./roots.ts";
 import { setupRoots } from "./roots-view.ts";
 import { disableSite, enabledSites, enableSite, siteOf, STORAGE_KEY } from "./sites.ts";
 
@@ -44,3 +45,13 @@ chrome.storage.onChanged.addListener((changes, area) => {
 });
 void render();
 setupRoots();
+
+const validity = document.querySelector<HTMLInputElement>("input[name=extended-validity]")!;
+const showValidity = async () => {
+  validity.checked = await extendedValidity();
+};
+validity.addEventListener("change", () => void setExtendedValidity(validity.checked));
+chrome.storage.onChanged.addListener((changes, area) => {
+  if (area === "local" && EXTENDED_VALIDITY_KEY in changes) void showValidity();
+});
+void showValidity();

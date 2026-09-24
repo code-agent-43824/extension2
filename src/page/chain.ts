@@ -41,3 +41,49 @@ export function chainError(certificate: X509, pool: readonly X509[], roots: read
   };
   return walk(certificate, 0, false, [certificate]) ? null : best;
 }
+
+// Certificate.IsValid() in the extended mode (the options page's switch): the chain CryptoPro's plug-in 2.0.15700
+// reports (docs/JOURNAL.md, 2026-09-24), from the certificate up, with a CERT_TRUST_* status for each element.
+// A certificate outside its period now is CERT_TRUST_IS_NOT_TIME_VALID; an issuer found by name whose key does
+// not verify the certificate below it is CERT_TRUST_IS_NOT_SIGNATURE_VALID, on the issuer, as the plug-in marks
+// it; a self-signed top the store lacks is CERT_TRUST_IS_UNTRUSTED_ROOT; no issuer at all ends the chain with no
+// status, and the certificate is still not valid. Revocation is not checked (the owner's decision, 2026-09-24).
+export const CERT_TRUST_IS_NOT_TIME_VALID = 0x1;
+export const CERT_TRUST_IS_NOT_SIGNATURE_VALID = 0x8;
+export const CERT_TRUST_IS_UNTRUSTED_ROOT = 0x20;
+
+export interface ValidationChain {
+  // The certificate first, then its issuers.
+  certificates: X509[];
+  statuses: number[];
+  valid: boolean;
+}
+
+export function validationChain(certificate: X509, pool: readonly X509[], roots: readonly X509[], at = Date.now()): ValidationChain {
+  const certificates = [certificate];
+  const statuses = [valid(certificate, at) ? 0 : CERT_TRUST_IS_NOT_TIME_VALID];
+  let trusted = false;
+  for (let current = certificate; ; ) {
+    if (roots.some((root) => same(root.der, current.der))) {
+      trusted = true;
+      break;
+    }
+    if (same(current.subjectDer, current.issuerDer)) {
+      statuses[statuses.length - 1]! |= CERT_TRUST_IS_UNTRUSTED_ROOT;
+      break;
+    }
+    if (certificates.length >= MAX_DEPTH) break;
+    const candidates = [...roots, ...pool].filter(
+      (issuer) => same(issuer.subjectDer, current.issuerDer) && !certificates.some((seen) => same(seen.der, issuer.der)),
+    );
+    if (!candidates.length) break;
+    // The issuer whose key verifies the certificate; of several, one that leads to a trusted root, whatever the
+    // dates (at minus infinity every certificate is out of its period, so only CERT_E_CHAINING means no chain).
+    const proven = candidates.filter((issuer) => verifyCertificate(current, issuer));
+    const issuer = proven.find((candidate) => chainError(candidate, pool, roots, Number.NEGATIVE_INFINITY) !== CERT_E_CHAINING) ?? proven[0] ?? candidates[0]!;
+    certificates.push(issuer);
+    statuses.push((valid(issuer, at) ? 0 : CERT_TRUST_IS_NOT_TIME_VALID) | (proven.includes(issuer) ? 0 : CERT_TRUST_IS_NOT_SIGNATURE_VALID));
+    current = issuer;
+  }
+  return { certificates, statuses, valid: trusted && statuses.every((status) => status === 0) };
+}

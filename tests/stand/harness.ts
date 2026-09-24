@@ -1,7 +1,7 @@
 /// <reference types="chrome" />
 // Drives Chromium on the test stand: the Rutoken adapter loaded under its store
 // id, the native host and the fake Rutoken found through the stand HOME.
-import { chromium, type BrowserContext, type Page } from "@playwright/test";
+import { chromium, expect, type BrowserContext, type Page } from "@playwright/test";
 import { createHash, X509Certificate } from "node:crypto";
 import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
@@ -223,5 +223,18 @@ export async function setRootStore(context: BrowserContext, enabled: boolean, ta
   await page.locator(`input[name=${tab}-enabled]`).setChecked(enabled);
   // The count says so once the setting is stored.
   await page.locator(`#${tab}-count`).filter({ hasText: enabled ? /^((?!выключено).)*$/ : /выключено/ }).waitFor();
+  await page.close();
+}
+
+// Turns the extended certificate validity check on or off on the options page (docs/PLAN.md, action 20).
+export async function setExtendedValidity(context: BrowserContext, enabled: boolean): Promise<void> {
+  const page = await optionsPage(context);
+  const box = page.locator("input[name=extended-validity]");
+  await box.setChecked(enabled);
+  // Stored once the page, reloaded, shows it.
+  await expect.poll(async () => {
+    await page.reload();
+    return page.locator("input[name=extended-validity]").isChecked();
+  }).toBe(enabled);
   await page.close();
 }

@@ -2,11 +2,14 @@ import { CadesError } from "../errors.ts";
 import { About } from "./about.ts";
 import { constants } from "../constants.ts";
 import { formatName } from "../dn.ts";
-import { algorithmName, derToBase64, type X509 } from "../x509.ts";
+import { validationChain } from "../chain.ts";
+import { algorithmName, derToBase64, parseCertificate, pemToDer, type X509 } from "../x509.ts";
 import type { TokenCertificate } from "../token.ts";
 import type { Session } from "./session.ts";
 
 const E_INVALIDARG = 0x80070057;
+const ERROR_INTERNAL_ERROR = 0x8007054f;
+const ERROR_INVALID_STATE = 0x8007139f;
 const E_NOTIMPL = 0x80004001;
 // CAPICOM_PROPID_KEY_PROV_INFO, not among cadesplugin_api.js's constants. With FIND_EXTENDED_PROPERTY it picks
 // the certificates that have a key: CryptoPro 2.0.15700 finds 1 of 1 in My and 0 of 165 in Root (docs/JOURNAL.md).
@@ -87,15 +90,48 @@ class PrivateKey {
   }
 }
 
+// What IsValid() answers. Only in the extended mode also the chain, from the root down, and a CERT_TRUST_* status
+// for each element in the opposite order, from the certificate up, as CryptoPro's plug-in 2.0.15700 gives them
+// (docs/JOURNAL.md, 2026-09-24); the demo page reads status Count - j + 1 for chain element j.
 class CertificateStatus {
   readonly #result: boolean;
+  readonly #chain: Certificates | undefined;
+  readonly #statuses: Statuses | undefined;
 
-  constructor(result: boolean) {
+  constructor(result: boolean, chain?: Certificates, statuses?: Statuses) {
     this.#result = result;
+    this.#chain = chain;
+    this.#statuses = statuses;
   }
 
   get Result(): Promise<boolean> {
     return Promise.resolve(this.#result);
+  }
+
+  get ValidationCertificates(): Promise<Certificates> | undefined {
+    return this.#chain && Promise.resolve(this.#chain);
+  }
+
+  get ErrorStatuses(): Promise<Statuses> | undefined {
+    return this.#statuses && Promise.resolve(this.#statuses);
+  }
+}
+
+class Statuses {
+  readonly #items: number[];
+
+  constructor(items: number[]) {
+    this.#items = items;
+  }
+
+  get Count(): Promise<number> {
+    return Promise.resolve(this.#items.length);
+  }
+
+  async Item(index: number): Promise<number> {
+    const item = this.#items[Number(index) - 1];
+    if (item === undefined) throw new CadesError("Неверный индекс", E_INVALIDARG);
+    return item;
   }
 }
 
@@ -116,23 +152,48 @@ export function tokenOf(certificate: unknown): TokenCertificate | undefined {
 
 const CRYPT_E_NOT_FOUND = 0x80092004;
 
-// CAdESCOM.Certificate: a certificate on a Rutoken, with its key, or one from the root store, without.
+// CAdESCOM.Certificate: a certificate on a Rutoken, with its key, or one from the root store, without; created
+// by a site, empty until Import (CryptoPro's demo pages import a CA's root to add it to the Root store).
 export class Certificate {
   readonly #session: Session;
-  readonly #x509: X509;
-  readonly #token: TokenCertificate | undefined;
+  #certificate: X509 | undefined;
+  #token: TokenCertificate | undefined;
 
-  constructor(session: Session, certificate: TokenCertificate | X509) {
+  constructor(session: Session, certificate?: TokenCertificate | X509) {
     this.#session = session;
-    if ("x509" in certificate) {
+    if (certificate && "x509" in certificate) {
       this.#token = certificate;
-      this.#x509 = certificate.x509;
+      this.#certificate = certificate.x509;
       tokens.set(this, certificate);
     } else {
       this.#token = undefined;
-      this.#x509 = certificate;
+      this.#certificate = certificate;
     }
-    parsed.set(this, this.#x509);
+    if (this.#certificate) parsed.set(this, this.#certificate);
+  }
+
+  // Anything but Import on an empty one: what plug-in 2.0.15700 answers (docs/JOURNAL.md, 2026-09-24).
+  get #x509(): X509 {
+    if (!this.#certificate) throw new CadesError("The group or resource is not in the correct state to perform the requested operation.", ERROR_INVALID_STATE);
+    return this.#certificate;
+  }
+
+  // Base64, with or without the PEM lines and line breaks, as the plug-in takes it; anything else is refused
+  // with the plug-in's codes. What was there before goes, the token certificate's key with it.
+  Import(data: unknown): Promise<void> {
+    const text = String(data ?? "");
+    if (!text.trim()) throw new CadesError("The parameter is incorrect.", E_INVALIDARG);
+    let certificate: X509;
+    try {
+      certificate = parseCertificate(pemToDer(text));
+    } catch {
+      throw new CadesError("An internal error occurred.", ERROR_INTERNAL_ERROR);
+    }
+    this.#token = undefined;
+    tokens.delete(this);
+    this.#certificate = certificate;
+    parsed.set(this, certificate);
+    return Promise.resolve();
   }
 
   get SubjectName(): Promise<string> {
@@ -179,6 +240,7 @@ export class Certificate {
   // A root store certificate has no key: false, and PrivateKey fails with CRYPT_E_NOT_FOUND, as CryptoPro
   // 2.0.15700 answers for its Root store (checked on the stand, docs/JOURNAL.md).
   HasPrivateKey(): Promise<boolean> {
+    void this.#x509;
     return Promise.resolve(this.#token !== undefined);
   }
 
@@ -199,11 +261,18 @@ export class Certificate {
     return Promise.resolve((text.match(/.{1,64}/g) ?? []).map((line) => `${line}\n`).join(""));
   }
 
-  // Only the validity period is checked so far; chain building is a later task (docs/PLAN.md, stage 3).
-  IsValid(): Promise<CertificateStatus> {
-    const now = Date.now();
-    const { notBefore, notAfter } = this.#x509;
-    return Promise.resolve(new CertificateStatus(notBefore.getTime() <= now && now <= notAfter.getTime()));
+  // Only the validity period, unless the options page turns on the extended check: then the chain to the
+  // extension's certificate stores, as CryptoPro builds it (docs/PLAN.md, action 20).
+  async IsValid(): Promise<CertificateStatus> {
+    const x509 = this.#x509;
+    const { roots, intermediates, extendedValidity } = await this.#session.storeCertificates();
+    if (!extendedValidity) {
+      const now = Date.now();
+      return new CertificateStatus(x509.notBefore.getTime() <= now && now <= x509.notAfter.getTime());
+    }
+    const chain = validationChain(x509, intermediates, roots);
+    const certificates = chain.certificates.map((certificate) => new Certificate(this.#session, certificate)).reverse();
+    return new CertificateStatus(chain.valid, new Certificates(certificates), new Statuses(chain.statuses));
   }
 }
 

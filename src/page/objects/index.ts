@@ -1,6 +1,7 @@
 import { CadesError, REGDB_E_CLASSNOTREG } from "../errors.ts";
 import { About } from "./about.ts";
 import { CadesTools } from "./cades-tools.ts";
+import { Certificate } from "./certificate.ts";
 import { CspInformation } from "./csp-information.ts";
 import {
   CertificateRequestPkcs10,
@@ -27,6 +28,8 @@ const factories = new Map<string, Factory>([
   ["cadescom.about", (session) => new About(session)],
   ["cadescom.cadessigneddata", (session) => new CadesSignedData(session)],
   ["cadescom.cadestools", () => new CadesTools()],
+  // Empty until Import; CryptoPro's demo pages import a CA's root to add it to the Root store.
+  ["cadescom.certificate", (session) => new Certificate(session)],
   ["cadescom.cpattribute", () => new CPAttribute()],
   ["cadescom.cpsigner", () => new CPSigner()],
   ["cadescom.hasheddata", () => new HashedData()],

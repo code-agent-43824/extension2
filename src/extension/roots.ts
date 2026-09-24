@@ -9,6 +9,9 @@ import { BUILTIN_ROOTS } from "./builtin-roots.ts";
 
 export const ROOTS_KEY = "roots";
 export const EXTRA_KEY = "extraCertificates";
+// The options page's "Расширенная проверка валидности сертификата": Certificate.IsValid() builds the chain to
+// these stores, as CryptoPro does; off (the default), it checks only the dates (docs/PLAN.md, action 20).
+export const EXTENDED_VALIDITY_KEY = "extendedValidity";
 
 // Which store: the built-in roots' tab, or the tab of the certificates added from files.
 export type Tab = "roots" | "extra";
@@ -209,4 +212,26 @@ export async function addCertificates(bytes: Uint8Array, api: Api = chrome): Pro
   }
   await api.storage.local.set({ [ROOTS_KEY]: { ...stores.roots, certificates: roots }, [EXTRA_KEY]: { ...stores.extra, certificates: extra } });
   return result;
+}
+
+// Store.Add from a site, once allowed (src/extension/install.ts): as added from a file, and switched on if it
+// was there already but off, since the user asked for it to be used.
+export async function installCertificate(der: Uint8Array, api: Api = chrome): Promise<Added> {
+  const result = await addCertificates(der, api);
+  const stores = await certificateStores(api);
+  for (const certificate of result.present) {
+    for (const tab of ["roots", "extra"] as const) {
+      const stored = stores[tab].certificates.find((root) => thumbprintOf(root) === certificate.thumbprint);
+      if (stored && !stored.enabled) await setCertificateEnabled(tab, certificate.thumbprint, true, api);
+    }
+  }
+  return result;
+}
+
+export async function extendedValidity(api: Api = chrome): Promise<boolean> {
+  return (await api.storage.local.get(EXTENDED_VALIDITY_KEY))[EXTENDED_VALIDITY_KEY] === true;
+}
+
+export async function setExtendedValidity(enabled: boolean, api: Api = chrome): Promise<void> {
+  await api.storage.local.set({ [EXTENDED_VALIDITY_KEY]: enabled });
 }

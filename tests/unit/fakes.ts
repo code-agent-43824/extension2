@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import type { Session } from "../../src/page/objects/session.ts";
 import type { PinDialog, PinRequest } from "../../src/page/pin-dialog.ts";
+import type { AddStore } from "../../src/page/roots.ts";
 import type { RutokenPlugin, SignOptions } from "../../src/page/rutoken.ts";
 import type { X509 } from "../../src/page/x509.ts";
 
@@ -126,6 +127,22 @@ export class FakePinDialog implements PinDialog {
   }
 }
 
-export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]), roots: X509[] = [], intermediates: X509[] = []): Session {
-  return { plugin, origin: "https://site.example", pinDialog: dialog.open, storeCertificates: async () => ({ roots, intermediates }) };
+export interface FakeStores {
+  extendedValidity?: boolean;
+  // What Store.Add sent; `refuse` makes it fail with that error, as the extension does when the user says no.
+  added?: { store: AddStore; certificate: X509 }[];
+  refuse?: Error;
+}
+
+export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]), roots: X509[] = [], intermediates: X509[] = [], stores: FakeStores = {}): Session {
+  return {
+    plugin,
+    origin: "https://site.example",
+    pinDialog: dialog.open,
+    storeCertificates: async () => ({ roots, intermediates, extendedValidity: stores.extendedValidity === true }),
+    addCertificate: async (store, certificate) => {
+      if (stores.refuse) throw stores.refuse;
+      stores.added?.push({ store, certificate });
+    },
+  };
 }

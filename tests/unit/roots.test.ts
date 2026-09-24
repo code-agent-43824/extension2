@@ -6,7 +6,7 @@ import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { formatName } from "../../src/page/dn.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
 import { BUILTIN_ROOTS } from "../../src/extension/builtin-roots.ts";
-import { storeCertificates, ROOTS_REQUEST, ROOTS_RESPONSE, ROOTS_WAIT_MS } from "../../src/page/roots.ts";
+import { addCertificate, ADD_REQUEST, ADD_RESPONSE, storeCertificates, ROOTS_REQUEST, ROOTS_RESPONSE, ROOTS_WAIT_MS } from "../../src/page/roots.ts";
 import type { Clock } from "../../src/page/rutoken.ts";
 import {
   addCertificates,
@@ -14,7 +14,10 @@ import {
   certificateOf,
   certificateStores,
   enabledCertificates,
+  EXTENDED_VALIDITY_KEY,
+  extendedValidity,
   EXTRA_KEY,
+  installCertificate,
   extraStore,
   isBuiltin,
   removeCertificate,
@@ -22,6 +25,7 @@ import {
   ROOTS_KEY,
   setAllEnabled,
   setCertificateEnabled,
+  setExtendedValidity,
   setStoreEnabled,
 } from "../../src/extension/roots.ts";
 
@@ -207,6 +211,33 @@ class ManualClock implements Clock {
   }
 }
 
+describe("the extended validity switch", () => {
+  it("is off until turned on, and stays as set", async () => {
+    const { api, store } = fakeChrome();
+    expect(await extendedValidity(api)).toBe(false);
+    await setExtendedValidity(true, api);
+    expect(store[EXTENDED_VALIDITY_KEY]).toBe(true);
+    expect(await extendedValidity(api)).toBe(true);
+    await setExtendedValidity(false, api);
+    expect(await extendedValidity(api)).toBe(false);
+  });
+});
+
+describe("a certificate a site adds", () => {
+  it("lands on the second tab, and one that was there but off is switched on", async () => {
+    const { api } = fakeChrome();
+    expect((await installCertificate(pemToDer(caPem), api)).added.map((certificate) => certificate.thumbprint)).toEqual([caThumbprint]);
+    expect(await extraThumbprints(api)).toEqual([caThumbprint]);
+    await setCertificateEnabled("extra", caThumbprint, false, api);
+    expect((await installCertificate(pemToDer(caPem), api)).present).toHaveLength(1);
+    expect((await extraStore(api)).certificates.map((root) => root.enabled)).toEqual([true]);
+    // A removed built-in root goes back to its own tab, switched on.
+    await removeCertificate("roots", headCa, api);
+    expect((await installCertificate(headCaDer(), api)).restored).toHaveLength(1);
+    expect(await thumbprints(api)).toContain(headCa);
+  });
+});
+
 describe("page.js asking for the stores", () => {
   it("gets them from the bridge's answer to its own request", async () => {
     const win = fakeWindow();
@@ -231,7 +262,18 @@ describe("page.js asking for the stores", () => {
       const { data } = event as MessageEvent;
       if (data?.type === ROOTS_REQUEST) win.postMessage({ type: ROOTS_RESPONSE, id: data.id, certificates: [BUILTIN_ROOTS[0]] }, "*");
     });
-    expect((await storeCertificates(win, new ManualClock())).intermediates).toEqual([]);
+    const answer = await storeCertificates(win, new ManualClock());
+    expect(answer.intermediates).toEqual([]);
+    expect(answer.extendedValidity).toBe(false);
+  });
+
+  it("carries the extended validity switch", async () => {
+    const win = fakeWindow();
+    win.addEventListener("message", (event) => {
+      const { data } = event as MessageEvent;
+      if (data?.type === ROOTS_REQUEST) win.postMessage({ type: ROOTS_RESPONSE, id: data.id, certificates: [], extendedValidity: true }, "*");
+    });
+    expect((await storeCertificates(win, new ManualClock())).extendedValidity).toBe(true);
   });
 
   it("sees an empty store when nothing answers in time", async () => {
@@ -239,7 +281,27 @@ describe("page.js asking for the stores", () => {
     const pending = storeCertificates(fakeWindow(), clock);
     expect(clock.timers).toHaveLength(1);
     clock.timers[0]!();
-    expect(await pending).toEqual({ roots: [], intermediates: [] });
+    expect(await pending).toEqual({ roots: [], intermediates: [], extendedValidity: false });
     expect(ROOTS_WAIT_MS).toBeGreaterThan(0);
+  });
+});
+
+describe("page.js adding a certificate", () => {
+  it("sends it to the bridge and resolves on the answer to its own request, or fails with the error given", async () => {
+    const win = fakeWindow();
+    const requests: unknown[] = [];
+    let error: { message: string; code: number } | undefined;
+    win.addEventListener("message", (event) => {
+      const { data } = event as MessageEvent;
+      if (data?.type !== ADD_REQUEST) return;
+      requests.push({ store: data.store, certificate: data.certificate });
+      win.postMessage({ type: ADD_RESPONSE, id: "other", error: { message: "not this one", code: 1 } }, "*");
+      win.postMessage({ type: ADD_RESPONSE, id: data.id, error }, "*");
+    });
+    const ca = parseCertificate(pemToDer(caPem));
+    await addCertificate(win, new ManualClock(), "root", ca);
+    expect(requests).toEqual([{ store: "root", certificate: caPem.replace(/-----[^-]+-----|\s/g, "") }]);
+    error = { message: "Пользователь не разрешил добавить сертификат.", code: 0x800704c7 };
+    await expect(addCertificate(win, new ManualClock(), "ca", ca)).rejects.toMatchObject({ message: expect.stringContaining("не разрешил") });
   });
 });
