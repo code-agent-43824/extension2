@@ -7,6 +7,15 @@ export const SCRIPT_ID = "cades-shim";
 // The isolated-world script handing page.js the root store (roots-bridge.ts).
 export const BRIDGE_ID = "cades-roots";
 export const STORAGE_KEY = "sites";
+// The site being enabled while Chrome asks for access. Chrome's prompt can close the popup that asked, and with
+// it the rest of enableSite; the service worker then finishes the job when the access arrives (finishPendingSite).
+export const PENDING_KEY = "pendingSite";
+
+interface PendingSite {
+  site: string;
+  // The tab to reload once the site is on: the popup's.
+  tabId?: number;
+}
 
 type Api = typeof chrome;
 
@@ -35,11 +44,30 @@ export async function hasAccess(site: string, api: Api = chrome): Promise<boolea
 
 // Must be called from a user gesture: permissions.request is its first step. Resolves false when the
 // user refuses access.
-export async function enableSite(site: string, api: Api = chrome): Promise<boolean> {
-  if (!(await api.permissions.request({ origins: [matchPattern(site)] }))) return false;
+export async function enableSite(site: string, api: Api = chrome, tabId?: number): Promise<boolean> {
+  // Both calls leave before the prompt shows: the request first, while the click still counts as a user gesture.
+  const request = api.permissions.request({ origins: [matchPattern(site)] });
+  const pending: PendingSite = tabId === undefined ? { site } : { site, tabId };
+  await api.storage.local.set({ [PENDING_KEY]: pending });
+  const granted = await request;
+  await api.storage.local.remove(PENDING_KEY);
+  if (granted) await listSite(site, api);
+  return granted;
+}
+
+async function listSite(site: string, api: Api): Promise<void> {
   const sites = await enabledSites(api);
   if (!sites.includes(site)) await api.storage.local.set({ [STORAGE_KEY]: [...sites, site].sort() });
-  return true;
+}
+
+// In the service worker, when Chrome grants access: lists the site enableSite was waiting for and reloads its tab,
+// unless enableSite lived to do it itself.
+export async function finishPendingSite(api: Api = chrome): Promise<void> {
+  const pending = (await api.storage.local.get(PENDING_KEY))[PENDING_KEY] as Partial<PendingSite> | undefined;
+  if (typeof pending?.site !== "string" || !(await hasAccess(pending.site, api))) return;
+  await api.storage.local.remove(PENDING_KEY);
+  await listSite(pending.site, api);
+  if (typeof pending.tabId === "number") await api.tabs.reload(pending.tabId).catch(() => {});
 }
 
 export async function disableSite(site: string, api: Api = chrome): Promise<void> {

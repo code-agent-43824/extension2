@@ -17,8 +17,9 @@ async function main(): Promise<void> {
   checkbox.checked = (await enabledSites()).includes(site) && (await hasAccess(site));
   toggle.hidden = false;
   checkbox.addEventListener("change", async () => {
-    // enableSite asks Chrome for access first, while the click still counts as a user gesture.
-    if (checkbox.checked && !(await enableSite(site))) {
+    // enableSite asks Chrome for access first, while the click still counts as a user gesture. Chrome's prompt may
+    // close this window; the service worker then turns the site on and reloads the tab (sites.ts).
+    if (checkbox.checked && !(await enableSite(site, chrome, tab.id))) {
       checkbox.checked = false;
       note.textContent = "Chrome не дал доступ к сайту.";
       return;

@@ -1,7 +1,7 @@
 // Service worker: keeps the page-world script registered for exactly the enabled sites, and adds the
 // certificates sites add to the Root and CA stores, asking the user first for a root (install.ts).
 import { ADD_MESSAGE, CONFIRM_ANSWER, CONFIRM_DETAILS, CONFIRM_PING, Installer, type AddMessage } from "./install.ts";
-import { pruneSites, STORAGE_KEY, syncContentScript } from "./sites.ts";
+import { finishPendingSite, pruneSites, STORAGE_KEY, syncContentScript } from "./sites.ts";
 
 // One sync at a time: two overlapping syncs would register the same script id twice.
 let queue: Promise<unknown> = Promise.resolve();
@@ -13,7 +13,10 @@ const sync = () => schedule(() => syncContentScript());
 
 chrome.runtime.onInstalled.addListener(sync);
 chrome.runtime.onStartup.addListener(sync);
-chrome.permissions.onAdded.addListener(sync);
+chrome.permissions.onAdded.addListener(() => {
+  schedule(() => finishPendingSite());
+  sync();
+});
 chrome.permissions.onRemoved.addListener(() => {
   schedule(() => pruneSites());
   sync();

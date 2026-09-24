@@ -4,7 +4,9 @@ import {
   disableSite,
   enabledSites,
   enableSite,
+  finishPendingSite,
   matchPattern,
+  PENDING_KEY,
   pruneSites,
   BRIDGE_ID,
   SCRIPT_ID,
@@ -14,9 +16,10 @@ import {
 
 // The parts of chrome.* the site list uses. `granted` holds host permissions; `grant` decides what
 // the user answers to Chrome's prompt; `required` ones cannot be removed.
-function fakeChrome({ grant = true, required = [] as string[] } = {}) {
+function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = false } = {}) {
   const store: Record<string, unknown> = {};
   const granted = new Set<string>(required);
+  const reloaded: number[] = [];
   let scripts: chrome.scripting.RegisteredContentScript[] = [];
   const covers = (origin: string) => granted.has(origin);
   const api = {
@@ -24,13 +27,17 @@ function fakeChrome({ grant = true, required = [] as string[] } = {}) {
       local: {
         get: async (key: string) => (key in store ? { [key]: store[key] } : {}),
         set: async (items: Record<string, unknown>) => void Object.assign(store, items),
+        remove: async (key: string) => void delete store[key],
       },
     },
+    tabs: { reload: async (tabId: number) => void reloaded.push(tabId) },
     permissions: {
       contains: async ({ origins = [] }: chrome.permissions.Permissions) => origins.every(covers),
       request: async ({ origins = [] }: chrome.permissions.Permissions) => {
         if (origins.every(covers)) return true;
         if (grant) origins.forEach((origin) => granted.add(origin));
+        // The prompt closed the popup: its enableSite never gets the answer.
+        if (closeOnPrompt) return new Promise<boolean>(() => {});
         return grant;
       },
       remove: async ({ origins = [] }: chrome.permissions.Permissions) => {
@@ -53,7 +60,7 @@ function fakeChrome({ grant = true, required = [] as string[] } = {}) {
       },
     },
   };
-  return { api: api as unknown as typeof chrome, store, granted, scripts: () => scripts };
+  return { api: api as unknown as typeof chrome, store, granted, reloaded, scripts: () => scripts };
 }
 
 describe("site list", () => {
@@ -83,6 +90,29 @@ describe("site list", () => {
     // A second sync replaces the registration instead of failing on the duplicate id.
     await syncContentScript(chrome.api);
     expect(chrome.scripts()).toHaveLength(2);
+  });
+
+  it("is finished by the service worker when Chrome's prompt closes the popup", async () => {
+    const chrome = fakeChrome({ closeOnPrompt: true });
+    void enableSite("https://a.example", chrome.api, 7);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(await enabledSites(chrome.api)).toEqual([]);
+    // Chrome's permissions.onAdded in the service worker.
+    await finishPendingSite(chrome.api);
+    expect(await enabledSites(chrome.api)).toEqual(["https://a.example"]);
+    expect(chrome.reloaded).toEqual([7]);
+    expect(PENDING_KEY in chrome.store).toBe(false);
+    // Another access granted later changes nothing.
+    await finishPendingSite(chrome.api);
+    expect(chrome.reloaded).toEqual([7]);
+  });
+
+  it("leaves nothing pending when the popup gets the answer itself", async () => {
+    const chrome = fakeChrome();
+    expect(await enableSite("https://a.example", chrome.api, 7)).toBe(true);
+    await finishPendingSite(chrome.api);
+    expect(chrome.reloaded).toEqual([]);
+    expect(PENDING_KEY in chrome.store).toBe(false);
   });
 
   it("does not list a site when the user refuses access", async () => {
