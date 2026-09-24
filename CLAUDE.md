@@ -19,7 +19,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   Python venv) and provision the token with a key and a test-CA certificate. Needs network (vendor files, PyPI).
 - `npm run build` — build the extension into `dist/extension/` (load it unpacked in Chrome).
 - `npm run package` — build, then pack it into `dist/cryptopro-via-rutoken-<version>.zip` for installing by hand;
-  CI uploads the same archive as the `cryptopro-via-rutoken` artifact.
+  CI uploads the same archive as the `cryptopro-via-rutoken` artifact, and its `release` job publishes a version
+  that has no GitHub release yet as a pre-release with that archive.
 - `node scripts/gen-constants.ts` — regenerate `src/page/constants.ts` after pinning a new `cadesplugin_api.js`.
 - `npm run check` — typecheck (Node code, then `src/page/` with DOM types, then `src/extension/` with Chrome types)
   and unit tests; must pass before every commit.
@@ -146,6 +147,11 @@ clicked) and turn sites on with `enableSite`, through the options page.
   owner's request to pre-fill the store from CryptoPro's package. Reason: they are public CA certificates, not
   software, and `lsb-cprocsp-ca-certs` downloads only after logging in to CryptoPro's site, so no pinned fetch can
   get them at build time. The package itself stays out of git.
+
+- **CI publishes the releases** (the `release` job in `.github/workflows/ci.yml`). Owner, 2026-09-24: "make it so
+  you can publish releases, and publish". Reason: agents cannot push tags through the proxy (AGENTS.md §12), so a
+  workflow with `contents: write` creates the tag and the release after the checks pass on `main`. Each release is
+  a pre-release until the owner has checked it on a real Rutoken; bumping `package.json` is what releases.
 
 ## Versions
 

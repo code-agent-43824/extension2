@@ -39,3 +39,52 @@ jobs:
           name: playwright-results
           path: test-results/
           if-no-files-found: ignore
+
+  # A version in package.json that has no GitHub release yet is released once the checks pass: the tag cannot
+  # be pushed through the agents' proxy (AGENTS.md §12). The owner's decision, 2026-09-24 (docs/JOURNAL.md).
+  # Every release starts as a pre-release; the owner lifts the mark after checking it on a real Rutoken.
+  release:
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - name: Is this version released already
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "v$version" > /dev/null 2>&1; then
+            echo "v$version is already released"
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/download-artifact@v7
+        if: steps.version.outputs.new == 'true'
+        with:
+          name: cryptopro-via-rutoken
+          path: dist
+      - name: Create the release with the archive
+        if: steps.version.outputs.new == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          docs="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/v$VERSION/docs"
+          {
+            echo "Сборка расширения «КриптоПро через Рутокен» $VERSION для установки вручную в Chrome."
+            echo
+            echo "- Установка и чек-лист ручной проверки: [MANUAL-CHECK.md]($docs/MANUAL-CHECK.md)."
+            echo "- Что проверено, на чём и какие проблемы известны: [STATUS.md]($docs/STATUS.md)."
+            echo
+            echo "Архив \`cryptopro-via-rutoken-$VERSION.zip\` распаковать, открыть chrome://extensions, включить"
+            echo "«Режим разработчика» и загрузить распакованную папку кнопкой «Загрузить распакованное расширение»."
+          } > notes.md
+          gh release create "v$VERSION" "dist/cryptopro-via-rutoken-$VERSION.zip" \
+            --target "$GITHUB_SHA" --title "$VERSION" --notes-file notes.md --prerelease
