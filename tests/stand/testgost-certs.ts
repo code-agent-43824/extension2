@@ -55,16 +55,25 @@ export async function issueTestgost(context: BrowserContext, { commonName, dn }:
   const caLink = (await page.locator("a[href*='ReqID=CACert']").first().getAttribute("href"))!;
   const caPem = await page.evaluate((href) => fetch(href).then((response) => response.text()), caLink);
   expect(caPem).toContain("-----BEGIN CERTIFICATE-----");
-  // The extension asks whether to trust the test CA's root the first time (docs/PLAN.md, action 22): yes.
-  const trustRoot = (window: Page) => {
-    if (window.url().includes("/confirm.html")) void window.locator("button[name=install]").click();
-  };
-  context.on("page", trustRoot);
   await page.locator("#locInstallCert1").click();
   await expect(pinDialog(page)).toContainText(`Сертификат: ${commonName}`, { timeout: 30_000 });
   await enterPin(page);
-  await expect(page.locator("body")).toContainText("Новый сертификат успешно установлен.", { timeout: 60_000 });
-  context.off("page", trustRoot);
+  // Until the test CA's root is trusted, the page says so (docs/PLAN.md, action 22): its link adds the root after
+  // a yes in the extension's window, and the certificate is installed again.
+  const notTrusted = page.locator("#spnNotTrusted");
+  const installed = page.getByText("Новый сертификат успешно установлен.");
+  await expect(notTrusted.or(installed)).toBeVisible({ timeout: 60_000 });
+  if (await notTrusted.isVisible()) {
+    const confirm = context.waitForEvent("page", (window) => window.url().includes("/confirm.html"));
+    await page.getByText("установите этот сертификат ЦС").click();
+    const alerted = page.waitForEvent("dialog");
+    await (await confirm).locator("button[name=install]").click();
+    await alerted;
+    await page.locator("#locInstallCert1").click();
+    await expect(pinDialog(page)).toContainText(`Сертификат: ${commonName}`, { timeout: 30_000 });
+    await enterPin(page);
+  }
+  await expect(installed).toBeVisible({ timeout: 60_000 });
   await page.close();
   return caPem;
 }

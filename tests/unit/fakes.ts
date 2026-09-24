@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import type { Session } from "../../src/page/objects/session.ts";
 import type { PinDialog, PinRequest } from "../../src/page/pin-dialog.ts";
+import type { RootOffer } from "../../src/page/root-links.ts";
 import type { AddStore } from "../../src/page/roots.ts";
 import type { RutokenPlugin, SignOptions } from "../../src/page/rutoken.ts";
 import type { X509 } from "../../src/page/x509.ts";
@@ -134,6 +135,8 @@ export interface FakeStores {
   // What Store.Add sent; `refuse` makes it fail with that error, as the extension does when the user says no.
   added?: { store: AddStore; certificate: X509 }[];
   refuse?: Error;
+  // The roots InstallResponse left to the page's link.
+  offered?: RootOffer[];
 }
 
 export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]), roots: X509[] = [], intermediates: X509[] = [], stores: FakeStores = {}): Session {
@@ -146,5 +149,6 @@ export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]
       if (stores.refuse) throw stores.refuse;
       stores.added?.push({ store, certificate });
     },
+    offerRootByLink: (offer) => void stores.offered?.push(offer),
   };
 }

@@ -1,8 +1,8 @@
 // Installing a certificate from a CA page, offline (docs/PLAN.md, action 22): the calls certrqma.asp and
 // certfnsh.asp of CryptoPro's test CA make, with the stand's CA issuing the certificate. Its root is in none of
-// the extension's stores, so with "Предлагать установить корневой сертификат при установке сертификата" (on by
-// default) InstallResponse asks about it, as Windows does: no leaves the certificate on the token and answers
-// CERT_E_UNTRUSTEDROOT, which certfnsh.asp shows as «Данный ЦС не является доверенным»; yes adds the root.
+// the extension's stores, so with the root switch on (the default) InstallResponse writes the certificate and
+// answers CERT_E_UNTRUSTEDROOT, as Windows does; certfnsh.asp then shows «Данный ЦС не является доверенным» and
+// a link to the CA certificate, and a click on it asks in the extension's window whether to add the root.
 // It runs on a copy of the stand HOME, so the stand's own token keeps its single certificate.
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { execFileSync } from "node:child_process";
@@ -29,7 +29,7 @@ test.beforeAll(async () => {
   rmSync(outDir, { recursive: true, force: true });
   mkdirSync(outDir, { recursive: true });
   cpSync(stand.home, home, { recursive: true, verbatimSymlinks: true });
-  server = await servePages({ "/": blankPage });
+  server = await servePages({ "/": blankPage, "/certnew.cer": { type: "application/x-x509-ca-cert", body: readFileSync(join(caDir, "ca.pem"), "utf8") } });
   context = await launchStand({ home, extensions: [stand.adapter, standExtension()] });
   await clearSites(context);
   await enableSite(context, server.url);
@@ -138,28 +138,50 @@ test("a certificate for a key made on the token is issued by the stand's CA", as
   await page.close();
 });
 
-test("no to the root: the certificate is on the token, the page gets CERT_E_UNTRUSTEDROOT", async () => {
+// certfnsh.asp's link «установите этот сертификат ЦС»: the CA certificate as a file.
+async function clickRootLink(page: Page): Promise<Page> {
+  const opened = confirmWindow();
+  await page.evaluate(() => {
+    const link = Object.assign(document.createElement("a"), { href: "/certnew.cer?ReqID=CACert&Renewal=21&Mode=inst&Enc=b64", textContent: "установите этот сертификат ЦС" });
+    document.body.replaceChildren(link);
+  });
+  await page.getByText("установите этот сертификат ЦС").click();
+  return opened;
+}
+
+test("the page gets CERT_E_UNTRUSTEDROOT at once, the certificate on the token and nothing asked", async () => {
   const page = await openStandPage(context, `${server.url}/`);
+  let asked = false;
+  const onPage = () => (asked = true);
+  context.on("page", onPage);
   await start(page, installResponse(response));
   await expect(pinDialog(page)).toContainText("Сертификат: Enrollment User", { timeout: 30_000 });
-  const opened = confirmWindow();
   await enterPin(page);
-  await (await opened).locator("button[name=cancel]").click();
   expect((await result(page)).error).toMatch(/0x800B0109/);
+  context.off("page", onPage);
+  expect(asked).toBe(false);
   expect(await extraTab()).not.toContain(caThumbprint);
   await page.close();
 });
 
-test("yes to the root, on installing again: the root lands on the second tab", async () => {
+test("the page's link to the root asks; no leaves it out, yes adds it, and installing again succeeds", async () => {
   const page = await openStandPage(context, `${server.url}/`);
+  const alerts: string[] = [];
+  page.on("dialog", (dialog) => {
+    alerts.push(dialog.message());
+    void dialog.accept();
+  });
   await start(page, installResponse(response));
-  await expect(pinDialog(page)).toContainText("Сертификат: Enrollment User", { timeout: 30_000 });
-  const opened = confirmWindow();
+  await expect(pinDialog(page)).toBeVisible({ timeout: 30_000 });
   await enterPin(page);
-  await (await opened).locator("button[name=install]").click();
-  expect(await result(page)).toEqual({ value: "installed" });
+  expect((await result(page)).error).toMatch(/0x800B0109/);
+  await (await clickRootLink(page)).locator("button[name=cancel]").click();
+  expect(await extraTab()).not.toContain(caThumbprint);
+  await (await clickRootLink(page)).locator("button[name=install]").click();
+  await expect.poll(() => alerts).toEqual(["Корневой сертификат «Stand Test CA» установлен в расширении. Установите свой сертификат ещё раз."]);
   expect(await extraTab()).toContain(caThumbprint);
-  // Trusted now, it is not asked about again.
+  // The page still works: it was not navigated to the file.
+  expect(page.url()).toBe(`${server.url}/`);
   await start(page, installResponse(response));
   await expect(pinDialog(page)).toBeVisible({ timeout: 30_000 });
   await enterPin(page);

@@ -1,4 +1,5 @@
 import type { PinDialog, PinRequest } from "../pin-dialog.ts";
+import type { RootOffer } from "../root-links.ts";
 import type { AddStore, StoreCertificates } from "../roots.ts";
 import type { RutokenPlugin } from "../rutoken.ts";
 import type { X509 } from "../x509.ts";
@@ -13,4 +14,6 @@ export interface Session {
   storeCertificates(): Promise<StoreCertificates>;
   // Store.Add into them, through the extension (src/page/roots.ts).
   addCertificate(store: AddStore, certificate: X509): Promise<void>;
+  // Lets the page's link to this root install it (src/page/root-links.ts).
+  offerRootByLink(offer: RootOffer): void;
 }

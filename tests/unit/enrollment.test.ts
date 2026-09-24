@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { parseNameString } from "../../src/page/dn.ts";
-import { CadesError } from "../../src/page/errors.ts";
 import { endEntity, offeredRoot, responseCertificates } from "../../src/page/objects/enrollment.ts";
+import { isCertificateLink, offerInFile } from "../../src/page/root-links.ts";
 import { createObject } from "../../src/page/objects/index.ts";
 import type { Session } from "../../src/page/objects/session.ts";
 import type { RutokenPlugin } from "../../src/page/rutoken.ts";
@@ -254,29 +254,25 @@ describe("the root offer when installing (certfnsh.asp)", () => {
     expect(offeredRoot(user, [user], [], [])).toBeUndefined();
   });
 
-  it("adds the root the user says yes to, after writing the certificate", async () => {
-    const added: FakeStores["added"] = [];
-    const { plugin, session } = withStores({ offerRoot: true, added });
-    await installLikeTestgost(session);
-    expect(plugin.calls.importCertificate).toHaveLength(1);
-    expect(added).toEqual([{ store: "root", certificate: root }]);
-  });
-
-  it("answers CERT_E_UNTRUSTEDROOT when the user says no, the certificate staying on the token", async () => {
-    const { plugin, session } = withStores({ offerRoot: true, added: [], refuse: new CadesError("Пользователь не разрешил добавить сертификат.", 0x800704c7) });
+  it("answers CERT_E_UNTRUSTEDROOT after writing the certificate, leaving the root to the page's link", async () => {
+    const stores: FakeStores = { offerRoot: true, added: [], offered: [] };
+    const { plugin, session } = withStores(stores);
     await expect(installLikeTestgost(session)).rejects.toThrow("(0x800B0109)");
     expect(plugin.calls.importCertificate).toHaveLength(1);
     expect(plugin.calls.deleteCertificate).toEqual([]);
+    // Nothing is added until the user clicks the link.
+    expect(stores.added).toEqual([]);
+    expect(stores.offered).toEqual([{ root, intermediates: [] }]);
   });
 
-  it("asks nothing when the root is trusted, the switch is off or the certificate is not written", async () => {
-    const trusted: FakeStores["added"] = [];
-    await installLikeTestgost(withStores({ offerRoot: true, added: trusted }, [root]).session);
-    const off: FakeStores["added"] = [];
-    await installLikeTestgost(withStores({ offerRoot: false, added: off }).session);
-    const noKey: FakeStores["added"] = [];
+  it("installs quietly when the root is trusted, the switch is off or the certificate is not written", async () => {
+    const trusted: FakeStores["offered"] = [];
+    await installLikeTestgost(withStores({ offerRoot: true, offered: trusted }, [root]).session);
+    const off: FakeStores["offered"] = [];
+    await installLikeTestgost(withStores({ offerRoot: false, offered: off }).session);
+    const noKey: FakeStores["offered"] = [];
     const failed = installLikeTestgost(
-      withStores({ offerRoot: true, added: noKey }, [], {
+      withStores({ offerRoot: true, offered: noKey }, [], {
         getKeyByCertificate: async () => {
           throw new Error("20");
         },
@@ -284,5 +280,28 @@ describe("the root offer when installing (certfnsh.asp)", () => {
     );
     await expect(failed).rejects.toThrow("(0x80092004)");
     expect([trusted, off, noKey]).toEqual([[], [], []]);
+  });
+});
+
+describe("the CA page's link to the root", () => {
+  const certificates = responseCertificates(response);
+  const user = endEntity(certificates)!;
+  const root = certificates.find((certificate) => certificate !== user)!;
+  const offer = { root, intermediates: [] };
+
+  it("finds the offered root in the file in any of its forms, and only that root", () => {
+    const pemText = `-----BEGIN CERTIFICATE-----\r\n${Buffer.from(root.der).toString("base64").replace(/.{64}/g, "$&\r\n")}\r\n-----END CERTIFICATE-----\r\n`;
+    expect(offerInFile(new TextEncoder().encode(pemText), [offer])).toBe(offer);
+    expect(offerInFile(root.der, [offer])).toBe(offer);
+    expect(offerInFile(Buffer.from(response, "base64"), [offer])).toBe(offer);
+    expect(offerInFile(user.der, [offer])).toBeUndefined();
+    expect(offerInFile(new TextEncoder().encode("<html>not a certificate</html>"), [offer])).toBeUndefined();
+  });
+
+  it("takes links to certificate files only", () => {
+    expect(isCertificateLink(new URL("https://ca.example/certsrv/certnew.cer?ReqID=CACert&Renewal=21&Mode=inst&Enc=b64"))).toBe(true);
+    expect(isCertificateLink(new URL("https://ca.example/root.CRT"))).toBe(true);
+    expect(isCertificateLink(new URL("https://ca.example/certsrv/certrmpn.asp"))).toBe(false);
+    expect(isCertificateLink(new URL("javascript:void(0)"))).toBe(false);
   });
 });

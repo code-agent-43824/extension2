@@ -21,8 +21,6 @@ const CRYPT_E_NOT_FOUND = 0x80092004;
 // What Windows' CertEnroll answers when the root of the installed certificate is not trusted; certfnsh.asp then
 // shows «Данный ЦС не является доверенным» with a link to its root (docs/JOURNAL.md, 2026-09-24).
 export const CERT_E_UNTRUSTEDROOT = 0x800b0109;
-// The extension's answer when the user says no to a root (src/extension/install.ts).
-const ERROR_CANCELLED = 0x800704c7;
 
 // X509KeySpec and AlgorithmType values from CertEnroll.
 const AT_KEYEXCHANGE = 1;
@@ -501,10 +499,10 @@ export class Enrollment {
 
   // Writes the issued certificate onto the token that holds its key. CA certificates in the response
   // are not written: signing needs only the user's certificate (docs/PLAN.md, stage 5).
-  // With the options page's "Предлагать установить корневой сертификат при установке сертификата" (docs/PLAN.md,
-  // action 22), after writing the certificate: when its root comes in the response and the extension's stores do
-  // not trust it, the extension's window asks, as Windows does. Yes adds the root and the response's intermediates
-  // to the stores; no leaves the certificate on the token and answers CERT_E_UNTRUSTEDROOT, as Windows does.
+  // With the options page's switch for the root (docs/PLAN.md, action 22), after writing the certificate: when its
+  // root comes in the response and the extension's stores do not trust it, answers CERT_E_UNTRUSTEDROOT, as
+  // Windows does, so the CA's page shows that the CA is not trusted and its link to the root; the link then
+  // installs the root through the extension's window (src/page/root-links.ts). The certificate stays on the token.
   async InstallResponse(_restrictions: number, response: string, _encoding?: number, _password?: string): Promise<void> {
     let certificate: X509 | undefined;
     let certificates: X509[];
@@ -552,16 +550,10 @@ export class Enrollment {
     if (!stores.offerRoot) return;
     const offer = offeredRoot(certificate, response, stores.roots, stores.intermediates);
     if (!offer) return;
-    try {
-      await this.#session.addCertificate("root", offer.root);
-    } catch (error) {
-      if (error instanceof CadesError && error.number === ERROR_CANCELLED) {
-        throw new CadesError("Сертификат записан на Рутокен, но корневой сертификат его УЦ не доверенный: пользователь не стал его устанавливать", CERT_E_UNTRUSTEDROOT);
-      }
-      throw error;
-    }
-    for (const intermediate of offer.intermediates) await this.#session.addCertificate("ca", intermediate);
+    this.#session.offerRootByLink(offer);
+    throw new CadesError("Сертификат записан на Рутокен, но корневой сертификат его УЦ не доверенный", CERT_E_UNTRUSTEDROOT);
   }
+
 }
 
 // X509Enrollment.CCspAlgorithm: the key or hash algorithm of one of our providers.
