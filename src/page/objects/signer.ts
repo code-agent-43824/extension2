@@ -4,6 +4,7 @@ import type { TokenCertificate } from "../token.ts";
 import { tokenOf } from "./certificate.ts";
 
 const E_INVALIDARG = 0x80070057;
+const CERT_E_EXPIRED = 0x800b0101;
 
 // CADESCOM.CPAttribute. Kept so sites can build their attribute lists; what reaches the signature
 // is decided in CadesSignedData (docs/PLAN.md of stage 4).
@@ -102,4 +103,19 @@ export class CPSigner {
   settings(): { token: TokenCertificate | undefined; checkCertificate: boolean; options: number } {
     return { token: tokenOf(this.#certificate), checkCertificate: this.#checkCertificate, options: this.#options };
   }
+}
+
+// The signer's certificate for signing, with CheckCertificate applied: what SignCades, SignHash and
+// SignedXML.Sign all need first.
+export function signerCertificate(signer: unknown): { token: TokenCertificate; options: number } {
+  if (!(signer instanceof CPSigner)) throw new CadesError("Ожидается объект CAdESCOM.CPSigner", E_INVALIDARG);
+  const { token, checkCertificate, options } = signer.settings();
+  if (!token) throw new CadesError("Не задан сертификат подписанта", E_INVALIDARG);
+  if (checkCertificate) {
+    const now = Date.now();
+    if (now < token.x509.notBefore.getTime() || now > token.x509.notAfter.getTime()) {
+      throw new CadesError("Срок действия сертификата истёк или ещё не начался", CERT_E_EXPIRED);
+    }
+  }
+  return { token, options };
 }

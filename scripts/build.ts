@@ -9,6 +9,11 @@ import { repoRoot } from "./fetch-vendor.ts";
 
 export const extensionDir = join(repoRoot, "dist", "extension");
 
+// Only the canonicalizer of xmldsigjs goes into page.js (docs/JOURNAL.md, 2026-09-24): the package's entry
+// point pulls in all of it, and its "exports" map hides the file, so it is reached by path. The same alias
+// is in tsconfig.json (paths) and vitest.config.ts.
+export const aliases = { "xmldsigjs-canonicalizer": join(repoRoot, "node_modules", "xmldsigjs", "build", "esm", "canonicalizer.js") };
+
 export function packageVersion(): string {
   return JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")).version;
 }
@@ -28,6 +33,7 @@ export async function buildExtension(): Promise<void> {
     target: "chrome111",
     charset: "utf8",
     define: { __EXTENSION_VERSION__: JSON.stringify(version) },
+    alias: aliases,
     logLevel: "warning",
   });
   const extension = join(repoRoot, "src", "extension");
@@ -41,6 +47,9 @@ export async function buildExtension(): Promise<void> {
     logLevel: "warning",
   });
   for (const file of ["popup.html", "options.html", "ui.css"]) copyFileSync(join(extension, file), join(extensionDir, file));
+  // page.js carries code of these MIT packages, whose licenses ask for their notice to go along.
+  const notices = ["xmldsigjs", "xml-core"].map((name) => `${name}\n\n${readFileSync(join(repoRoot, "node_modules", name, "LICENSE"), "utf8").trim()}\n`);
+  writeFileSync(join(extensionDir, "THIRD-PARTY-LICENSES.txt"), `${notices.join("\n\n")}`);
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

@@ -7,7 +7,7 @@ import type { Session } from "./session.ts";
 const E_INVALIDARG = 0x80070057;
 const E_FAIL = 0x80004005;
 
-type HashType =
+export type HashType =
   | "HASH_TYPE_GOST3411_94"
   | "HASH_TYPE_GOST3411_12_256"
   | "HASH_TYPE_GOST3411_12_512"
@@ -39,11 +39,11 @@ export function ucs2leBinary(text: string): string {
   return binary;
 }
 
-async function digest(plugin: RutokenPlugin, type: HashType, binary: string): Promise<string> {
+// The hash of `binary` (a binary string) as upper-case hex, computed by the Rutoken Plugin on the token
+// `deviceId`, or on the first connected one: the hash involves no key.
+export async function tokenDigest(plugin: RutokenPlugin, deviceId: number | undefined, type: HashType, binary: string): Promise<string> {
   if (!binary) throw new CadesError("Рутокен Плагин не хеширует пустые данные.", E_INVALIDARG);
-  const devices = await plugin.enumerateDevices();
-  // Any token will do: the hash involves no key.
-  const deviceId = devices[0];
+  deviceId ??= (await plugin.enumerateDevices())[0];
   if (deviceId === undefined) throw new CadesError("Рутокен не подключён: хеш считает Рутокен Плагин на токене.", SCARD_E_NO_SMARTCARD);
   let value: string;
   try {
@@ -130,7 +130,7 @@ export class HashedData {
     const { type } = this.#known();
     if (this.#value === undefined) {
       if (this.#data === null) throw new CadesError("Хеш ещё не вычислен: нет данных.", E_INVALIDARG);
-      this.#value = await digest(this.#session.plugin, type, this.#data);
+      this.#value = await tokenDigest(this.#session.plugin, undefined, type, this.#data);
       this.#data = null;
     }
     return { algorithm: this.#algorithm, value: this.#value };

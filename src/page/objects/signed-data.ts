@@ -1,14 +1,12 @@
 import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
 import { signWithToken } from "../signing.ts";
-import type { TokenCertificate } from "../token.ts";
 import { HashedData, ucs2leBinary } from "./hashed-data.ts";
 import type { Session } from "./session.ts";
-import { CPSigner } from "./signer.ts";
+import { signerCertificate } from "./signer.ts";
 
 const E_INVALIDARG = 0x80070057;
 const E_NOTIMPL = 0x80004001;
-const CERT_E_EXPIRED = 0x800b0101;
 // SignCades' type argument carries flags above the type itself (CADES_USE_OCSP_AUTHORIZED_POLICY).
 const TYPE_MASK = 0xffff;
 
@@ -24,20 +22,6 @@ const hashForKey = new Map<string, number>([
   ["1.2.643.7.1.1.1.1", constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256],
   ["1.2.643.7.1.1.1.2", constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512],
 ]);
-
-// The signer's certificate, checked as SignCades and SignHash both need it.
-function signerToken(signer: unknown): { token: TokenCertificate; options: number } {
-  if (!(signer instanceof CPSigner)) throw new CadesError("Ожидается объект CAdESCOM.CPSigner", E_INVALIDARG);
-  const { token, checkCertificate, options } = signer.settings();
-  if (!token) throw new CadesError("Не задан сертификат подписанта", E_INVALIDARG);
-  if (checkCertificate) {
-    const now = Date.now();
-    if (now < token.x509.notBefore.getTime() || now > token.x509.notAfter.getTime()) {
-      throw new CadesError("Срок действия сертификата истёк или ещё не начался", CERT_E_EXPIRED);
-    }
-  }
-  return { token, options };
-}
 
 // CAdES-BES and PKCS#7 are what the Rutoken Plugin's sign() makes; the other types need a timestamp service.
 function signatureKind(type: number): number {
@@ -92,7 +76,7 @@ export class CadesSignedData {
 
   async SignCades(signer: unknown, type: number = constants.CADESCOM_CADES_DEFAULT, detached: unknown = false): Promise<string> {
     const kind = signatureKind(type);
-    const { token, options } = signerToken(signer);
+    const { token, options } = signerCertificate(signer);
     const cades = kind === constants.CADESCOM_CADES_BES;
     const content = this.#encoding === constants.CADESCOM_BASE64_TO_BINARY ? this.#content.replace(/\s+/g, "") : ucs2leBase64(this.#content);
     if (!content) throw new CadesError("Нет данных для подписи", E_INVALIDARG);
@@ -117,7 +101,7 @@ export class CadesSignedData {
     if (!(hashed instanceof HashedData)) throw new CadesError("Ожидается объект CAdESCOM.HashedData", E_INVALIDARG);
     signatureKind(type);
     if (Number(encoding) !== constants.CADESCOM_ENCODE_BASE64) throw new CadesError("Подпись хеша выдаётся только в Base64", E_INVALIDARG);
-    const { token, options } = signerToken(signer);
+    const { token, options } = signerCertificate(signer);
     const { algorithm, value } = await hashed.hash();
     const required = hashForKey.get(token.x509.publicKeyAlgorithm);
     if (required !== undefined && required !== algorithm) {

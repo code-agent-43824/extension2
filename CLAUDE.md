@@ -50,7 +50,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `src/page/` — the MAIN-world content script, bundled into one `page.js`: `main.ts` (entry), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
-  case-insensitively by ProgID; `objects/hashed-data.ts` hashes with the plugin's `digest` on a connected token), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
+  case-insensitively by ProgID; `objects/hashed-data.ts` hashes with the plugin's `digest` on a connected token; `objects/signed-xml.ts`
+  makes XMLDSig with xmldsigjs' canonicalizer, `digest` and `rawSign`), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing; `dn.ts` holds the CryptoPro name format sites match with regexes),
   `signing.ts` (the plugin's `sign`, data or a hash) + `token-login.ts` (PIN window, login, logout, the single connected token) +
@@ -73,11 +74,12 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `nalog.spec.ts` (opt-in,
   online) signs in by certificate on the FNS personal accounts up to the server refusing the CA; `crpt.spec.ts`
   (opt-in, online) does the same on Честный знак; `testgost-certs.ts` issues their certificates; `with-cryptopro.spec.ts`
-  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `roots.spec.ts` drives the root store
+  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `roots.spec.ts` drives the root store
   on the options page; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `verify.ts` runs the
   independent verifier on a signature.
-- `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier),
+- `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier,
+  `verify_xmldsig.py` XMLDSig verifier on lxml),
   hash-pinned in `requirements.txt`.
 
 Stand pitfalls (details in `docs/JOURNAL.md`): the native host finds the plugin only via `$HOME/.mozilla/plugins`,
@@ -111,9 +113,18 @@ clicked) and turn sites on with `enableSite`, through the options page.
   trigger a signature and a real CryptoPro install is intercepted everywhere (risks 7 and 9 in `docs/ANALYSIS.md`).
   Site access is an optional host permission requested when the user enables a site.
 
-- **Independent GOST tooling is Python (`gostcrypto`, `asn1crypto`) in `tests/tools/`, test-only.** Agent,
+- **Independent GOST tooling is Python (`gostcrypto`, `asn1crypto`, `lxml`) in `tests/tools/`, test-only.** Agent,
   2026-09-23. Reason: a verifier must not share code with what it checks, and no maintained npm GOST signature
   library was found; these two are on PyPI and pinned by hash. Never ship them in the extension.
+
+- **XMLDSig canonicalization comes from `xmldsigjs`, and only that file goes into page.js.** Owner, 2026-09-24,
+  "xmldsig if you find suitable JavaScript libraries"; the choice is the agent's (`docs/JOURNAL.md`). Reason: of
+  the libraries checked, only its `XmlCanonicalizer` canonicalizes correctly in the browser; the whole package
+  adds about 450 KB, patches the page's `window.crypto` on import and signs CryptoPro's template sample wrongly,
+  so the SignedInfo/Reference/KeyInfo layer is ours. The file is reached through the `xmldsigjs-canonicalizer`
+  alias (scripts/build.ts, tsconfig.json, vitest.config.ts, the types in `src/page/globals.d.ts`); the version is
+  pinned exactly. The XMLDSig verifier uses `lxml` (libxml2) for the same reason `verify_cms.py` exists: a check
+  must not share code with what it checks.
 
 - **The built-in root certificates are committed** (`src/extension/builtin-roots.ts`). Agent, 2026-09-23, on the
   owner's request to pre-fill the store from CryptoPro's package. Reason: they are public CA certificates, not

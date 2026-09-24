@@ -2,6 +2,20 @@
 
 Новые записи сверху.
 
+## 2026-09-24 — XMLDSig
+
+**План.** Вторая половина действия 15 `PLAN.md`: `CAdESCOM.SignedXML`, если найдётся библиотека.
+
+**Сделано.** Разобраны библиотеки XMLDSig (`JOURNAL.md`): взята только канонизация `xmldsigjs` 2.8.8 (зависимость,
+в page.js попадает один файл, лицензии — `THIRD-PARTY-LICENSES.txt` в сборке). Поведение `SignedXML` снято с
+настоящего плагина через `nmcades`. Новый `src/page/objects/signed-xml.ts`, `rawSign` в интерфейсе плагина,
+проверяльщик `tests/tools/verify_xmldsig.py` на `lxml` (закреплён по хешам), тесты `tests/unit/signed-xml.test.ts`
+и `tests/stand/xml-signing.spec.ts`. Наши подписи принял `Verify` настоящего плагина. `npm run check`,
+`npm run test:stand`, `with-cryptopro-csp.spec.ts` зелёные. Версия 0.5.8. Стенд нужно пересобрать
+(`npm run stand`) или доставить `lxml` в `stand/venv`.
+
+**Дальше.** Проверка владельцем.
+
 ## 2026-09-24 — подпись хеша
 
 **План.** Первая половина действия 15 `PLAN.md`.

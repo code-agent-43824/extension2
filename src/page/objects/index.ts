@@ -14,6 +14,7 @@ import {
 } from "./enrollment.ts";
 import { HashedData } from "./hashed-data.ts";
 import { CadesSignedData } from "./signed-data.ts";
+import { SignedXML } from "./signed-xml.ts";
 import { CPAttribute, CPSigner } from "./signer.ts";
 import { Store } from "./store.ts";
 import type { Session } from "./session.ts";
@@ -27,6 +28,7 @@ const factories = new Map<string, Factory>([
   ["cadescom.cpattribute", () => new CPAttribute()],
   ["cadescom.cpsigner", () => new CPSigner()],
   ["cadescom.hasheddata", (session) => new HashedData(session)],
+  ["cadescom.signedxml", (session) => new SignedXML(session)],
   ["cadescom.store", (session) => new Store(session)],
   // The real plug-in also answers to CAPICOM's name for it (checked with 2.0.15700); lkfl2.nalog.ru uses it.
   ["capicom.store", (session) => new Store(session)],

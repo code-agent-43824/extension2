@@ -43,7 +43,11 @@ export interface RutokenPlugin {
   createPkcs10(deviceId: number, keyId: string, subject: SubjectAttribute[], extensions: RequestExtensions, options: RequestOptions): PromiseLike<string>;
   // Takes PEM; returns the new certificate id.
   importCertificate(deviceId: number, certificate: string, category: number): PromiseLike<string>;
+  // Needs a login; returns the key id.
   getKeyByCertificate(deviceId: number, certId: string): PromiseLike<string>;
+  // Signs a hash given as colon-separated hex (plain hex is refused); returns the signature as colon-separated
+  // hex, laid out as in CMS (checked on the stand, docs/JOURNAL.md 2026-09-24). Needs a login.
+  rawSign(deviceId: number, keyId: string, data: string, options: Record<string, never>): PromiseLike<string>;
   deleteCertificate(deviceId: number, certId: string): PromiseLike<void>;
 }
 

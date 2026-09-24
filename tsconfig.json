@@ -11,7 +11,10 @@
     "skipLibCheck": true,
     "types": [
       "node"
-    ]
+    ],
+    "paths": {
+      "xmldsigjs-canonicalizer": ["./node_modules/xmldsigjs/build/esm/canonicalizer.js"]
+    }
   },
   "include": [
     "scripts",

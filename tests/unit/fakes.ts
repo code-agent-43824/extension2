@@ -108,6 +108,8 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
       return "ne:w1";
     },
     getKeyByCertificate: async () => "ke:y1",
+    // 64 bytes: the hash that was signed, twice.
+    rawSign: async (_device, _key, data) => `${data}:${data}`,
     deleteCertificate: async (_device, id) => {
       calls.deleteCertificate.push(id);
     },

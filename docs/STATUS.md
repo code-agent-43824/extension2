@@ -4,7 +4,7 @@
 
 ## Версия
 
-`0.5.7` (в `package.json`), не выпускалась.
+`0.5.8` (в `package.json`), не выпускалась.
 
 ## Что есть
 
@@ -71,6 +71,10 @@
   Сбербанк-АСТ, `crypto-pro`) проходят `verify_cms.py` (`tests/stand/hash-signing.spec.ts`), архивный код
   Сбербанк-АСТ (`SignDataHash_Async`) и `crypto-pro` (`createHash`, `createDetachedSignature`) подписывают и
   проверяются. Только fake Рутокен, не устройство.
+- XML-подпись (действие 15, 2026-09-24): `CAdESCOM.SignedXML` делает XMLDSig ГОСТ вложенный, оборачивающий и по
+  шаблону (канонизация `xmldsigjs`, хеш и подпись Рутокен Плагина); на стенде шесть сценариев
+  (`tests/stand/xml-signing.spec.ts`) проходят независимый `tests/tools/verify_xmldsig.py`, настоящий плагин
+  КриптоПро 2.0.15700 принимает наши подписи своим `Verify` (разовая проверка, `JOURNAL.md`). Только fake Рутокен.
 
 ## Известные проблемы
 
@@ -81,8 +85,10 @@
   «подпись и обмен» (выбор страницы по умолчанию) экспортные Рутокен ЭЦП 3.0 не создают — тогда нужен «ключ
   подписи»; эмулированы только объекты, которые вызывает certsrv.
 - Вход ИП — на lkipgost2.nalog.ru, только по ГОСТ TLS, из Chrome недоступен.
-- Нет `CAdESCOM.SignedXML`, `Certificate.ExtendedKeyUsage`, `VerifyCades`, `VerifyHash`, `CoSignCades`: сайты
+- Нет `Certificate.ExtendedKeyUsage`, `VerifyCades`, `VerifyHash`, `CoSignCades`, `SignedXML.Verify`: сайты
   действия 14 вызывают их для документов, не для входа.
+- `SignedXML`: Base64 в `Content` — только документы в UTF-8; преобразования — только enveloped-signature и C14N;
+  ссылки `#id` находят кроме `xml:id` ещё `Id`/`ID`/`id` (настоящий плагин — только `xml:id`).
 - `HashedData`: без подключённого Рутокена хеш не считается (его считает Рутокен Плагин на токене); хеш пустых
   данных Рутокен Плагин не считает; ГОСТ Р 34.11-94 fake Рутокен не умеет (ошибка 147), на устройстве не проверялся;
   HMAC-алгоритмы не поддерживаются.
