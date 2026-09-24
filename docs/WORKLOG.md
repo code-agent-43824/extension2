@@ -2,6 +2,12 @@
 
 Новые записи сверху.
 
+## 2026-09-24 — релиз 1.0
+
+**План.** Действие 17 `PLAN.md`: версия 1.0.0, выпуск в GitHub Releases из CI, чек-лист на все функции. Сначала
+прогнать на стенде демо-страницы КриптоПро, которые войдут в чек-лист (`verify.html`, `cades_xmldsig_sample.html`,
+`cades_bes_file.html`); `verify.html` упадёт на нас: нет `AdditionalStore` и `GetMsgType`.
+
 ## 2026-09-24 — проверка подписи
 
 **План.** Действие 16 `PLAN.md`: `VerifyCades`, `VerifyHash`, `SignedXML.Verify` целиком в расширении, без
