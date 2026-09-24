@@ -91,7 +91,8 @@
   `DataEncoding`, `Hash`, `SetHashValue`, `Value`) и `CadesSignedData.SignHash` — по поведению настоящего плагина
   2.0.15700, снятому через `nmcades`; хеш считает Рутокен Плагин (`digest`), подписывает его `sign` с
   `DATA_FORMAT_HASH`. Проверка — `verify_cms.py` и сценарии Честного знака, Сбербанк-АСТ и `crypto-pro` на стенде.
-  XMLDSig (`CAdESCOM.SignedXML`) — после выбора библиотеки, с отчётом владельцу.
+  XMLDSig (`CAdESCOM.SignedXML`) — после выбора библиотеки, с отчётом владельцу. Подпись хеша сделана
+  (0.5.7, `tests/stand/hash-signing.spec.ts`, поведение — `JOURNAL.md` 2026-09-24); XMLDSig в работе.
 - [ ] **7. Прогон владельцем и исправления.** Подпись владельца проверяем `verify_cms.py` с сертификатом его УЦ.
 
 ## Значения по умолчанию, выбранные агентом

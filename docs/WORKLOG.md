@@ -2,6 +2,18 @@
 
 Новые записи сверху.
 
+## 2026-09-24 — подпись хеша
+
+**План.** Первая половина действия 15 `PLAN.md`.
+
+**Сделано.** Поведение `HashedData` и `SignHash` снято с настоящего плагина 2.0.15700 через `nmcades`, `digest` и
+`sign` с `DATA_FORMAT_HASH` — с Рутокен Плагина на стенде (`JOURNAL.md`). Новый объект
+`src/page/objects/hashed-data.ts`, `CadesSignedData.SignHash`, модульные тесты `tests/unit/hashing.test.ts`, тест
+стенда `tests/stand/hash-signing.spec.ts`. Архивный код Сбербанк-АСТ и `crypto-pro` прогнан на стенде без сети
+(разово, в репозиторий не вошёл). `npm run check` и `npm run test:stand` зелёные. Версия 0.5.7.
+
+**Дальше.** XMLDSig: канонизация из `xmldsigjs`, своя обвязка `SignedXML`, поведение — с настоящего плагина.
+
 ## 2026-09-24 — план: подпись хеша и XMLDSig
 
 **План.** Действие 15 `PLAN.md`: `CAdESCOM.HashedData` и `CadesSignedData.SignHash` через `digest` и `sign`

@@ -12,10 +12,17 @@ export interface RutokenPlugin {
   readonly CERT_CATEGORY_USER: PromiseLike<number>;
   readonly TOKEN_INFO_SERIAL: PromiseLike<number>;
   readonly DATA_FORMAT_BASE64: PromiseLike<number>;
+  readonly DATA_FORMAT_HASH: PromiseLike<number>;
   readonly PUBLIC_KEY_ALGORITHM_GOST3410_2012_256: PromiseLike<number>;
   readonly PUBLIC_KEY_ALGORITHM_GOST3410_2012_512: PromiseLike<number>;
+  readonly HASH_TYPE_GOST3411_94: PromiseLike<number>;
   readonly HASH_TYPE_GOST3411_12_256: PromiseLike<number>;
   readonly HASH_TYPE_GOST3411_12_512: PromiseLike<number>;
+  readonly HASH_TYPE_MD5: PromiseLike<number>;
+  readonly HASH_TYPE_SHA1: PromiseLike<number>;
+  readonly HASH_TYPE_SHA256: PromiseLike<number>;
+  readonly HASH_TYPE_SHA384: PromiseLike<number>;
+  readonly HASH_TYPE_SHA512: PromiseLike<number>;
   readonly KEY_SPEC_SIGN: PromiseLike<number>;
   readonly KEY_SPEC_SIGN_AND_EXCHANGE: PromiseLike<number>;
   enumerateDevices(): PromiseLike<number[]>;
@@ -24,7 +31,11 @@ export interface RutokenPlugin {
   getDeviceInfo(deviceId: number, option: number): PromiseLike<unknown>;
   login(deviceId: number, pin: string): PromiseLike<void>;
   logout(deviceId: number): PromiseLike<void>;
+  // With DATA_FORMAT_HASH, `data` is the hash as hex and the signature must be detached.
   sign(deviceId: number, certId: string, data: string, dataFormat: number, options: SignOptions): PromiseLike<string>;
+  // Hashes on the token; returns colon-separated lower-case hex ("4e:29:…"). Rejects empty data and a
+  // deviceId of no connected token (checked on the stand, docs/JOURNAL.md 2026-09-24).
+  digest(deviceId: number, hashType: number, data: string, options: DigestOptions): PromiseLike<string>;
   // Returns the key id (hex). `reserved` must be undefined.
   generateKeyPair(deviceId: number, reserved: undefined, marker: string, options: KeyPairOptions): PromiseLike<string>;
   deleteKeyPair(deviceId: number, keyId: string): PromiseLike<void>;
@@ -57,6 +68,11 @@ export interface RequestExtensions {
 
 export interface RequestOptions {
   hashAlgorithm: number;
+}
+
+export interface DigestOptions {
+  // `data` is Base64 of the bytes rather than text.
+  base64: boolean;
 }
 
 export interface SignOptions {

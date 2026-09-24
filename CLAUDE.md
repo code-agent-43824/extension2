@@ -50,10 +50,10 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `src/page/` — the MAIN-world content script, bundled into one `page.js`: `main.ts` (entry), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
-  case-insensitively by ProgID), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
+  case-insensitively by ProgID; `objects/hashed-data.ts` hashes with the plugin's `digest` on a connected token), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing; `dn.ts` holds the CryptoPro name format sites match with regexes),
-  `signing.ts` (the plugin's `sign`) + `token-login.ts` (PIN window, login, logout, the single connected token) +
+  `signing.ts` (the plugin's `sign`, data or a hash) + `token-login.ts` (PIN window, login, logout, the single connected token) +
   `pin-dialog.ts` (the PIN window, in a shadow root), `roots.ts` (asks the bridge for the "Root" store), `objects/enrollment.ts` (X509Enrollment for CA pages:
   key and PKCS#10 request on the token, installing the issued certificate).
   Rutoken Plugin methods return thenables, not Promises: `await` them, never `.catch()`.
@@ -73,7 +73,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `nalog.spec.ts` (opt-in,
   online) signs in by certificate on the FNS personal accounts up to the server refusing the CA; `crpt.spec.ts`
   (opt-in, online) does the same on Честный знак; `testgost-certs.ts` issues their certificates; `with-cryptopro.spec.ts`
-  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `roots.spec.ts` drives the root store
+  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `roots.spec.ts` drives the root store
   on the options page; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `verify.ts` runs the
   independent verifier on a signature.

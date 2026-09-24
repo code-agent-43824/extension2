@@ -10,8 +10,9 @@ export { SCARD_E_NO_SMARTCARD, SCARD_W_CANCELLED_BY_USER, SCARD_W_CHV_BLOCKED } 
 
 export interface SignJob {
   token: TokenCertificate;
-  // Base64 of the bytes to sign.
+  // Base64 of the bytes to sign, or with `hash` the hash as hex.
   content: string;
+  hash: boolean;
   options: SignOptions;
 }
 
@@ -32,14 +33,19 @@ export async function signWithToken(session: Session, job: SignJob): Promise<str
   const deviceId = await findDevice(session.plugin, job.token.serial);
   if (deviceId === undefined) throw new CadesError("Рутокен с этим сертификатом не подключён.", SCARD_E_NO_SMARTCARD);
   const size = Math.floor((job.content.replace(/=+$/, "").length * 3) / 4);
+  const what = job.hash ? "Хеш данных" : bytes(size);
   const request = {
     origin: session.origin,
-    action: "просит подписать данные.",
-    details: [`${bytes(size)}, ${job.options.detached ? "отсоединённая" : "присоединённая"} подпись.`, ...certificateLines(job.token.x509)],
+    action: job.hash ? "просит подписать хеш данных." : "просит подписать данные.",
+    details: [`${what}, ${job.options.detached ? "отсоединённая" : "присоединённая"} подпись.`, ...certificateLines(job.token.x509)],
     confirm: "Подписать",
   };
   return withLogin(session, deviceId, request, async () => {
-    const format = await session.plugin.DATA_FORMAT_BASE64;
-    return session.plugin.sign(deviceId, job.token.certId, job.content, format, job.options);
+    if (job.hash) {
+      // The hex form digest() returns, which sign() was checked to take (docs/JOURNAL.md, 2026-09-24).
+      const hash = job.content.toLowerCase().replace(/(..)(?!$)/g, "$1:");
+      return session.plugin.sign(deviceId, job.token.certId, hash, await session.plugin.DATA_FORMAT_HASH, job.options);
+    }
+    return session.plugin.sign(deviceId, job.token.certId, job.content, await session.plugin.DATA_FORMAT_BASE64, job.options);
   });
 }
