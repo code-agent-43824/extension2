@@ -7,7 +7,7 @@ import { getLastError } from "./errors.ts";
 import { createObject } from "./objects/index.ts";
 import type { Session } from "./objects/session.ts";
 import { openPinDialog } from "./pin-dialog.ts";
-import { rootCertificates } from "./roots.ts";
+import { storeCertificates } from "./roots.ts";
 import { loadRutokenPlugin, type Clock } from "./rutoken.ts";
 import { asyncSpawn } from "./spawn.ts";
 
@@ -81,7 +81,7 @@ export function createCadesplugin(win: PageWindow, clock: Clock): Cadesplugin {
           plugin,
           origin: win.location?.origin ?? "",
           pinDialog: (request) => openPinDialog(win.document, request),
-          rootCertificates: () => rootCertificates(win, clock),
+          storeCertificates: () => storeCertificates(win, clock),
         });
         (win.cadesplugin_plugin_loaded_callback as Callback)?.();
         resolvePlugin();

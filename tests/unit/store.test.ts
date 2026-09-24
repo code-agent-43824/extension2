@@ -16,7 +16,11 @@ async function openStore(plugin: RutokenPlugin, ...args: unknown[]): Promise<Cer
 }
 
 async function openStoreWith(plugin: RutokenPlugin, rootStore: X509[], ...args: unknown[]): Promise<Certificates> {
-  const store = createObject("CAdESCOM.Store", fakeSession(plugin, new FakePinDialog([]), rootStore)) as Store;
+  return openStoreWithBoth(plugin, rootStore, [], ...args);
+}
+
+async function openStoreWithBoth(plugin: RutokenPlugin, rootStore: X509[], intermediates: X509[], ...args: unknown[]): Promise<Certificates> {
+  const store = createObject("CAdESCOM.Store", fakeSession(plugin, new FakePinDialog([]), rootStore, intermediates)) as Store;
   await (store.Open as (...a: unknown[]) => Promise<void>)(...args);
   return store.Certificates;
 }
@@ -33,13 +37,20 @@ describe("CAdESCOM.Store", () => {
     }
   });
 
-  it("lists the root store in Root, in either location and any case, and keeps CA empty", async () => {
+  it("lists the enabled roots in Root and the intermediates in CA, in either location and any case", async () => {
     const { CAPICOM_CURRENT_USER_STORE: user, CAPICOM_LOCAL_MACHINE_STORE: machine } = constants;
     for (const [location, name] of [[user, "Root"], [machine, "Root"], [user, "root"]] as const) {
       expect(await (await openStoreWith(fakePlugin(), roots, location, name)).Count).toBe(roots.length);
     }
     expect(await (await openStore(fakePlugin(), user, "Root")).Count).toBe(0);
     expect(await (await openStoreWith(fakePlugin(), roots, user, "CA")).Count).toBe(0);
+    const [first, ...rest] = roots as [X509, ...X509[]];
+    for (const [location, name] of [[user, "CA"], [machine, "ca"]] as const) {
+      const ca = await openStoreWithBoth(fakePlugin(), rest, [first], location, name);
+      expect(await ca.Count).toBe(1);
+      expect(await (await ca.Item(1)).Thumbprint).toBe(first.thumbprint);
+    }
+    expect(await (await openStoreWithBoth(fakePlugin(), rest, [first], user, "Root")).Count).toBe(rest.length);
   });
 
   it("finds a root by SHA-1 as lkip2.nalog.ru does, without a key, as CryptoPro answers for its Root store", async () => {

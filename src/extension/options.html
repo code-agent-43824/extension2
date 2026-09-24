@@ -18,24 +18,44 @@
   <p id="error" class="error" role="alert"></p>
 
   <section id="roots-section">
-    <h1>Хранилище корневых сертификатов</h1>
-    <p class="note">Корневые сертификаты удостоверяющих центров. Включённые сайты видят включённые здесь
-      сертификаты как хранилище «Доверенные корневые центры» (Root) плагина КриптоПро. Рутокен Плагину и
-      Рутокену хранилище не передаётся.</p>
-    <div class="toolbar">
-      <label><input type="checkbox" name="roots-enabled"> Хранилище включено</label>
-      <span id="roots-count" class="note"></span>
-      <button type="button" id="roots-all-on">Включить все</button>
-      <button type="button" id="roots-all-off">Выключить все</button>
+    <h1>Сертификаты удостоверяющих центров</h1>
+    <p class="note">Включённые сайты видят включённые здесь корневые сертификаты как хранилище «Доверенные корневые
+      центры» (Root) плагина КриптоПро, промежуточные — как «Промежуточные центры сертификации» (CA); по ним же
+      расширение проверяет подписи. Рутокен Плагину и Рутокену эти хранилища не передаются.</p>
+    <div class="tabs" role="tablist">
+      <button type="button" role="tab" id="tab-roots" aria-controls="panel-roots" aria-selected="true">Корневые</button>
+      <button type="button" role="tab" id="tab-extra" aria-controls="panel-extra" aria-selected="false">Промежуточные и сторонние корневые</button>
     </div>
-    <form id="roots-add" class="toolbar">
-      <label>Добавить из файла (DER или PEM)
-        <input name="files" type="file" accept=".cer,.crt,.der,.pem,application/pkix-cert,application/x-x509-ca-cert" multiple required></label>
-      <button type="submit">Добавить</button>
-    </form>
-    <p id="roots-message" class="note" role="status"></p>
-    <ul id="roots" class="cards"></ul>
-    <p id="roots-empty" class="note" hidden>В хранилище нет сертификатов.</p>
+    <div id="panel-roots" role="tabpanel" aria-labelledby="tab-roots">
+      <p class="note">Корневые сертификаты, которые ставит КриптоПро CSP. Удалённый возвращается, если добавить его
+        файл на вкладке «Промежуточные и сторонние корневые».</p>
+      <div class="toolbar">
+        <label><input type="checkbox" name="roots-enabled"> Хранилище включено</label>
+        <span id="roots-count" class="note"></span>
+        <button type="button" id="roots-all-on">Включить все</button>
+        <button type="button" id="roots-all-off">Выключить все</button>
+      </div>
+      <ul id="roots" class="cards"></ul>
+      <p id="roots-empty" class="note" hidden>В хранилище нет сертификатов.</p>
+    </div>
+    <div id="panel-extra" role="tabpanel" aria-labelledby="tab-extra" hidden>
+      <p class="note">Сертификаты, добавленные из файлов: корневые других удостоверяющих центров (самоподписанные) и
+        промежуточные, которыми цепочка от сертификата подписанта доходит до корневого.</p>
+      <div class="toolbar">
+        <label><input type="checkbox" name="extra-enabled"> Хранилище включено</label>
+        <span id="extra-count" class="note"></span>
+        <button type="button" id="extra-all-on">Включить все</button>
+        <button type="button" id="extra-all-off">Выключить все</button>
+      </div>
+      <form id="extra-add" class="toolbar">
+        <label>Добавить из файла (DER или PEM)
+          <input name="files" type="file" accept=".cer,.crt,.der,.pem,application/pkix-cert,application/x-x509-ca-cert" multiple required></label>
+        <button type="submit">Добавить</button>
+      </form>
+      <p id="extra-message" class="note" role="status"></p>
+      <ul id="extra" class="cards"></ul>
+      <p id="extra-empty" class="note" hidden>Пока ни одного сертификата.</p>
+    </div>
   </section>
   <script src="options.js"></script>
 </body>

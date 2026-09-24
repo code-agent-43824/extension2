@@ -1,7 +1,8 @@
 /// <reference types="chrome" />
-// The root certificate store (docs/PLAN.md of stage 5, actions 12 and 13): on the options page, the built-in
-// roots as cards, switched one by one, all at once and as a whole store, removed and added from DER and PEM
-// files; on an enabled site, the enabled ones as CryptoPro's Root store.
+// The certificate stores (docs/PLAN.md of stage 5, actions 12, 13 and 18): on the options page, the built-in
+// roots as cards on their tab, switched one by one, all at once and as a whole store, and removed; on the second
+// tab, roots of other CAs and intermediates added from DER and PEM files; on an enabled site, the enabled roots
+// of both as CryptoPro's Root store and the intermediates as CA.
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -9,14 +10,18 @@ import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { standDir } from "../../scripts/setup-stand.ts";
 import { BUILTIN_ROOTS } from "../../src/extension/builtin-roots.ts";
 import { base64ToDer } from "../../src/extension/roots.ts";
+import { parseSignedData } from "../../src/page/cms.ts";
 import { parseCertificate } from "../../src/page/x509.ts";
 import { stand } from "../../scripts/setup-stand.ts";
-import { clearSites, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { addRoots, clearSites, enableSite, extensionOrigin, launchStand, openStandPage, servePages, setRootStore, standExtension, type PageServer } from "./harness.ts";
 
 const outDir = join(standDir, "roots");
 const headCa = "8CAE88BBFD404A7A53630864F9033606E1DC45E2";
 const headCaDer = base64ToDer(BUILTIN_ROOTS.find((der) => parseCertificate(base64ToDer(der)).thumbprint === headCa)!);
 const caPem = readFileSync(join(repoRoot, "tests", "fixtures", "stand-ca.pem"));
+// An intermediate CA: the one a crafted signature of tests/fixtures/verify.json chains through.
+const fixtures = JSON.parse(readFileSync(join(repoRoot, "tests", "fixtures", "verify.json"), "utf8")) as { crafted: Record<string, string> };
+const intermediate = parseSignedData(Uint8Array.from(Buffer.from(fixtures.crafted.intermediate!, "base64"))).certificates[1]!;
 
 let context: BrowserContext;
 let server: PageServer;
@@ -81,62 +86,89 @@ test("certificates switch one by one and all at once, the store as a whole, and 
   await expect(page.locator("#roots")).toHaveClass(/off/);
 });
 
-test("a certificate is removed, and added back from DER, another from PEM; other files are refused", async () => {
+const extraCards = (page: Page) => page.locator("#extra li");
+
+test("a built-in root is removed and comes back from its file; other CAs' roots and intermediates go to their own tab", async () => {
   const page = await optionsPage();
   const all = BUILTIN_ROOTS.length;
+  await expect(page.locator("#panel-extra")).toBeHidden();
   page.once("dialog", (dialog) => void dialog.accept());
   await cardOf(page, headCa).locator("button[name=remove]").click();
   await expect(cards(page)).toHaveCount(all - 1);
   await expect(cardOf(page, headCa)).toHaveCount(0);
 
-  const files = page.locator("#roots-add input[name=files]");
-  const submit = page.locator("#roots-add button[type=submit]");
+  await page.locator("#tab-extra").click();
+  await expect(page.locator("#panel-roots")).toBeHidden();
+  await expect(page.locator("#extra-empty")).toBeVisible();
+  const files = page.locator("#extra-add input[name=files]");
+  const submit = page.locator("#extra-add button[type=submit]");
   await files.setInputFiles([
     { name: "guc.cer", mimeType: "application/pkix-cert", buffer: Buffer.from(headCaDer) },
     { name: "stand-ca.pem", mimeType: "application/x-pem-file", buffer: caPem },
+    { name: "intermediate.cer", mimeType: "application/pkix-cert", buffer: Buffer.from(intermediate.der) },
   ]);
   await submit.click();
-  await expect(cards(page)).toHaveCount(all + 1);
-  await expect(page.locator("#roots-message")).toContainText("guc.cer: добавлен Головной удостоверяющий центр");
-  await expect(cardOf(page, headCa).locator("h2")).toContainText("встроенный");
-  await expect(cards(page).last().locator("h2")).not.toContainText("встроенный");
-  await expect(cards(page).last().locator("input[name=enabled]")).toBeChecked();
+  const message = page.locator("#extra-message");
+  await expect(message).toContainText("guc.cer: встроенный Головной удостоверяющий центр возвращён на вкладку «Корневые»");
+  await expect(message).toContainText("stand-ca.pem: добавлен Stand Test CA (корневой)");
+  await expect(message).toContainText("intermediate.cer: добавлен");
+  await expect(message).toContainText("(промежуточный)");
+  await expect(extraCards(page)).toHaveCount(2);
+  await expect(extraCards(page).first().locator("h2")).toContainText("корневой");
+  await expect(extraCards(page).last().locator("h2")).toContainText("промежуточный");
+  await expect(extraCards(page).last().locator("input[name=enabled]")).toBeChecked();
+  await expect(page.locator("#extra-count")).toHaveText("Включено 2 из 2");
 
   await files.setInputFiles([
     { name: "again.pem", mimeType: "application/x-pem-file", buffer: caPem },
     { name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("не сертификат") },
   ]);
   await submit.click();
-  await expect(page.locator("#roots-message")).toContainText("again.pem: уже есть");
-  await expect(page.locator("#roots-message")).toContainText("notes.txt: файл не похож на сертификат X.509");
-  await expect(cards(page)).toHaveCount(all + 1);
-  await page.screenshot({ path: join(outDir, "added.png"), fullPage: true });
+  await expect(message).toContainText("again.pem: уже есть");
+  await expect(message).toContainText("notes.txt: файл не похож на сертификат X.509");
+  await expect(extraCards(page)).toHaveCount(2);
+  await page.screenshot({ path: join(outDir, "extra.png"), fullPage: true });
 
+  await page.locator("#tab-roots").click();
+  await expect(cards(page)).toHaveCount(all);
+  await expect(cardOf(page, headCa).locator("h2")).toContainText("встроенный");
   // Declining the confirmation keeps the certificate.
   page.once("dialog", (dialog) => void dialog.dismiss());
   await cardOf(page, headCa).locator("button[name=remove]").click();
-  await expect(cards(page)).toHaveCount(all + 1);
+  await expect(cards(page)).toHaveCount(all);
 });
 
 // What lkip2.nalog.ru's conditions check does (docs/JOURNAL.md): open Root, find the head CA by SHA-1.
-async function rootStoreOnSite(page: Page) {
-  return page.evaluate(async (thumbprint) => {
+async function rootStoreOnSite(page: Page, name = "Root") {
+  return page.evaluate(async ({ thumbprint, name }) => {
     const cadesplugin = (window as unknown as { cadesplugin: Promise<void> & { CreateObjectAsync(name: string): Promise<any> } }).cadesplugin;
     await cadesplugin;
     const store = await cadesplugin.CreateObjectAsync("CAPICOM.Store");
-    await store.Open(2, "Root", 2);
+    await store.Open(2, name, 2);
     const certificates = await store.Certificates;
     const found = await certificates.Find(0, thumbprint);
     const result = { count: await certificates.Count, found: await found.Count };
     await store.Close();
     return result;
-  }, headCa);
+  }, { thumbprint: headCa, name });
 }
 
-test("an enabled site sees the enabled certificates as CryptoPro's Root store", async () => {
+test("an enabled site sees the enabled roots as CryptoPro's Root store, and the intermediates as CA", async () => {
   await enableSite(context, server.url);
   const site = await openStandPage(context, `${server.url}/`);
   expect(await rootStoreOnSite(site)).toEqual({ count: BUILTIN_ROOTS.length, found: 1 });
+  expect(await rootStoreOnSite(site, "CA")).toEqual({ count: 0, found: 0 });
+  await addRoots(context, [
+    { name: "stand-ca.pem", buffer: caPem },
+    { name: "intermediate.cer", buffer: Buffer.from(intermediate.der) },
+  ]);
+  await site.reload();
+  expect(await rootStoreOnSite(site)).toEqual({ count: BUILTIN_ROOTS.length + 1, found: 1 });
+  expect(await rootStoreOnSite(site, "CA")).toEqual({ count: 1, found: 0 });
+  await setRootStore(context, false, "extra");
+  await site.reload();
+  expect(await rootStoreOnSite(site)).toEqual({ count: BUILTIN_ROOTS.length, found: 1 });
+  expect(await rootStoreOnSite(site, "CA")).toEqual({ count: 0, found: 0 });
 
   const options = await optionsPage();
   await cardOf(options, headCa).locator("input[name=enabled]").uncheck();

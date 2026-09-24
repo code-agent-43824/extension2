@@ -202,22 +202,26 @@ export async function disableSite(context: BrowserContext, site: string): Promis
   await page.close();
 }
 
-// Adds certificates to the extension's root store from files, the way a user does on the options page.
+// Adds certificates from files on the options page's second tab, the way a user does: roots of other CAs and
+// intermediates (src/extension/roots.ts).
 export async function addRoots(context: BrowserContext, files: { name: string; buffer: Buffer }[]): Promise<void> {
   const page = await optionsPage(context);
   await page.locator("#roots li").first().waitFor();
-  await page.locator("#roots-add input[name=files]").setInputFiles(files.map(({ name, buffer }) => ({ name, mimeType: "application/x-pem-file", buffer })));
-  await page.locator("#roots-add button[type=submit]").click();
-  await page.locator("#roots-message").filter({ hasText: files[files.length - 1]!.name }).waitFor();
+  await page.locator("#tab-extra").click();
+  await page.locator("#extra-add input[name=files]").setInputFiles(files.map(({ name, buffer }) => ({ name, mimeType: "application/x-pem-file", buffer })));
+  await page.locator("#extra-add button[type=submit]").click();
+  await page.locator("#extra-message").filter({ hasText: files[files.length - 1]!.name }).waitFor();
   await page.close();
 }
 
-// Switches the whole root store on or off on the options page.
-export async function setRootStore(context: BrowserContext, enabled: boolean): Promise<void> {
+// Switches a whole certificate store on or off on the options page: the built-in roots, or the certificates
+// added from files.
+export async function setRootStore(context: BrowserContext, enabled: boolean, tab: "roots" | "extra" = "roots"): Promise<void> {
   const page = await optionsPage(context);
   await page.locator("#roots li").first().waitFor();
-  await page.locator("input[name=roots-enabled]").setChecked(enabled);
+  await page.locator(`#tab-${tab}`).click();
+  await page.locator(`input[name=${tab}-enabled]`).setChecked(enabled);
   // The count says so once the setting is stored.
-  await page.locator("#roots-count").filter({ hasText: enabled ? /^((?!выключено).)*$/ : /выключено/ }).waitFor();
+  await page.locator(`#${tab}-count`).filter({ hasText: enabled ? /^((?!выключено).)*$/ : /выключено/ }).waitFor();
   await page.close();
 }

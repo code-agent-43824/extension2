@@ -1,13 +1,13 @@
 // Runs on the enabled sites in the extension's isolated world, next to page.js: answers page.js's request
-// for the root certificates (src/page/roots.ts) with the enabled ones of the root store.
+// for the certificate stores (src/page/roots.ts) with the enabled roots and intermediates.
 import { ROOTS_REQUEST, ROOTS_RESPONSE, type RootsRequest, type RootsResponse } from "../page/roots.ts";
-import { enabledRoots } from "./roots.ts";
+import { enabledCertificates } from "./roots.ts";
 
 window.addEventListener("message", (event: MessageEvent) => {
   const data = event.data as Partial<RootsRequest> | null;
   if (event.source !== window || data?.type !== ROOTS_REQUEST || typeof data.id !== "string") return;
   const id = data.id;
-  void enabledRoots().then((certificates) => {
-    window.postMessage({ type: ROOTS_RESPONSE, id, certificates } satisfies RootsResponse, "*");
+  void enabledCertificates().then(({ roots, intermediates }) => {
+    window.postMessage({ type: ROOTS_RESPONSE, id, certificates: roots, intermediates } satisfies RootsResponse, "*");
   });
 });

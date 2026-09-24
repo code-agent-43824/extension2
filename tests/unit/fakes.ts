@@ -126,6 +126,6 @@ export class FakePinDialog implements PinDialog {
   }
 }
 
-export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]), roots: X509[] = []): Session {
-  return { plugin, origin: "https://site.example", pinDialog: dialog.open, rootCertificates: async () => roots };
+export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]), roots: X509[] = [], intermediates: X509[] = []): Session {
+  return { plugin, origin: "https://site.example", pinDialog: dialog.open, storeCertificates: async () => ({ roots, intermediates }) };
 }

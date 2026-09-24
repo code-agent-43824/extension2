@@ -5,9 +5,9 @@ import type { Session } from "./session.ts";
 
 // CAdESCOM.Store. The personal store ("My", also what Open() with no arguments opens) and the
 // container store both list the user certificates on the connected Rutokens; the demo page drops
-// duplicates by thumbprint. "Root" lists the enabled certificates of the extension's root store, in any
-// location, as CryptoPro's current-user Root store also shows the machine's (docs/JOURNAL.md). Other stores
-// are empty: the Rutoken Plugin cannot see the OS stores.
+// duplicates by thumbprint. "Root" lists the enabled roots of the extension's certificate stores and "CA" its
+// enabled intermediates, in any location, as CryptoPro's current-user stores also show the machine's
+// (docs/JOURNAL.md). Other stores are empty: the Rutoken Plugin cannot see the OS stores.
 // Calls on one store run in the order made, as CryptoPro's queue them: sites read Certificates without awaiting
 // Open (the npm crypto-pro library, which lk.roseltorg.ru bundles, and markirovka.crpt.ru's XML signing do).
 export class Store {
@@ -33,8 +33,9 @@ export class Store {
       const store = String(name).toLowerCase();
       if (Number(location) === constants.CADESCOM_CONTAINER_STORE || store === "my") {
         this.#items = (await userCertificates(this.#session.plugin)).map((token) => new Certificate(this.#session, token));
-      } else if (store === "root") {
-        this.#items = (await this.#session.rootCertificates()).map((x509) => new Certificate(this.#session, x509));
+      } else if (store === "root" || store === "ca") {
+        const { roots, intermediates } = await this.#session.storeCertificates();
+        this.#items = (store === "root" ? roots : intermediates).map((x509) => new Certificate(this.#session, x509));
       } else {
         this.#items = [];
       }

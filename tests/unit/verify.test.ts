@@ -187,6 +187,14 @@ describe("CadesSignedData.GetMsgType and AdditionalStore, as the demo page verif
     await expect(data.GetMsgType("")).rejects.toMatchObject({ number: E_INVALIDARG });
   });
 
+  it("chains through the intermediates of the extension's CA store", async () => {
+    const [, intermediate] = parseSignedData(der(fixtures.crafted.intermediate!)).certificates as [X509, X509];
+    const plugin = fakePlugin([], { enumerateDevices: async () => [] });
+    const data = createObject("CAdESCOM.CadesSignedData", fakeSession(plugin, new FakePinDialog([]), [ca], [intermediate])) as CadesSignedData;
+    await data.VerifyCades(fixtures.crafted.intermediate_missing, BES);
+    expect(await (await (await firstSigner(data)).SignatureStatus).IsValid).toBe(true);
+  });
+
   it("takes only a store, and looks for the chain in its certificates too", async () => {
     const [, intermediate] = parseSignedData(der(fixtures.crafted.intermediate!)).certificates as [X509, X509];
     const plugin = fakePlugin([], { enumerateDevices: async () => [] });

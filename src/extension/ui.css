@@ -10,7 +10,10 @@ input[type="url"] { width: 320px; margin: 0 8px; }
 button { font: inherit; padding: 4px 12px; }
 section { margin-top: 32px; max-width: 760px; }
 .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 16px; margin: 8px 0; }
-#roots-message { white-space: pre-line; }
+#extra-message { white-space: pre-line; }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid #ccc; margin: 12px 0; }
+.tabs button { border: 1px solid #ccc; border-bottom: none; border-radius: 6px 6px 0 0; background: #f4f4f4; padding: 6px 14px; margin-bottom: -1px; cursor: pointer; }
+.tabs button[aria-selected="true"] { background: #fff; font-weight: 600; }
 ul.cards li { display: block; border: 1px solid #ccc; border-radius: 6px; padding: 10px 14px; margin: 10px 0; max-width: none; }
 ul.cards h2 { font-size: 15px; margin: 0 0 6px; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 ul.cards dl { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0 0 6px; }
@@ -19,5 +22,6 @@ ul.cards dd { margin: 0; word-break: break-all; }
 ul.cards details p { margin: 4px 0; word-break: break-word; }
 ul.cards .actions { display: flex; justify-content: space-between; align-items: center; margin-top: 6px; }
 .badge { font-size: 12px; font-weight: normal; padding: 1px 6px; border-radius: 8px; background: #e6eefc; color: #1a3d8f; }
+.badge.other { background: #eef6e8; color: #2f5d12; }
 .badge.bad { background: #fde7e9; color: #b00020; }
 ul.cards li.off, ul.cards.off li { opacity: 0.55; }

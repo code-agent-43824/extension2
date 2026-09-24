@@ -279,10 +279,11 @@ export class CadesSignedData {
       throw new CadesError("The cryptographic message does not contain all of the requested attributes.", CRYPT_E_ATTRIBUTES_MISSING);
     }
     if (required.length > 0) throw new CadesError("Проверка штампов времени и доказательств CAdES-T и X Long пока не поддерживается", E_NOTIMPL);
-    const roots = await this.#session.rootCertificates();
+    const { roots, intermediates } = await this.#session.storeCertificates();
+    const pool = [...cms.certificates, ...this.#additional, ...intermediates];
     const found: { info: SignerInfo; certificate: X509 }[] = [];
     for (const info of cms.signers) {
-      const certificate = findSignerCertificate(info, [...cms.certificates, ...this.#additional, ...roots]);
+      const certificate = findSignerCertificate(info, [...pool, ...roots]);
       if (!certificate) throw new CadesError("Cannot find the original signer.", CRYPT_E_SIGNER_NOT_FOUND);
       const name = signerDigest(info);
       if (!name || !isGostKey(certificate)) throw new CadesError("Проверяются только подписи ГОСТ Р 34.10", NTE_BAD_ALGID);
@@ -298,7 +299,7 @@ export class CadesSignedData {
     let error: number | null = null;
     const signers = found.map(({ info, certificate }): VerifiedSignature => {
       const usage = certificate.keyUsage;
-      const problem = usage !== null && !(usage & SIGNATURE_KEY_USAGE) ? CERT_E_WRONG_USAGE : chainError(certificate, [...cms.certificates, ...this.#additional], roots);
+      const problem = usage !== null && !(usage & SIGNATURE_KEY_USAGE) ? CERT_E_WRONG_USAGE : chainError(certificate, pool, roots);
       error ??= problem;
       return { certificate, signingTime: signingTime(info), valid: problem === null };
     });

@@ -29,6 +29,7 @@ test.beforeAll(async () => {
   await clearSites(context);
   await enableSite(context, server.url);
   // This stand's CA signed our token certificate; the fixtures' CA, the certificate of CryptoPro's signatures.
+  // Both land on the options page's second tab, as roots of other CAs.
   await addRoots(context, [
     { name: "fixtures-ca.pem", buffer: pem(fixtures.ca) },
     { name: "stand-ca.pem", buffer: readFileSync(join(caDir, "ca.pem")) },
@@ -126,7 +127,7 @@ test("answers a changed document and a chain the root store does not end, as the
   const page = await openStandPage(context, `${server.url}/`);
   const changed = await inPage(page, verifyCades, { signature: fixtures.cryptopro.detached, type: 1, detached: true, content: "Привеп" });
   expect(changed.error).toMatch(/\(0x80090006\)$/);
-  await setRootStore(context, false);
+  await setRootStore(context, false, "extra");
   try {
     const untrusted = await inPage(
       page,
@@ -145,7 +146,7 @@ test("answers a changed document and a chain the root store does not end, as the
     expect(untrusted.error).toMatch(/\(0x800B010A\)$/);
     expect(untrusted.valid).toBe(false);
   } finally {
-    await setRootStore(context, true);
+    await setRootStore(context, true, "extra");
   }
 });
 
