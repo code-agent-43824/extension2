@@ -74,7 +74,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   the stand, and `verify.json` signatures made by CryptoPro's plug-in and crafted ones (how: `docs/JOURNAL.md`,
   2026-09-24) with the CA they chain to.
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
-  `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `testgost.spec.ts`
+  `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `demo-pages.spec.ts` its
+  file-signing, XMLDSig and verification pages (`cades_bes_file.html`, `cades_xmldsig_sample.html`, `verify.html`); `testgost.spec.ts`
   (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `nalog.spec.ts` (opt-in,
   online) signs in by certificate on the FNS personal accounts up to the server refusing the CA; `crpt.spec.ts`
   (opt-in, online) does the same on Честный знак; `testgost-certs.ts` issues their certificates; `with-cryptopro.spec.ts`
@@ -149,8 +150,9 @@ clicked) and turn sites on with `enableSite`, through the options page.
 ## Versions
 
 The extension version lives only in `package.json`; the build copies it into the manifest and the page-world
-script. Until the first release it is `0.<stage>.<n>`: the minor number is the roadmap stage being built, the patch
-counts fixes within it. The CryptoPro versions the shim reports to sites (`PluginVersion`, `CSPVersion`) are
+script. Before 1.0.0 (the owner's manual-check build, 2026-09-24) it was `0.<stage>.<n>`; from 1.0.0 on it is
+semantic versioning: the patch for fixes, the minor for new CAdESCOM objects, methods or site support, the major when
+a site's working flow or the stored data (`chrome.storage.local`) changes incompatibly. The CryptoPro versions the shim reports to sites (`PluginVersion`, `CSPVersion`) are
 compatibility constants, not our version; why they are what they are is in `docs/PLAN.md` of stage 2 and
 `docs/JOURNAL.md`.
 

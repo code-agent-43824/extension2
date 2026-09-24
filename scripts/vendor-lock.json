@@ -73,5 +73,20 @@
     "file": "cryptopro/products/cades/demopage/demopage.css",
     "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/demopage.css",
     "sha256": "25d474fbf403718e72a8292ae7d48bc2a645cde55056280a17960cf5b16dcff8"
+  },
+  "cryptopro-demopage-cades_bes_file-html": {
+    "file": "cryptopro/products/cades/demopage/cades_bes_file.html",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/cades_bes_file.html",
+    "sha256": "40a812eadbf551b5fc0c249662bad26c435468b459594a0ca4568a8edb0cb97d"
+  },
+  "cryptopro-demopage-cades_xmldsig_sample-html": {
+    "file": "cryptopro/products/cades/demopage/cades_xmldsig_sample.html",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/cades_xmldsig_sample.html",
+    "sha256": "beb30203e23beeb254b15c843c1ee7042ad2d7ff061c3365af1f0a5dae2586b4"
+  },
+  "cryptopro-demopage-verify-html": {
+    "file": "cryptopro/products/cades/demopage/verify.html",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/verify.html",
+    "sha256": "396361091c2c189a5b6ab9d2e2354283367728e2e86e82f63353b42ef234eac5"
   }
 }

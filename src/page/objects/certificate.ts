@@ -105,6 +105,11 @@ const tokens = new WeakMap<object, TokenCertificate>();
 // The parsed certificate behind each emulated one, for Certificates.Find.
 const parsed = new WeakMap<Certificate, X509>();
 
+// The parsed certificate behind an emulated one a site hands back (CadesSignedData.AdditionalStore).
+export function x509Of(certificate: unknown): X509 | undefined {
+  return certificate instanceof Certificate ? parsed.get(certificate) : undefined;
+}
+
 export function tokenOf(certificate: unknown): TokenCertificate | undefined {
   return typeof certificate === "object" && certificate !== null ? tokens.get(certificate) : undefined;
 }

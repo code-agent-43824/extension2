@@ -19,10 +19,11 @@ import { CadesError } from "../errors.ts";
 import { digest, isGostKey, type DigestName } from "../gost.ts";
 import { signWithToken } from "../signing.ts";
 import type { X509 } from "../x509.ts";
-import { Certificate, Certificates } from "./certificate.ts";
+import { Certificate, Certificates, x509Of } from "./certificate.ts";
 import { binaryBytes, bytesBinary, HashedData, ucs2leBinary } from "./hashed-data.ts";
 import type { Session } from "./session.ts";
 import { signerCertificate } from "./signer.ts";
+import { Store } from "./store.ts";
 import { Signers, type VerifiedSignature } from "./signers.ts";
 
 const E_INVALIDARG = 0x80070057;
@@ -30,6 +31,7 @@ const E_NOTIMPL = 0x80004001;
 // What CryptoPro's plug-in 2.0.15700 answers VerifyCades and VerifyHash with (docs/JOURNAL.md, 2026-09-24).
 const NTE_BAD_SIGNATURE = 0x80090006;
 const NTE_BAD_ALGID = 0x80090008;
+const CRYPT_E_INVALID_MSG_TYPE = 0x80091004;
 const CRYPT_E_HASH_VALUE = 0x80091007;
 const CRYPT_E_SIGNER_NOT_FOUND = 0x8009100e;
 const CRYPT_E_ATTRIBUTES_MISSING = 0x8009100f;
@@ -102,6 +104,8 @@ export class CadesSignedData {
   #encoding: number = constants.CADESCOM_STRING_TO_UCS2LE;
   #content = "";
   #displayData = 0;
+  // Certificates of the stores AdditionalStore added: more candidates for the signer and the chain.
+  #additional: X509[] = [];
   // What the last verification found; undefined before one, or after one that failed on the signature.
   #verified: { signers: VerifiedSignature[]; certificates: X509[] } | undefined;
 
@@ -200,6 +204,38 @@ export class CadesSignedData {
     return Promise.resolve(new Certificates(verified.certificates.map((x509) => new Certificate(this.#session, x509))));
   }
 
+  // Adds a store's certificates to those verification looks in, as the demo page verify.html does with the
+  // (for us empty) AddressBook store; anything but a store is E_INVALIDARG, as with plug-in 2.0.15700.
+  async AdditionalStore(store: unknown): Promise<void> {
+    if (!(store instanceof Store)) throw new CadesError("The parameter is incorrect.", E_INVALIDARG);
+    const certificates = await store.Certificates;
+    const count = await certificates.Count;
+    for (let i = 1; i <= count; i++) {
+      const x509 = x509Of(await certificates.Item(i));
+      if (x509) this.#additional.push(x509);
+    }
+  }
+
+  // The type a signature was made as, by its first signer's attributes, as plug-in 2.0.15700 answers
+  // (docs/JOURNAL.md, 2026-09-24): a signature timestamp makes CAdES-T, a signing-certificate attribute
+  // CAdES-BES, neither PKCS#7. X Long and A signatures were not at hand to check; they come out as CAdES-T,
+  // which VerifyCades does not verify either.
+  async GetMsgType(message: unknown): Promise<number> {
+    if (typeof message !== "string" || !message.trim()) throw new CadesError("The parameter is incorrect.", E_INVALIDARG);
+    let info: SignerInfo | undefined;
+    try {
+      info = parseSignedData(binaryBytes(atob(message.replace(/\s+/g, "")))).signers[0];
+    } catch {
+      info = undefined;
+    }
+    if (!info) throw new CadesError("Invalid cryptographic message type.", CRYPT_E_INVALID_MSG_TYPE);
+    if (info.unsignedAttributes.has(ATTRIBUTE_SIGNATURE_TIMESTAMP)) return constants.CADESCOM_CADES_T;
+    if (info.signedAttributes.has(ATTRIBUTE_SIGNING_CERTIFICATE_V2) || info.signedAttributes.has(ATTRIBUTE_SIGNING_CERTIFICATE)) {
+      return constants.CADESCOM_CADES_BES;
+    }
+    return constants.CADESCOM_PKCS7_TYPE;
+  }
+
   // Verifies an attached signature, or a detached one of Content. On success an attached signature's content
   // becomes Content, decoded by ContentEncoding.
   async VerifyCades(message: unknown, type: number = constants.CADESCOM_CADES_DEFAULT, detached: unknown = false): Promise<void> {
@@ -246,7 +282,7 @@ export class CadesSignedData {
     const roots = await this.#session.rootCertificates();
     const found: { info: SignerInfo; certificate: X509 }[] = [];
     for (const info of cms.signers) {
-      const certificate = findSignerCertificate(info, [...cms.certificates, ...roots]);
+      const certificate = findSignerCertificate(info, [...cms.certificates, ...this.#additional, ...roots]);
       if (!certificate) throw new CadesError("Cannot find the original signer.", CRYPT_E_SIGNER_NOT_FOUND);
       const name = signerDigest(info);
       if (!name || !isGostKey(certificate)) throw new CadesError("Проверяются только подписи ГОСТ Р 34.10", NTE_BAD_ALGID);
@@ -262,7 +298,7 @@ export class CadesSignedData {
     let error: number | null = null;
     const signers = found.map(({ info, certificate }): VerifiedSignature => {
       const usage = certificate.keyUsage;
-      const problem = usage !== null && !(usage & SIGNATURE_KEY_USAGE) ? CERT_E_WRONG_USAGE : chainError(certificate, cms.certificates, roots);
+      const problem = usage !== null && !(usage & SIGNATURE_KEY_USAGE) ? CERT_E_WRONG_USAGE : chainError(certificate, [...cms.certificates, ...this.#additional], roots);
       error ??= problem;
       return { certificate, signingTime: signingTime(info), valid: problem === null };
     });

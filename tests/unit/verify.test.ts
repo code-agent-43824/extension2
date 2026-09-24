@@ -15,6 +15,7 @@ import type { HashedData } from "../../src/page/objects/hashed-data.ts";
 import { createObject } from "../../src/page/objects/index.ts";
 import type { CadesSignedData } from "../../src/page/objects/signed-data.ts";
 import type { Signers, VerifiedSigner } from "../../src/page/objects/signers.ts";
+import type { Store } from "../../src/page/objects/store.ts";
 import { parseCertificate, type X509 } from "../../src/page/x509.ts";
 import { fakePlugin, FakePinDialog, fakeSession } from "./fakes.ts";
 
@@ -171,6 +172,31 @@ describe("CadesSignedData.VerifyCades", () => {
     await expect(signedData().VerifyCades("MAMCAQA=", BES)).rejects.toMatchObject({ number: CRYPT_E_SIGNER_NOT_FOUND });
     await expect(signedData().Signers).rejects.toMatchObject({ number: TRUST_E_NOSIGNATURE });
     await expect(signedData().Certificates).rejects.toMatchObject({ number: TRUST_E_NOSIGNATURE });
+  });
+});
+
+describe("CadesSignedData.GetMsgType and AdditionalStore, as the demo page verify.html calls them", () => {
+  it("names the type by the first signer's attributes, as plug-in 2.0.15700", async () => {
+    const data = signedData();
+    for (const name of ["bes", "detached", "pkcs7", "hash_abc"] as const) expect(await data.GetMsgType(fixtures.cryptopro[name]), name).toBe(BES);
+    expect(await data.GetMsgType(fixtures.crafted.ber)).toBe(BES);
+    expect(await data.GetMsgType(fixtures.crafted.no_attributes)).toBe(PKCS7);
+    expect(await data.GetMsgType(fixtures.crafted.no_signing_certificate)).toBe(PKCS7);
+    expect(await data.GetMsgType(fixtures.crafted.timestamped)).toBe(constants.CADESCOM_CADES_T);
+    await expect(data.GetMsgType("AAAA")).rejects.toMatchObject({ number: 0x80091004 });
+    await expect(data.GetMsgType("")).rejects.toMatchObject({ number: E_INVALIDARG });
+  });
+
+  it("takes only a store, and looks for the chain in its certificates too", async () => {
+    const [, intermediate] = parseSignedData(der(fixtures.crafted.intermediate!)).certificates as [X509, X509];
+    const plugin = fakePlugin([], { enumerateDevices: async () => [] });
+    const store = createObject("CAdESCOM.Store", fakeSession(plugin, new FakePinDialog([]), [intermediate])) as Store;
+    await store.Open(constants.CAPICOM_CURRENT_USER_STORE, "Root");
+    const data = signedData();
+    await expect(data.AdditionalStore("AddressBook")).rejects.toMatchObject({ number: E_INVALIDARG });
+    await data.AdditionalStore(store);
+    await data.VerifyCades(fixtures.crafted.intermediate_missing, BES);
+    expect(await (await (await firstSigner(data)).SignatureStatus).IsValid).toBe(true);
   });
 });
 

@@ -8,6 +8,14 @@
 прогнать на стенде демо-страницы КриптоПро, которые войдут в чек-лист (`verify.html`, `cades_xmldsig_sample.html`,
 `cades_bes_file.html`); `verify.html` упадёт на нас: нет `AdditionalStore` и `GetMsgType`.
 
+**Сделано.** Три демо-страницы закреплены в `vendor-lock.json`; `AdditionalStore` и `GetMsgType` по поведению
+плагина 2.0.15700 (`JOURNAL.md`); `tests/stand/demo-pages.spec.ts` (3 теста) и модульные в `verify.test.ts`.
+Версия 1.0.0, правило версий в `CLAUDE.md` — semver. `MANUAL-CHECK.md`: пункты 9–15 (подпись файла, XML,
+хранилище корневых, `verify.html`, соседство с КриптоПро). Задание выпуска в `ci.yml` не записано: нужно явное
+решение владельца.
+
+**Дальше.** Решение владельца о задании выпуска; затем выпуск `v1.0.0` и ручной прогон (действие 7).
+
 ## 2026-09-24 — проверка подписи
 
 **План.** Действие 16 `PLAN.md`: `VerifyCades`, `VerifyHash`, `SignedXML.Verify` целиком в расширении, без
