@@ -11,6 +11,10 @@ const E_NOTIMPL = 0x80004001;
 // CAPICOM_PROPID_KEY_PROV_INFO, not among cadesplugin_api.js's constants. With FIND_EXTENDED_PROPERTY it picks
 // the certificates that have a key: CryptoPro 2.0.15700 finds 1 of 1 in My and 0 of 165 in Root (docs/JOURNAL.md).
 const PROPID_KEY_PROV_INFO = 2;
+// The properties CryptoPro 2.0.15700 finds on every certificate, key or not (3 and 4 are CAPICOM's SHA-1 and MD5
+// hashes); the other ids up to 30 on none of them; ids above 30 are 0x80070057.
+const PROPIDS_OF_EVERY_CERTIFICATE = new Set([3, 4, 15, 20]);
+const PROPID_MAX = 30;
 
 // Dates cross the CryptoPro async API as strings in this form (DateToUTCStr in nmcades_plugin_api.js);
 // sites pass them to new Date(). Not yet compared with a real CryptoPro installation: docs/JOURNAL.md.
@@ -98,6 +102,8 @@ class CertificateStatus {
 // Which token certificate an emulated Certificate stands for; sites hand these objects back to us,
 // e.g. in CPSigner.propset_Certificate, and must not be able to forge one.
 const tokens = new WeakMap<object, TokenCertificate>();
+// The parsed certificate behind each emulated one, for Certificates.Find.
+const parsed = new WeakMap<Certificate, X509>();
 
 export function tokenOf(certificate: unknown): TokenCertificate | undefined {
   return typeof certificate === "object" && certificate !== null ? tokens.get(certificate) : undefined;
@@ -121,6 +127,7 @@ export class Certificate {
       this.#token = undefined;
       this.#x509 = certificate;
     }
+    parsed.set(this, this.#x509);
   }
 
   get SubjectName(): Promise<string> {
@@ -214,11 +221,30 @@ export class Certificates {
   }
 
   // CAPICOM's search, for the kinds sites use (lkfl2.nalog.ru looks up the certificate to sign with by its
-  // SHA-1): by thumbprint, or by a piece of the subject or issuer name, ignoring case.
-  async Find(findType: number, criteria: unknown, validOnly = false): Promise<Certificates> {
+  // SHA-1): by thumbprint, or by a piece of the subject or issuer name, ignoring case; by key usage and validity
+  // time, and by extended property as CryptoPro 2.0.15700 answers (docs/JOURNAL.md): a key usage is one flag, a number (anything else is
+  // 0x80070057), and a certificate without the extension has none; the time is the criterion, now if none.
+  async Find(findType: number, criteria?: unknown, validOnly = false): Promise<Certificates> {
     const wanted = String(criteria ?? "");
+    const type = Number(findType);
+    const flag = Number(criteria);
+    if (
+      type === constants.CAPICOM_CERTIFICATE_FIND_EXTENDED_PROPERTY &&
+      criteria !== undefined &&
+      !(typeof criteria === "number" && Number.isInteger(flag) && flag >= 0 && flag <= PROPID_MAX)
+    ) {
+      throw new CadesError("The parameter is incorrect.", E_INVALIDARG);
+    }
+    if (
+      type === constants.CAPICOM_CERTIFICATE_FIND_KEY_USAGE &&
+      !(typeof criteria === "number" && Number.isInteger(flag) && flag > 0 && flag <= 0x8000 && (flag & (flag - 1)) === 0)
+    ) {
+      throw new CadesError("The parameter is incorrect.", E_INVALIDARG);
+    }
+    const at = criteria === undefined || criteria === null || criteria === "" ? Date.now() : new Date(criteria as string).getTime();
     const matches = async (item: Certificate): Promise<boolean> => {
-      switch (Number(findType)) {
+      const x509 = parsed.get(item)!;
+      switch (type) {
         case constants.CAPICOM_CERTIFICATE_FIND_SHA1_HASH:
           return (await item.Thumbprint).toLowerCase() === wanted.replace(/\s+/g, "").toLowerCase();
         case constants.CAPICOM_CERTIFICATE_FIND_SUBJECT_NAME:
@@ -226,8 +252,16 @@ export class Certificates {
         case constants.CAPICOM_CERTIFICATE_FIND_ISSUER_NAME:
           return (await item.IssuerName).toLowerCase().includes(wanted.toLowerCase());
         case constants.CAPICOM_CERTIFICATE_FIND_EXTENDED_PROPERTY:
-          // Only the key's property is known; no certificate here carries any other.
-          return Number(criteria) === PROPID_KEY_PROV_INFO && (await item.HasPrivateKey());
+          if (flag === PROPID_KEY_PROV_INFO) return item.HasPrivateKey();
+          return PROPIDS_OF_EVERY_CERTIFICATE.has(flag);
+        case constants.CAPICOM_CERTIFICATE_FIND_KEY_USAGE:
+          return ((x509.keyUsage ?? 0) & flag) !== 0;
+        case constants.CAPICOM_CERTIFICATE_FIND_TIME_VALID:
+          return x509.notBefore.getTime() <= at && at <= x509.notAfter.getTime();
+        case constants.CAPICOM_CERTIFICATE_FIND_TIME_NOT_YET_VALID:
+          return at < x509.notBefore.getTime();
+        case constants.CAPICOM_CERTIFICATE_FIND_TIME_EXPIRED:
+          return x509.notAfter.getTime() < at;
         default:
           throw new CadesError(`Поиск сертификатов вида ${findType} не поддерживается`, E_NOTIMPL);
       }

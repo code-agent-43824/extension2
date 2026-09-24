@@ -99,3 +99,14 @@ describe("parseCertificate on the stand CA", () => {
     expect(cert.privateKeyNotAfter).toBeNull();
   });
 });
+
+describe("keyUsage", () => {
+  // Flags as asn1crypto reads the extensions: the user has digitalSignature, nonRepudiation, keyEncipherment,
+  // dataEncipherment and keyAgreement; the CA keyCertSign and cRLSign; Go Daddy's root has no extension.
+  it("gives CAPICOM's flags, or null without the extension", () => {
+    expect(parseCertificate(pemToDer(readFileSync(userPem, "utf8"))).keyUsage).toBe(128 | 64 | 32 | 16 | 8);
+    expect(parseCertificate(pemToDer(readFileSync(caPem, "utf8"))).keyUsage).toBe(4 | 2);
+    const noUsage = join(repoRoot, "tests", "fixtures", "no-key-usage.pem");
+    expect(parseCertificate(pemToDer(readFileSync(noUsage, "utf8"))).keyUsage).toBeNull();
+  });
+});

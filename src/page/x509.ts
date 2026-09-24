@@ -16,6 +16,9 @@ export interface X509 {
   // From the private key usage period extension (2.5.29.16); null when absent.
   privateKeyNotBefore: Date | null;
   privateKeyNotAfter: Date | null;
+  // The key usage extension (2.5.29.15) as CAPICOM's flags: the bit string's first byte, then its second byte
+  // shifted left by 8 (CAPICOM_DIGITAL_SIGNATURE_KEY_USAGE is 128, decipherOnly 0x8000); null when absent.
+  keyUsage: number | null;
   thumbprint: string;
 }
 
@@ -41,21 +44,35 @@ export function derToBase64(der: Uint8Array): string {
   return btoa(binary);
 }
 
-function privateKeyUsagePeriod(extensions: ReturnType<typeof read> | undefined): [Date | null, Date | null] {
-  if (!extensions) return [null, null];
+// The value (the OCTET STRING's content) of the extension with this OID, if the certificate has it.
+function extensionValue(extensions: ReturnType<typeof read> | undefined, oid: string): Uint8Array | undefined {
+  if (!extensions) return undefined;
   for (const extension of children(expectTag(children(extensions)[0], 0x30, "Extensions"))) {
     const parts = children(extension);
-    if (decodeOid(expectTag(parts[0], 0x06, "extension id").value) !== "2.5.29.16") continue;
-    const value = expectTag(parts[parts.length - 1], 0x04, "extension value").value;
-    let from: Date | null = null;
-    let to: Date | null = null;
-    for (const field of children(expectTag(read(value), 0x30, "PrivateKeyUsagePeriod"))) {
-      if (field.tag === 0x80) from = decodeTime(field);
-      else if (field.tag === 0x81) to = decodeTime(field);
-    }
-    return [from, to];
+    if (decodeOid(expectTag(parts[0], 0x06, "extension id").value) !== oid) continue;
+    return expectTag(parts[parts.length - 1], 0x04, "extension value").value;
   }
-  return [null, null];
+  return undefined;
+}
+
+function privateKeyUsagePeriod(extensions: ReturnType<typeof read> | undefined): [Date | null, Date | null] {
+  const value = extensionValue(extensions, "2.5.29.16");
+  if (!value) return [null, null];
+  let from: Date | null = null;
+  let to: Date | null = null;
+  for (const field of children(expectTag(read(value), 0x30, "PrivateKeyUsagePeriod"))) {
+    if (field.tag === 0x80) from = decodeTime(field);
+    else if (field.tag === 0x81) to = decodeTime(field);
+  }
+  return [from, to];
+}
+
+function keyUsage(extensions: ReturnType<typeof read> | undefined): number | null {
+  const value = extensionValue(extensions, "2.5.29.15");
+  if (!value) return null;
+  // BIT STRING content: the count of unused bits, then the bits.
+  const bits = expectTag(read(value), 0x03, "KeyUsage").value;
+  return (bits[1] ?? 0) | ((bits[2] ?? 0) << 8);
 }
 
 export function parseCertificate(der: Uint8Array): X509 {
@@ -67,7 +84,8 @@ export function parseCertificate(der: Uint8Array): X509 {
   const [serial, , issuer, validity, subject, spki, ...rest] = hasVersion ? tbs.slice(1) : tbs;
   const [notBefore, notAfter] = children(expectTag(validity, 0x30, "Validity"));
   const algorithm = children(expectTag(children(expectTag(spki, 0x30, "SubjectPublicKeyInfo"))[0], 0x30, "AlgorithmIdentifier"))[0];
-  const [privateKeyNotBefore, privateKeyNotAfter] = privateKeyUsagePeriod(rest.find((node) => node.tag === 0xa3));
+  const extensions = rest.find((node) => node.tag === 0xa3);
+  const [privateKeyNotBefore, privateKeyNotAfter] = privateKeyUsagePeriod(extensions);
   return {
     der,
     version,
@@ -79,6 +97,7 @@ export function parseCertificate(der: Uint8Array): X509 {
     publicKeyAlgorithm: decodeOid(expectTag(algorithm, 0x06, "algorithm").value),
     privateKeyNotBefore,
     privateKeyNotAfter,
+    keyUsage: keyUsage(extensions),
     thumbprint: hex(sha1(der)),
   };
 }

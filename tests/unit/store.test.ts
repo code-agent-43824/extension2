@@ -56,7 +56,47 @@ describe("CAdESCOM.Store", () => {
     const { CAPICOM_CERTIFICATE_FIND_EXTENDED_PROPERTY: property, CAPICOM_CURRENT_USER_STORE: user } = constants;
     expect(await (await (await openStore(fakePlugin())).Find(property, 2)).Count).toBe(1);
     expect(await (await (await openStore(fakePlugin())).Find(property, 9)).Count).toBe(0);
-    expect(await (await (await openStoreWith(fakePlugin(), roots, user, "Root")).Find(property, 2)).Count).toBe(0);
+    expect(await (await (await openStore(fakePlugin())).Find(property)).Count).toBe(0);
+    const root = await openStoreWith(fakePlugin(), roots, user, "Root");
+    expect(await (await root.Find(property, 2)).Count).toBe(0);
+    expect(await (await root.Find(property, 3)).Count).toBe(roots.length);
+    for (const bad of [31, "2"]) await expect(root.Find(property, bad)).rejects.toMatchObject({ number: 0x80070057 });
+  });
+
+  it("finds by one key usage flag and refuses anything else, as sberbank-ast.ru asks and CryptoPro answers", async () => {
+    const { CAPICOM_CERTIFICATE_FIND_KEY_USAGE: usage, CAPICOM_DIGITAL_SIGNATURE_KEY_USAGE: signature, CAPICOM_CURRENT_USER_STORE: user } = constants;
+    const my = await openStore(fakePlugin());
+    expect(await (await my.Find(usage, signature)).Count).toBe(1);
+    expect(await (await my.Find(usage, 4)).Count).toBe(0);
+    const root = await openStoreWith(fakePlugin(), roots, user, "Root");
+    // By asn1crypto: 4 of the 12 built-in roots have digitalSignature, all have keyCertSign.
+    expect(await (await root.Find(usage, signature)).Count).toBe(4);
+    expect(await (await root.Find(usage, 4)).Count).toBe(12);
+    for (const bad of [132, 0, "128", "DigitalSignature", undefined]) {
+      await expect(root.Find(usage, bad)).rejects.toMatchObject({ number: 0x80070057 });
+    }
+  });
+
+  it("finds by validity time, now or at the given time", async () => {
+    const { CAPICOM_CERTIFICATE_FIND_TIME_VALID: valid, CAPICOM_CERTIFICATE_FIND_TIME_NOT_YET_VALID: notYet, CAPICOM_CERTIFICATE_FIND_TIME_EXPIRED: expired } = constants;
+    const my = await openStore(fakePlugin());
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2027-01-01T00:00:00Z"));
+    expect(await (await my.Find(valid)).Count).toBe(1);
+    expect(await (await my.Find(notYet)).Count).toBe(0);
+    expect(await (await my.Find(expired)).Count).toBe(0);
+    expect(await (await my.Find(valid, "2029-01-01T00:00:00.000Z")).Count).toBe(0);
+    expect(await (await my.Find(expired, "2029-01-01T00:00:00.000Z")).Count).toBe(1);
+    expect(await (await my.Find(notYet, "2026-01-01T00:00:00.000Z")).Count).toBe(1);
+  });
+
+  it("answers Certificates after an Open that was not awaited, and Close after both", async () => {
+    const store = createObject("CAdESCOM.Store", fakeSession(fakePlugin(), new FakePinDialog([]))) as Store;
+    void store.Open(constants.CAPICOM_CURRENT_USER_STORE, "My");
+    const listed = store.Certificates;
+    void store.Close();
+    expect(await (await listed).Count).toBe(1);
+    expect(await (await store.Certificates).Count).toBe(0);
   });
 
   it("skips a certificate that does not parse", async () => {
@@ -83,7 +123,7 @@ describe("CAdESCOM.Certificate", () => {
     expect(await (await byHash.Item(1)).Thumbprint).toBe("CDEA7EAB5BE6B167F22B713BF376E9B28ADB14A3");
     expect(await (await all.Find(constants.CAPICOM_CERTIFICATE_FIND_SUBJECT_NAME, "stand user")).Count).toBe(1);
     expect(await (await all.Find(constants.CAPICOM_CERTIFICATE_FIND_SHA1_HASH, "00")).Count).toBe(0);
-    await expect(all.Find(constants.CAPICOM_CERTIFICATE_FIND_KEY_USAGE, 0)).rejects.toThrow("0x80004001");
+    await expect(all.Find(constants.CAPICOM_CERTIFICATE_FIND_TEMPLATE_NAME, "x")).rejects.toThrow("0x80004001");
   });
 
   it("exports itself as base64 in 64-column LF lines, and refuses binary", async () => {
