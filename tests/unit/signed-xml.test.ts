@@ -5,7 +5,8 @@ import { constants } from "../../src/page/constants.ts";
 import type { Certificates } from "../../src/page/objects/certificate.ts";
 import { createObject } from "../../src/page/objects/index.ts";
 import type { Session } from "../../src/page/objects/session.ts";
-import type { SignedXML, SignedXmlSigners } from "../../src/page/objects/signed-xml.ts";
+import type { SignedXML } from "../../src/page/objects/signed-xml.ts";
+import type { Signers } from "../../src/page/objects/signers.ts";
 import type { CPSigner } from "../../src/page/objects/signer.ts";
 import type { Store } from "../../src/page/objects/store.ts";
 import { fakePlugin, FakePinDialog, fakeSession } from "./fakes.ts";
@@ -32,7 +33,7 @@ function signedXml(session: Session): SignedXML {
 }
 
 describe("CAdESCOM.SignedXML", () => {
-  it("keeps Content, and like the real plug-in has write-only type and methods and no Verify yet", async () => {
+  it("keeps Content, and like the real plug-in has write-only type and methods and no signers before Verify", async () => {
     const { session } = setup();
     const xml = signedXml(session);
     await xml.propset_Content("<r/>");
@@ -40,8 +41,7 @@ describe("CAdESCOM.SignedXML", () => {
     await expect(xml.SignatureType).rejects.toMatchObject({ number: E_NOTIMPL });
     await expect(xml.SignatureMethod).rejects.toMatchObject({ number: E_NOTIMPL });
     await expect(xml.DigestMethod).rejects.toMatchObject({ number: E_NOTIMPL });
-    expect(await ((await xml.Signers) as SignedXmlSigners).Count).toBe(0);
-    await expect(xml.Verify()).rejects.toMatchObject({ number: E_NOTIMPL });
+    expect(await ((await xml.Signers) as Signers).Count).toBe(0);
   });
 
   it("answers an unknown signature type with an empty string, as the real plug-in", async () => {

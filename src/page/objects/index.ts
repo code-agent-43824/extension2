@@ -27,7 +27,7 @@ const factories = new Map<string, Factory>([
   ["cadescom.cadessigneddata", (session) => new CadesSignedData(session)],
   ["cadescom.cpattribute", () => new CPAttribute()],
   ["cadescom.cpsigner", () => new CPSigner()],
-  ["cadescom.hasheddata", (session) => new HashedData(session)],
+  ["cadescom.hasheddata", () => new HashedData()],
   ["cadescom.signedxml", (session) => new SignedXML(session)],
   ["cadescom.store", (session) => new Store(session)],
   // The real plug-in also answers to CAPICOM's name for it (checked with 2.0.15700); lkfl2.nalog.ru uses it.

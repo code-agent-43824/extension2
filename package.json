@@ -1,6 +1,6 @@
 {
   "name": "extension2",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "private": true,
   "type": "module",
   "engines": {
@@ -24,6 +24,8 @@
     "vitest": "5.0.1"
   },
   "dependencies": {
+    "@li0ard/gost": "0.2.4",
+    "@noble/hashes": "2.4.0",
     "xmldsigjs": "2.8.8"
   }
 }

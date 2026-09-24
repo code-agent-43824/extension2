@@ -1,24 +1,29 @@
 // CAdESCOM.SignedXML: GOST XMLDSig signatures, enveloped, enveloping and in a template, as CryptoPro's
-// plug-in 2.0.15700 makes them (docs/JOURNAL.md, 2026-09-24). Canonicalization is xmldsigjs'; digests
-// are the Rutoken Plugin's digest(), the signature its rawSign() with the certificate's key.
+// plug-in 2.0.15700 makes and verifies them (docs/JOURNAL.md, 2026-09-24). Canonicalization is xmldsigjs',
+// digests and signature checks are the page's own (src/page/gost.ts), the signature is the Rutoken Plugin's
+// rawSign() with the certificate's key.
 import { XmlCanonicalizer } from "xmldsigjs-canonicalizer";
 import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
+import { digest, GOST_2001, GOST_2012_256, GOST_2012_512, verifyHash, type DigestName } from "../gost.ts";
 import { certificateLines } from "../signing.ts";
 import { findDevice } from "../token.ts";
 import { SCARD_E_NO_SMARTCARD, withLogin } from "../token-login.ts";
-import { derToBase64 } from "../x509.ts";
-import { tokenDigest, type HashType } from "./hashed-data.ts";
+import { derToBase64, parseCertificate, type X509 } from "../x509.ts";
+import { binaryBytes, bytesBinary } from "./hashed-data.ts";
 import type { Session } from "./session.ts";
 import { signerCertificate } from "./signer.ts";
+import { Signers, type VerifiedSignature } from "./signers.ts";
 
-const E_INVALIDARG = 0x80070057;
 const E_NOTIMPL = 0x80004001;
 // HRESULTs the real plug-in answers with (docs/JOURNAL.md, 2026-09-24).
 const ERROR_XML_PARSE_ERROR = 0x800705b9;
 const ERROR_NOT_FOUND = 0x80070490;
 const CRYPT_E_NOT_FOUND = 0x80092004;
 const NTE_BAD_ALGID = 0x80090008;
+const NTE_BAD_SIGNATURE = 0x80090006;
+const ERROR_INVALID_DATA = 0x8007000d;
+const ERROR_XML_SIGNATURE = 0x800705ba;
 
 const DS = "http://www.w3.org/2000/09/xmldsig#";
 const XMLNS = "http://www.w3.org/2000/xmlns/";
@@ -34,23 +39,19 @@ const canonicalizations = new Map<string, { exclusive: boolean; comments: boolea
   [`${EXC_C14N}WithComments`, { exclusive: true, comments: true }],
 ]);
 
-const GOST_2001 = "1.2.643.2.2.19";
-const GOST_2012_256 = "1.2.643.7.1.1.1.1";
-const GOST_2012_512 = "1.2.643.7.1.1.1.2";
-
-const digestMethods = new Map<string, HashType>([
-  [constants.XmlDsigGost3411Url2012256, "HASH_TYPE_GOST3411_12_256"],
-  [constants.XmlDsigGost3411Url2012512, "HASH_TYPE_GOST3411_12_512"],
-  [constants.XmlDsigGost3411Url, "HASH_TYPE_GOST3411_94"],
-  [constants.XmlDsigGost3411UrlObsolete, "HASH_TYPE_GOST3411_94"],
+const digestMethods = new Map<string, DigestName>([
+  [constants.XmlDsigGost3411Url2012256, "streebog256"],
+  [constants.XmlDsigGost3411Url2012512, "streebog512"],
+  [constants.XmlDsigGost3411Url, "gost94"],
+  [constants.XmlDsigGost3411UrlObsolete, "gost94"],
 ]);
 
 // Each signature method, the key it needs and the hash it signs.
-const signatureMethods = new Map<string, { key: string; hash: HashType }>([
-  [constants.XmlDsigGost3410Url2012256, { key: GOST_2012_256, hash: "HASH_TYPE_GOST3411_12_256" }],
-  [constants.XmlDsigGost3410Url2012512, { key: GOST_2012_512, hash: "HASH_TYPE_GOST3411_12_512" }],
-  [constants.XmlDsigGost3410Url, { key: GOST_2001, hash: "HASH_TYPE_GOST3411_94" }],
-  [constants.XmlDsigGost3410UrlObsolete, { key: GOST_2001, hash: "HASH_TYPE_GOST3411_94" }],
+const signatureMethods = new Map<string, { key: string; hash: DigestName }>([
+  [constants.XmlDsigGost3410Url2012256, { key: GOST_2012_256, hash: "streebog256" }],
+  [constants.XmlDsigGost3410Url2012512, { key: GOST_2012_512, hash: "streebog512" }],
+  [constants.XmlDsigGost3410Url, { key: GOST_2001, hash: "gost94" }],
+  [constants.XmlDsigGost3410UrlObsolete, { key: GOST_2001, hash: "gost94" }],
 ]);
 
 // Without SignatureMethod and DigestMethod the real plug-in takes the ones of the key.
@@ -66,14 +67,14 @@ const typeNames = new Map<number, string>([
   [constants.CADESCOM_XML_SIGNATURE_TYPE_TEMPLATE, "по шаблону"],
 ]);
 
-function signatureMethod(uri: string, keyAlgorithm: string): { key: string; hash: HashType } {
+function signatureMethod(uri: string, keyAlgorithm: string): { key: string; hash: DigestName } {
   const method = signatureMethods.get(uri);
   if (!method) throw new CadesError(`Неизвестный алгоритм подписи ${uri}`, CRYPT_E_NOT_FOUND);
   if (method.key !== keyAlgorithm) throw new CadesError("Алгоритм подписи не подходит к ключу сертификата", NTE_BAD_ALGID);
   return method;
 }
 
-function digestMethod(uri: string): HashType {
+function digestMethod(uri: string): DigestName {
   const method = digestMethods.get(uri);
   if (!method) throw new CadesError(`Неизвестный алгоритм хеширования ${uri}`, CRYPT_E_NOT_FOUND);
   return method;
@@ -84,19 +85,28 @@ function wrap(base64: string): string {
   return base64.replace(/(.{64})(?=.)/g, "$1\n");
 }
 
-// Bytes as a binary string, in slices: spreading a whole document into one call would overflow the stack.
-function binary(bytes: Uint8Array): string {
-  let result = "";
-  for (let i = 0; i < bytes.length; i += 0x8000) result += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return result;
-}
-
 function hexToBase64(hex: string): string {
-  return btoa(binary(Uint8Array.from(hex.replace(/:/g, "").match(/../g) ?? [], (byte) => parseInt(byte, 16))));
+  return btoa(bytesBinary(Uint8Array.from(hex.replace(/:/g, "").match(/../g) ?? [], (byte) => parseInt(byte, 16))));
 }
 
 function utf8Binary(text: string): string {
-  return binary(new TextEncoder().encode(text));
+  return bytesBinary(new TextEncoder().encode(text));
+}
+
+function utf8Digest(name: DigestName, text: string): Uint8Array {
+  return digest(name, new TextEncoder().encode(text));
+}
+
+function base64Bytes(text: string): Uint8Array | undefined {
+  try {
+    return binaryBytes(atob(text.replace(/\s+/g, "")));
+  } catch {
+    return undefined;
+  }
+}
+
+function same(a: Uint8Array, b: Uint8Array | undefined): boolean {
+  return b !== undefined && a.length === b.length && a.every((byte, i) => byte === b[i]);
 }
 
 // A random id for the Signature and Object elements; crypto.randomUUID() needs a secure context, sites may not be one.
@@ -186,7 +196,7 @@ interface Reference {
   enveloped: boolean;
   canonicalization: string;
   prefixes: string | null;
-  hash: HashType;
+  hash: DigestName;
   value: Element;
 }
 
@@ -195,12 +205,39 @@ interface Pending {
   references: Reference[];
   signedInfo: Element;
   canonicalization: string;
-  hash: HashType;
+  hash: DigestName;
+}
+
+// What a Reference points at and how it is transformed.
+function referenceTarget(reference: Element): Omit<Reference, "hash" | "value"> {
+  const doc = reference.ownerDocument as XMLDocument;
+  // A Reference without URI means the whole document (the real plug-in's documentation of Verify).
+  const uri = reference.getAttribute("URI") ?? "";
+  if (uri !== "" && !uri.startsWith("#")) throw new CadesError(`Ссылка ${uri} не поддерживается`, E_NOTIMPL);
+  let enveloped = false;
+  // Without a canonicalization transform the node-set is canonicalized inclusively (XMLDSig, 4.4.3.2).
+  let canonicalization = INCLUSIVE_C14N;
+  let prefixes: string | null = null;
+  for (const transform of Array.from(child(reference, "Transforms")?.children ?? [])) {
+    const algorithm = transform.getAttribute("Algorithm") ?? "";
+    if (algorithm === ENVELOPED_SIGNATURE) {
+      enveloped = true;
+    } else if (canonicalizations.has(algorithm)) {
+      canonicalization = algorithm;
+      prefixes = transform.getElementsByTagNameNS(EXC_C14N, "InclusiveNamespaces")[0]?.getAttribute("PrefixList") ?? null;
+    } else {
+      throw new CadesError(`Преобразование ${algorithm} не поддерживается`, E_NOTIMPL);
+    }
+  }
+  return { target: uri === "" ? doc : findById(doc, uri.slice(1)), enveloped, canonicalization, prefixes };
+}
+
+function references(signedInfo: Element): Element[] {
+  return Array.from(signedInfo.children).filter((element) => element.namespaceURI === DS && element.localName === "Reference");
 }
 
 // The work a template signature needs, checked before any PIN is asked for.
 function prepare(signature: Element, keyAlgorithm: string, methods: { signature: string; digest: string }): Pending {
-  const doc = signature.ownerDocument as XMLDocument;
   const signedInfo = child(signature, "SignedInfo");
   if (!signedInfo) throw new CadesError("В шаблоне подписи нет SignedInfo", CRYPT_E_NOT_FOUND);
   const method = child(signedInfo, "SignatureMethod");
@@ -209,27 +246,8 @@ function prepare(signature: Element, keyAlgorithm: string, methods: { signature:
   const { hash } = signatureMethod(method.getAttribute("Algorithm")!, keyAlgorithm);
   const canonicalization = child(signedInfo, "CanonicalizationMethod")?.getAttribute("Algorithm") ?? INCLUSIVE_C14N;
   if (!canonicalizations.has(canonicalization)) throw new CadesError(`Канонизация ${canonicalization} не поддерживается`, E_NOTIMPL);
-  const references = Array.from(signedInfo.children)
-    .filter((element) => element.namespaceURI === DS && element.localName === "Reference")
-    .map((reference): Reference => {
-      // A Reference without URI means the whole document (the real plug-in's documentation of Verify).
-      const uri = reference.getAttribute("URI") ?? "";
-      if (uri !== "" && !uri.startsWith("#")) throw new CadesError(`Ссылка ${uri} не поддерживается`, E_NOTIMPL);
-      let enveloped = false;
-      // Without a canonicalization transform the node-set is canonicalized inclusively (XMLDSig, 4.4.3.2).
-      let canonicalization = INCLUSIVE_C14N;
-      let prefixes: string | null = null;
-      for (const transform of Array.from(child(reference, "Transforms")?.children ?? [])) {
-        const algorithm = transform.getAttribute("Algorithm") ?? "";
-        if (algorithm === ENVELOPED_SIGNATURE) {
-          enveloped = true;
-        } else if (canonicalizations.has(algorithm)) {
-          canonicalization = algorithm;
-          prefixes = transform.getElementsByTagNameNS(EXC_C14N, "InclusiveNamespaces")[0]?.getAttribute("PrefixList") ?? null;
-        } else {
-          throw new CadesError(`Преобразование ${algorithm} не поддерживается`, E_NOTIMPL);
-        }
-      }
+  const items = references(signedInfo).map((reference): Reference => {
+      const target = referenceTarget(reference);
       let digest = child(reference, "DigestMethod");
       if (!digest) {
         digest = createDs(signature, "DigestMethod");
@@ -238,15 +256,14 @@ function prepare(signature: Element, keyAlgorithm: string, methods: { signature:
       if (!digest.getAttribute("Algorithm")) digest.setAttribute("Algorithm", methods.digest);
       let value = child(reference, "DigestValue");
       if (!value) value = reference.appendChild(createDs(signature, "DigestValue"));
-      return { target: uri === "" ? doc : findById(doc, uri.slice(1)), enveloped, canonicalization, prefixes, hash: digestMethod(digest.getAttribute("Algorithm")!), value };
+      return { ...target, hash: digestMethod(digest.getAttribute("Algorithm")!), value };
     });
-  return { signature, references, signedInfo, canonicalization, hash };
+  return { signature, references: items, signedInfo, canonicalization, hash };
 }
 
 // The canonical bytes of a Reference: same-document references drop comments (XMLDSig, 4.4.3.3), the
 // enveloped-signature transform takes this signature out for the moment.
-function referenceData(pending: Pending, reference: Reference): string {
-  const { signature } = pending;
+function referenceData(signature: Element, reference: Omit<Reference, "hash" | "value">): string {
   const detach = reference.enveloped && (reference.target === signature.ownerDocument || reference.target.contains(signature));
   const parent = signature.parentNode!;
   const next = signature.nextSibling;
@@ -288,15 +305,31 @@ function signatureTemplate(id: string, methods: { signature: string; digest: str
   );
 }
 
-// CAdESCOM.SignedXML's Signers: empty after Sign, as with the real plug-in; Verify is not supported yet.
-export class SignedXmlSigners {
-  get Count(): Promise<number> {
-    return Promise.resolve(0);
+// Checks one ds:Signature as the real plug-in's Verify does: the references' digests and the signature with
+// the key of the certificate in KeyInfo; neither the chain nor revocation.
+function verifySignature(signature: Element): VerifiedSignature {
+  const text = child(signature, "KeyInfo")?.getElementsByTagNameNS(DS, "X509Certificate")[0]?.textContent ?? "";
+  const der = base64Bytes(text);
+  let certificate: X509;
+  try {
+    certificate = parseCertificate(der!);
+  } catch {
+    throw new CadesError("An error was encountered while processing an XML digital signature.", ERROR_XML_SIGNATURE);
   }
-
-  Item(): Promise<never> {
-    return Promise.reject(new CadesError("Неверный индекс подписанта", E_INVALIDARG));
+  const signedInfo = child(signature, "SignedInfo");
+  const method = signatureMethods.get(signedInfo && child(signedInfo, "SignatureMethod")?.getAttribute("Algorithm") || "");
+  if (!signedInfo || !method) throw new CadesError("An error was encountered while processing an XML digital signature.", ERROR_XML_SIGNATURE);
+  let valid = method.key === certificate.publicKeyAlgorithm;
+  for (const reference of references(signedInfo)) {
+    const name = digestMethods.get(child(reference, "DigestMethod")?.getAttribute("Algorithm") ?? "");
+    if (!name) throw new CadesError("An error was encountered while processing an XML digital signature.", ERROR_XML_SIGNATURE);
+    const expected = base64Bytes(child(reference, "DigestValue")?.textContent ?? "");
+    valid &&= same(utf8Digest(name, referenceData(signature, referenceTarget(reference))), expected);
   }
+  const canonicalization = child(signedInfo, "CanonicalizationMethod")?.getAttribute("Algorithm") ?? INCLUSIVE_C14N;
+  const value = base64Bytes(child(signature, "SignatureValue")?.textContent ?? "");
+  valid &&= value !== undefined && verifyHash(certificate, utf8Digest(method.hash, canonicalize(signedInfo, canonicalization, null)), value);
+  return { certificate, valid };
 }
 
 export class SignedXML {
@@ -305,6 +338,7 @@ export class SignedXML {
   #type: number = constants.CADESCOM_XML_SIGNATURE_TYPE_ENVELOPED;
   #signatureMethod: string | undefined;
   #digestMethod: string | undefined;
+  #signers: VerifiedSignature[] = [];
 
   constructor(session: Session) {
     this.#session = session;
@@ -347,15 +381,34 @@ export class SignedXML {
     return Promise.resolve();
   }
 
-  get Signers(): Promise<SignedXmlSigners> {
-    return Promise.resolve(new SignedXmlSigners());
+  // Empty until Verify, as with the real plug-in, and after Sign.
+  get Signers(): Promise<Signers> {
+    return Promise.resolve(new Signers(this.#session, this.#signers));
   }
 
-  Verify(): Promise<never> {
-    return Promise.reject(new CadesError("Проверка XML-подписи пока не поддерживается", E_NOTIMPL));
+  // Verifies every ds:Signature of the document, or those an XPath names, in the page; the document becomes
+  // Content. Every signature checked is a signer, the failed ones marked not valid.
+  async Verify(message?: unknown, xpath?: unknown): Promise<void> {
+    this.#signers = [];
+    const { xml } = decodeContent(typeof message === "string" ? message : "");
+    const doc = parse(xml);
+    let signatures: Element[];
+    if (typeof xpath === "string" && xpath) {
+      const result = doc.evaluate(xpath, doc, null, XPathResult.ORDERED_NODE_SNAPSHOT_TYPE, null);
+      signatures = Array.from({ length: result.snapshotLength }, (_, i) => result.snapshotItem(i)).filter(
+        (node): node is Element => node instanceof Element && node.namespaceURI === DS && node.localName === "Signature",
+      );
+    } else {
+      signatures = Array.from(doc.getElementsByTagNameNS(DS, "Signature"));
+    }
+    if (signatures.length === 0) throw new CadesError("The data is invalid.", ERROR_INVALID_DATA);
+    this.#signers = signatures.map(verifySignature);
+    this.#content = serialize(doc, xml);
+    if (this.#signers.some((signer) => !signer.valid)) throw new CadesError("Invalid Signature.", NTE_BAD_SIGNATURE);
   }
 
   async Sign(signer?: unknown, xpath?: unknown): Promise<string> {
+    this.#signers = [];
     const type = this.#type;
     // The real plug-in answers an unknown type with an empty string rather than an error.
     if (!typeNames.has(type)) return "";
@@ -405,11 +458,10 @@ export class SignedXML {
       // One signature after another, in document order: a later one may cover an earlier one.
       for (const item of pending) {
         for (const reference of item.references) {
-          const hash = await tokenDigest(plugin, deviceId, reference.hash, utf8Binary(referenceData(item, reference)));
-          reference.value.textContent = wrap(hexToBase64(hash));
+          reference.value.textContent = wrap(btoa(bytesBinary(utf8Digest(reference.hash, referenceData(item.signature, reference)))));
         }
-        const hash = await tokenDigest(plugin, deviceId, item.hash, utf8Binary(canonicalize(item.signedInfo, item.canonicalization, null)));
-        const raw = await plugin.rawSign(deviceId, keyId, hash.toLowerCase().replace(/(..)(?!$)/g, "$1:"), {});
+        const hash = utf8Digest(item.hash, canonicalize(item.signedInfo, item.canonicalization, null));
+        const raw = await plugin.rawSign(deviceId, keyId, Array.from(hash, (byte) => byte.toString(16).padStart(2, "0")).join(":"), {});
         let value = child(item.signature, "SignatureValue");
         if (!value) value = item.signature.insertBefore(createDs(item.signature, "SignatureValue"), item.signedInfo.nextSibling);
         value.textContent = wrap(hexToBase64(raw));

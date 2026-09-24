@@ -1,5 +1,5 @@
-// A minimal DER reader: enough to take X.509 certificates apart. Not a general BER parser —
-// indefinite lengths and high tag numbers are rejected, which DER certificates never use.
+// A minimal DER reader: enough to take X.509 certificates and CMS messages apart. Of BER it takes the
+// indefinite lengths CMS producers may use for signed data; high tag numbers are rejected, which neither uses.
 
 export interface Node {
   tag: number;
@@ -14,6 +14,16 @@ export function read(input: Uint8Array, offset = 0): Node {
   if ((tag & 0x1f) === 0x1f) throw new Error("DER: high tag numbers are not supported");
   let length = input[offset + 1]!;
   let header = 2;
+  if (length === 0x80) {
+    // Indefinite length (constructed elements only): the contents run up to the end-of-contents octets.
+    if (!(tag & 0x20)) throw new Error("DER: indefinite length on a primitive element");
+    let end = offset + 2;
+    while (input[end] !== 0 || input[end + 1] !== 0) {
+      if (end + 2 > input.length) throw new Error("DER: truncated contents");
+      end += read(input, end).der.length;
+    }
+    return { tag, der: input.subarray(offset, end + 2), value: input.subarray(offset + 2, end) };
+  }
   if (length & 0x80) {
     const count = length & 0x7f;
     if (count === 0 || count > 4) throw new Error("DER: unsupported length");
@@ -32,6 +42,20 @@ export function children(node: Node): Node[] {
     const child = read(node.value, offset);
     result.push(child);
     offset += child.der.length;
+  }
+  return result;
+}
+
+// An OCTET STRING's bytes, joining the pieces of a constructed one (BER).
+export function octets(node: Node): Uint8Array {
+  if (node.tag === 0x04) return node.value;
+  if (node.tag !== 0x24) throw new Error("DER: OCTET STRING expected");
+  const parts = children(node).map(octets);
+  const result = new Uint8Array(parts.reduce((sum, part) => sum + part.length, 0));
+  let offset = 0;
+  for (const part of parts) {
+    result.set(part, offset);
+    offset += part.length;
   }
   return result;
 }

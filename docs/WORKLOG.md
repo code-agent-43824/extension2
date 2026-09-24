@@ -9,6 +9,18 @@
 256 и 512, 2001 с хешем 34.11-94) её проверка сходится; 0.2.5 вышла в день выбора, а в нужных нам файлах
 отличается только именами констант, поэтому взята 0.2.4. Сначала — поведение настоящего плагина через `nmcades`.
 
+**Сделано.** Поведение `VerifyCades`, `VerifyHash`, `SignedXML.Verify` и `Signers` снято с плагина 2.0.15700 на
+подписях КриптоПро и на собранных вручную (`JOURNAL.md`). Владелец выбрал не проверять отзыв. Новые
+`src/page/gost.ts` (ГОСТ и хеши), `cms.ts` (разбор SignedData, в том числе BER), `chain.ts` (цепочка до хранилища
+корневых), `objects/signers.ts`; `CadesSignedData.VerifyCades`/`VerifyHash`/`Signers`/`Certificates`,
+`SignedXML.Verify`/`Signers`. `HashedData` и `SignedXML.Sign` хешируют в странице, `digest` Рутокен Плагина больше
+не нужен. Тесты: `tests/unit/verify.test.ts`, новые значения в `hashing.test.ts` (с настоящего плагина),
+`tests/stand/verification.spec.ts`, подписи — `tests/fixtures/verify.json`. `npm run check`, `npm run test:stand`
+(32 прошли, 11 пропущены) и `with-cryptopro-csp.spec.ts` зелёные. Версия 0.5.9, page.js вырос со 123 до 278 КБ
+(без сжатия).
+
+**Дальше.** Проверка владельцем.
+
 ## 2026-09-24 — XMLDSig
 
 **План.** Вторая половина действия 15 `PLAN.md`: `CAdESCOM.SignedXML`, если найдётся библиотека.

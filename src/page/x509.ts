@@ -20,6 +20,16 @@ export interface X509 {
   // shifted left by 8 (CAPICOM_DIGITAL_SIGNATURE_KEY_USAGE is 128, decipherOnly 0x8000); null when absent.
   keyUsage: number | null;
   thumbprint: string;
+  // For checking signatures and chains: the signed part with its algorithm and signature (the BIT STRING's
+  // bits), the names as encoded, the key's parameter set (the first OID of its parameters, null without
+  // one) and the subjectPublicKey BIT STRING's bits.
+  tbs: Uint8Array;
+  signatureAlgorithm: string;
+  signature: Uint8Array;
+  issuerDer: Uint8Array;
+  subjectDer: Uint8Array;
+  publicKeyParameters: string | null;
+  publicKey: Uint8Array;
 }
 
 // Friendly names CryptoPro gives the GOST public key algorithms; other algorithms show their OID.
@@ -77,13 +87,16 @@ function keyUsage(extensions: ReturnType<typeof read> | undefined): number | nul
 
 export function parseCertificate(der: Uint8Array): X509 {
   const certificate = expectTag(read(der), 0x30, "Certificate");
-  const tbs = children(expectTag(children(certificate)[0], 0x30, "TBSCertificate"));
+  const [tbsNode, signatureAlgorithm, signature] = children(certificate);
+  const tbs = children(expectTag(tbsNode, 0x30, "TBSCertificate"));
   // version [0] EXPLICIT is optional (v1 certificates omit it); the rest is positional.
   const hasVersion = tbs[0]?.tag === 0xa0;
   const version = hasVersion ? children(tbs[0]!)[0]!.value[0]! + 1 : 1;
   const [serial, , issuer, validity, subject, spki, ...rest] = hasVersion ? tbs.slice(1) : tbs;
   const [notBefore, notAfter] = children(expectTag(validity, 0x30, "Validity"));
-  const algorithm = children(expectTag(children(expectTag(spki, 0x30, "SubjectPublicKeyInfo"))[0], 0x30, "AlgorithmIdentifier"))[0];
+  const [keyAlgorithm, keyBits] = children(expectTag(spki, 0x30, "SubjectPublicKeyInfo"));
+  const [algorithm, parameters] = children(expectTag(keyAlgorithm, 0x30, "AlgorithmIdentifier"));
+  const parameterSet = parameters?.tag === 0x30 ? children(parameters)[0] : undefined;
   const extensions = rest.find((node) => node.tag === 0xa3);
   const [privateKeyNotBefore, privateKeyNotAfter] = privateKeyUsagePeriod(extensions);
   return {
@@ -99,5 +112,12 @@ export function parseCertificate(der: Uint8Array): X509 {
     privateKeyNotAfter,
     keyUsage: keyUsage(extensions),
     thumbprint: hex(sha1(der)),
+    tbs: tbsNode!.der,
+    signatureAlgorithm: decodeOid(expectTag(children(expectTag(signatureAlgorithm, 0x30, "signatureAlgorithm"))[0], 0x06, "algorithm").value),
+    signature: expectTag(signature, 0x03, "signatureValue").value.subarray(1),
+    issuerDer: issuer!.der,
+    subjectDer: subject!.der,
+    publicKeyParameters: parameterSet?.tag === 0x06 ? decodeOid(parameterSet.value) : null,
+    publicKey: expectTag(keyBits, 0x03, "subjectPublicKey").value.subarray(1),
   };
 }

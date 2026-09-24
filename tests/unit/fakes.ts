@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import type { Session } from "../../src/page/objects/session.ts";
 import type { PinDialog, PinRequest } from "../../src/page/pin-dialog.ts";
-import type { DigestOptions, RutokenPlugin, SignOptions } from "../../src/page/rutoken.ts";
+import type { RutokenPlugin, SignOptions } from "../../src/page/rutoken.ts";
 import type { X509 } from "../../src/page/x509.ts";
 
 export const pem = readFileSync(join(repoRoot, "tests", "fixtures", "stand-user.pem"), "utf8");
@@ -25,7 +25,6 @@ export interface FakeCalls {
   login: string[];
   logout: number;
   sign: SignCall[];
-  digest: { deviceId: number; hashType: number; data: string; options: DigestOptions }[];
   generateKeyPair: unknown[][];
   createPkcs10: unknown[][];
   deleteKeyPair: string[];
@@ -46,7 +45,6 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     login: [],
     logout: 0,
     sign: [],
-    digest: [],
     generateKeyPair: [],
     createPkcs10: [],
     deleteKeyPair: [],
@@ -62,14 +60,8 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     DATA_FORMAT_HASH: thenable(2),
     PUBLIC_KEY_ALGORITHM_GOST3410_2012_256: thenable(3),
     PUBLIC_KEY_ALGORITHM_GOST3410_2012_512: thenable(4),
-    HASH_TYPE_GOST3411_94: thenable(11),
     HASH_TYPE_GOST3411_12_256: thenable(5),
     HASH_TYPE_GOST3411_12_512: thenable(6),
-    HASH_TYPE_MD5: thenable(12),
-    HASH_TYPE_SHA1: thenable(13),
-    HASH_TYPE_SHA256: thenable(14),
-    HASH_TYPE_SHA384: thenable(15),
-    HASH_TYPE_SHA512: thenable(16),
     KEY_SPEC_SIGN: thenable(7),
     KEY_SPEC_SIGN_AND_EXCHANGE: thenable(8),
     enumerateDevices: async () => [0],
@@ -86,11 +78,6 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     sign: async (deviceId, id, data, format, options) => {
       calls.sign.push({ deviceId, certId: id, data, format, options });
       return "MIIsignature";
-    },
-    // "ab:cd:…" of the hash type followed by the bytes, so tests can see what was hashed.
-    digest: async (deviceId, hashType, data, options) => {
-      calls.digest.push({ deviceId, hashType, data, options });
-      return [hashType, ...Array.from(atob(data), (char) => char.charCodeAt(0))].map((b) => b.toString(16).padStart(2, "0")).join(":");
     },
     generateKeyPair: async (...args) => {
       calls.generateKeyPair.push(args);

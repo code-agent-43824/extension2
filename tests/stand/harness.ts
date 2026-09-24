@@ -201,3 +201,23 @@ export async function disableSite(context: BrowserContext, site: string): Promis
   await item.waitFor({ state: "detached" });
   await page.close();
 }
+
+// Adds certificates to the extension's root store from files, the way a user does on the options page.
+export async function addRoots(context: BrowserContext, files: { name: string; buffer: Buffer }[]): Promise<void> {
+  const page = await optionsPage(context);
+  await page.locator("#roots li").first().waitFor();
+  await page.locator("#roots-add input[name=files]").setInputFiles(files.map(({ name, buffer }) => ({ name, mimeType: "application/x-pem-file", buffer })));
+  await page.locator("#roots-add button[type=submit]").click();
+  await page.locator("#roots-message").filter({ hasText: files[files.length - 1]!.name }).waitFor();
+  await page.close();
+}
+
+// Switches the whole root store on or off on the options page.
+export async function setRootStore(context: BrowserContext, enabled: boolean): Promise<void> {
+  const page = await optionsPage(context);
+  await page.locator("#roots li").first().waitFor();
+  await page.locator("input[name=roots-enabled]").setChecked(enabled);
+  // The count says so once the setting is stored.
+  await page.locator("#roots-count").filter({ hasText: enabled ? /^((?!выключено).)*$/ : /выключено/ }).waitFor();
+  await page.close();
+}

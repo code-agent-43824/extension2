@@ -48,7 +48,7 @@ export async function buildExtension(): Promise<void> {
   });
   for (const file of ["popup.html", "options.html", "ui.css"]) copyFileSync(join(extension, file), join(extensionDir, file));
   // page.js carries code of these MIT packages, whose licenses ask for their notice to go along.
-  const notices = ["xmldsigjs", "xml-core"].map((name) => `${name}\n\n${readFileSync(join(repoRoot, "node_modules", name, "LICENSE"), "utf8").trim()}\n`);
+  const notices = ["xmldsigjs", "xml-core", "@li0ard/gost", "@noble/curves", "@noble/hashes"].map((name) => `${name}\n\n${readFileSync(join(repoRoot, "node_modules", name, "LICENSE"), "utf8").trim()}\n`);
   writeFileSync(join(extensionDir, "THIRD-PARTY-LICENSES.txt"), `${notices.join("\n\n")}`);
 }
 

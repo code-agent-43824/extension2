@@ -50,10 +50,13 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `src/page/` — the MAIN-world content script, bundled into one `page.js`: `main.ts` (entry), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
-  case-insensitively by ProgID; `objects/hashed-data.ts` hashes with the plugin's `digest` on a connected token; `objects/signed-xml.ts`
-  makes XMLDSig with xmldsigjs' canonicalizer, `digest` and `rawSign`), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
+  case-insensitively by ProgID; `objects/hashed-data.ts` hashes in the page; `objects/signed-xml.ts`
+  makes XMLDSig with xmldsigjs' canonicalizer and `rawSign`, and verifies it; `objects/signers.ts` the signers a
+  verification found), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing; `dn.ts` holds the CryptoPro name format sites match with regexes),
+  `gost.ts` (hashes and GOST R 34.10 signature checks, on `@li0ard/gost`) + `cms.ts` (SignedData parsing and signer
+  checks, BER included) + `chain.ts` (chains to the root store) — verification never touches the plugin,
   `signing.ts` (the plugin's `sign`, data or a hash) + `token-login.ts` (PIN window, login, logout, the single connected token) +
   `pin-dialog.ts` (the PIN window, in a shadow root), `roots.ts` (asks the bridge for the "Root" store), `objects/enrollment.ts` (X509Enrollment for CA pages:
   key and PKCS#10 request on the token, installing the issued certificate).
@@ -68,13 +71,15 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   (`docs/MANUAL-CHECK.md`, the manual install and checklist).
 - `tests/unit/` — Vitest unit tests (`vitest.config.ts` limits Vitest to this directory); `fakes.ts` holds the
   fake plugin and PIN window; `tests/fixtures/` holds copies of a stand certificate and its CA so they run without
-  the stand.
+  the stand, and `verify.json` signatures made by CryptoPro's plug-in and crafted ones (how: `docs/JOURNAL.md`,
+  2026-09-24) with the CA they chain to.
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
   `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `testgost.spec.ts`
   (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `nalog.spec.ts` (opt-in,
   online) signs in by certificate on the FNS personal accounts up to the server refusing the CA; `crpt.spec.ts`
   (opt-in, online) does the same on Честный знак; `testgost-certs.ts` issues their certificates; `with-cryptopro.spec.ts`
-  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `roots.spec.ts` drives the root store
+  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `xml-signing.spec.ts` makes XMLDSig signatures of the three types;
+  `verification.spec.ts` verifies ours and CryptoPro's signatures in the page; `roots.spec.ts` drives the root store
   on the options page; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `verify.ts` runs the
   independent verifier on a signature.
@@ -114,8 +119,8 @@ clicked) and turn sites on with `enableSite`, through the options page.
   Site access is an optional host permission requested when the user enables a site.
 
 - **Independent GOST tooling is Python (`gostcrypto`, `asn1crypto`, `lxml`) in `tests/tools/`, test-only.** Agent,
-  2026-09-23. Reason: a verifier must not share code with what it checks, and no maintained npm GOST signature
-  library was found; these two are on PyPI and pinned by hash. Never ship them in the extension.
+  2026-09-23. Reason: a verifier must not share code with what it checks (the extension's own verification uses
+  `@li0ard/gost`, found later, 2026-09-24); these are on PyPI and pinned by hash. Never ship them in the extension.
 
 - **XMLDSig canonicalization comes from `xmldsigjs`, and only that file goes into page.js.** Owner, 2026-09-24,
   "xmldsig if you find suitable JavaScript libraries"; the choice is the agent's (`docs/JOURNAL.md`). Reason: of
@@ -125,6 +130,16 @@ clicked) and turn sites on with `enableSite`, through the options page.
   alias (scripts/build.ts, tsconfig.json, vitest.config.ts, the types in `src/page/globals.d.ts`); the version is
   pinned exactly. The XMLDSig verifier uses `lxml` (libxml2) for the same reason `verify_cms.py` exists: a check
   must not share code with what it checks.
+
+- **Signature verification runs in the page, on `@li0ard/gost` (with `@noble/curves` and `@noble/hashes`).** Owner,
+  2026-09-24: "verification inside the extension, without the Rutoken Plugin and the token"; the library choice is
+  the agent's (`docs/JOURNAL.md`). Reason: it is MIT, pure TypeScript on the audited noble libraries, and checks
+  every GOST root in the store; the others found wrap 2016–2020 code or are Node-only. Versions are pinned exactly.
+  Hashing (`HashedData`, XMLDSig digests) uses it too, so none of it needs a token.
+
+- **Verification does not check revocation.** Owner, 2026-09-24 (decision card). Reason: CRLs sit on the CAs'
+  servers and would need the background worker and access to their hosts; CryptoPro refuses without a CRL, we
+  accept. Chains end in the enabled certificates of the extension's root store.
 
 - **The built-in root certificates are committed** (`src/extension/builtin-roots.ts`). Agent, 2026-09-23, on the
   owner's request to pre-fill the store from CryptoPro's package. Reason: they are public CA certificates, not

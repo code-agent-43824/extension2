@@ -1,5 +1,5 @@
-// Signing a hash through our extension on the stand: CAdESCOM.HashedData hashed by the Rutoken Plugin,
-// CadesSignedData.SignHash signed by it, in the three ways sites call them (docs/JOURNAL.md, 2026-09-24).
+// Signing a hash through our extension on the stand: CAdESCOM.HashedData hashed in the page,
+// CadesSignedData.SignHash signed by the Rutoken Plugin, in the three ways sites call them (docs/JOURNAL.md, 2026-09-24).
 // Every signature must pass the independent verifier against the data that was hashed.
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { stand } from "../../scripts/setup-stand.ts";
