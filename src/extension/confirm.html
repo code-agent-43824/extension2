@@ -2,17 +2,28 @@
 <html lang="ru">
 <head>
   <meta charset="utf-8">
-  <title>КриптоПро через Рутокен — добавить сертификат?</title>
+  <title>Предупреждение системы безопасности</title>
   <link rel="stylesheet" href="ui.css">
 </head>
 <body class="confirm">
-  <h1 id="title">Добавить сертификат?</h1>
-  <p id="request"></p>
-  <dl id="fields"></dl>
-  <p id="warning" class="note"></p>
+  <div class="warning">
+    <svg class="icon" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true">
+      <path d="M24 3 46 43H2Z" fill="#f6c343" stroke="#b7860b" stroke-width="2" stroke-linejoin="round"/>
+      <rect x="21.5" y="16" width="5" height="15" rx="1.5" fill="#1b1b1b"/>
+      <circle cx="24" cy="36.5" r="3" fill="#1b1b1b"/>
+    </svg>
+    <div>
+      <p id="subject"></p>
+      <p id="request"></p>
+      <p id="fingerprint"></p>
+      <p id="danger"></p>
+      <p id="where" class="note"></p>
+      <p class="question">Вы хотите установить этот сертификат?</p>
+    </div>
+  </div>
   <div class="toolbar">
-    <button type="button" name="cancel">Отмена</button>
-    <button type="button" name="install">Установить</button>
+    <button type="button" name="install">Да</button>
+    <button type="button" name="cancel">Нет</button>
   </div>
   <script src="confirm.js"></script>
 </body>

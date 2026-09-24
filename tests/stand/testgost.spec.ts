@@ -8,7 +8,7 @@ import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { vendorDir } from "../../scripts/fetch-vendor.ts";
 import { stand, standDir, userPin } from "../../scripts/setup-stand.ts";
-import { clearSites, directoryRoutes, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { clearSites, directoryRoutes, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { verifyCms } from "./verify.ts";
 
 const ca = "https://testgost2012.cryptopro.ru";
@@ -110,7 +110,28 @@ for (const { bits, type, keySize, hash, commonName } of variants) {
     await expect(pinDialog(page)).toContainText("просит записать сертификат на Рутокен.", { timeout: 30_000 });
     await expect(pinDialog(page)).toContainText(`Сертификат: ${commonName}`);
     await page.screenshot({ path: join(outDir, `${bits}-4-pin-for-certificate.png`) });
+    const extension = await extensionOrigin(context);
+    const confirmWindow = () => context.waitForEvent("page", { predicate: (candidate) => candidate.url().startsWith(`${extension}/confirm.html`), timeout: 30_000 });
+    // Only the first install asks about the root: the second finds it trusted.
+    const confirm = bits === 256 ? confirmWindow() : undefined;
     await enterPin(page);
+    if (confirm) {
+      // The test CA's root is in none of the extension's stores: the extension asks about it, as Windows does
+      // (docs/PLAN.md, action 22). No first: the page says the CA is not trusted.
+      let window = await confirm;
+      await expect(window.locator("#subject")).toContainText("Тестовый УЦ ООО \"КРИПТО-ПРО\"");
+      await window.screenshot({ path: join(outDir, `${bits}-4a-root-question.png`) });
+      await window.locator("button[name=cancel]").click();
+      await expect(page.locator("#spnNotTrusted")).toBeVisible({ timeout: 30_000 });
+      await page.screenshot({ path: join(outDir, `${bits}-4b-not-trusted.png`), fullPage: true });
+      // The certificate is on the token already; installing again asks again, and yes trusts the root.
+      const again = confirmWindow();
+      await install.click();
+      await expect(pinDialog(page)).toContainText(`Сертификат: ${commonName}`, { timeout: 30_000 });
+      await enterPin(page);
+      window = await again;
+      await window.locator("button[name=install]").click();
+    }
     await page.waitForURL(/certrmpn\.asp/i, { timeout: 60_000 });
     await expect(page.locator("body")).toContainText("Новый сертификат успешно установлен.");
     await page.screenshot({ path: join(outDir, `${bits}-5-installed.png`), fullPage: true });

@@ -56,8 +56,8 @@ async function installRoot(page: Page): Promise<Page> {
   if (!(await page.locator("#showMoreCheckbox").isChecked())) await page.locator("label[for=showMoreCheckbox]").click();
   await page.getByText("Установить корневой сертификат тестового УЦ").click();
   const window = await opened;
-  await expect(window.locator("#request")).toContainText(`Сайт ${server.url} просит добавить сертификат в хранилище «Доверенные корневые центры сертификации» (Root).`);
-  await expect(window.locator("#fields")).toContainText(caThumbprint);
+  await expect(window.locator("#request")).toContainText(`Его устанавливает сайт ${server.url} в хранилище «Доверенные корневые центры сертификации» (Root).`);
+  await expect(window.locator("#fingerprint")).toHaveText(`Отпечаток (sha1): ${caThumbprint.toUpperCase().match(/.{8}/g)!.join(" ")}`);
   return window;
 }
 

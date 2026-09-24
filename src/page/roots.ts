@@ -27,6 +27,8 @@ export interface RootsResponse {
   intermediates?: string[];
   // The extended validity check (1.2.0 on).
   extendedValidity?: boolean;
+  // Offering the root when installing a certificate (1.3.0 on).
+  offerRoot?: boolean;
 }
 
 // The store a site adds to: CryptoPro's "Root" or "CA".
@@ -51,6 +53,8 @@ export interface StoreCertificates {
   roots: X509[];
   intermediates: X509[];
   extendedValidity: boolean;
+  // False also without the bridge: Store.Add would then wait for an answer that never comes.
+  offerRoot: boolean;
 }
 
 // The bridge answers from chrome.storage at once; no answer means it is not there (an older build).
@@ -75,19 +79,19 @@ export function storeCertificates(win: Window, clock: Clock, waitMs = ROOTS_WAIT
   const id = `${clock.now()}-${++requests}`;
   return new Promise((resolve) => {
     let done = false;
-    const finish = (roots: unknown[], intermediates: unknown[], extendedValidity: boolean) => {
+    const finish = (roots: unknown[], intermediates: unknown[], extendedValidity: boolean, offerRoot: boolean) => {
       if (done) return;
       done = true;
       win.removeEventListener("message", listener);
-      resolve({ roots: parsed(roots), intermediates: parsed(intermediates), extendedValidity });
+      resolve({ roots: parsed(roots), intermediates: parsed(intermediates), extendedValidity, offerRoot });
     };
     const listener = (event: MessageEvent) => {
       const data = event.data as Partial<RootsResponse> | null;
       if (event.source !== win || data?.type !== ROOTS_RESPONSE || data.id !== id || !Array.isArray(data.certificates)) return;
-      finish(data.certificates, Array.isArray(data.intermediates) ? data.intermediates : [], data.extendedValidity === true);
+      finish(data.certificates, Array.isArray(data.intermediates) ? data.intermediates : [], data.extendedValidity === true, data.offerRoot === true);
     };
     win.addEventListener("message", listener);
-    clock.setTimeout(() => finish([], [], false), waitMs);
+    clock.setTimeout(() => finish([], [], false, false), waitMs);
     win.postMessage({ type: ROOTS_REQUEST, id } satisfies RootsRequest, "*");
   });
 }

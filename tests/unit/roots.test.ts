@@ -20,12 +20,15 @@ import {
   installCertificate,
   extraStore,
   isBuiltin,
+  OFFER_ROOT_KEY,
+  offerRoot,
   removeCertificate,
   rootStore,
   ROOTS_KEY,
   setAllEnabled,
   setCertificateEnabled,
   setExtendedValidity,
+  setOfferRoot,
   setStoreEnabled,
 } from "../../src/extension/roots.ts";
 
@@ -223,6 +226,18 @@ describe("the extended validity switch", () => {
   });
 });
 
+describe("the root offer switch", () => {
+  it("is on until turned off, and stays as set", async () => {
+    const { api, store } = fakeChrome();
+    expect(await offerRoot(api)).toBe(true);
+    await setOfferRoot(false, api);
+    expect(store[OFFER_ROOT_KEY]).toBe(false);
+    expect(await offerRoot(api)).toBe(false);
+    await setOfferRoot(true, api);
+    expect(await offerRoot(api)).toBe(true);
+  });
+});
+
 describe("a certificate a site adds", () => {
   it("lands on the second tab, and one that was there but off is switched on", async () => {
     const { api } = fakeChrome();
@@ -265,15 +280,16 @@ describe("page.js asking for the stores", () => {
     const answer = await storeCertificates(win, new ManualClock());
     expect(answer.intermediates).toEqual([]);
     expect(answer.extendedValidity).toBe(false);
+    expect(answer.offerRoot).toBe(false);
   });
 
-  it("carries the extended validity switch", async () => {
+  it("carries the extended validity and root offer switches", async () => {
     const win = fakeWindow();
     win.addEventListener("message", (event) => {
       const { data } = event as MessageEvent;
-      if (data?.type === ROOTS_REQUEST) win.postMessage({ type: ROOTS_RESPONSE, id: data.id, certificates: [], extendedValidity: true }, "*");
+      if (data?.type === ROOTS_REQUEST) win.postMessage({ type: ROOTS_RESPONSE, id: data.id, certificates: [], extendedValidity: true, offerRoot: true }, "*");
     });
-    expect((await storeCertificates(win, new ManualClock())).extendedValidity).toBe(true);
+    expect(await storeCertificates(win, new ManualClock())).toMatchObject({ extendedValidity: true, offerRoot: true });
   });
 
   it("sees an empty store when nothing answers in time", async () => {
@@ -281,7 +297,7 @@ describe("page.js asking for the stores", () => {
     const pending = storeCertificates(fakeWindow(), clock);
     expect(clock.timers).toHaveLength(1);
     clock.timers[0]!();
-    expect(await pending).toEqual({ roots: [], intermediates: [], extendedValidity: false });
+    expect(await pending).toEqual({ roots: [], intermediates: [], extendedValidity: false, offerRoot: false });
     expect(ROOTS_WAIT_MS).toBeGreaterThan(0);
   });
 });

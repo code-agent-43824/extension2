@@ -3,11 +3,12 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { parseNameString } from "../../src/page/dn.ts";
-import { endEntity, responseCertificates } from "../../src/page/objects/enrollment.ts";
+import { CadesError } from "../../src/page/errors.ts";
+import { endEntity, offeredRoot, responseCertificates } from "../../src/page/objects/enrollment.ts";
 import { createObject } from "../../src/page/objects/index.ts";
 import type { Session } from "../../src/page/objects/session.ts";
 import type { RutokenPlugin } from "../../src/page/rutoken.ts";
-import { fakePlugin, FakePinDialog, fakeSession, pem, requestPem, userPin } from "./fakes.ts";
+import { fakePlugin, FakePinDialog, fakeSession, pem, requestPem, userPin, type FakeStores } from "./fakes.ts";
 
 // A CMC response of testgost2012.cryptopro.ru's certsrv (certfnsh.asp): the issued certificate and the CA's.
 const response = readFileSync(join(repoRoot, "tests", "fixtures", "testgost-response.b64"), "utf8");
@@ -232,5 +233,56 @@ describe("X.500 name strings", () => {
     ]);
     expect(() => parseNameString("XX=1")).toThrow("XX");
     expect(() => parseNameString('CN="open')).toThrow("кавычка");
+  });
+});
+
+// The options page's "Предлагать установить корневой сертификат при установке сертификата" (docs/PLAN.md, action 22).
+describe("the root offer when installing (certfnsh.asp)", () => {
+  const certificates = responseCertificates(response);
+  const user = endEntity(certificates)!;
+  const root = certificates.find((certificate) => certificate !== user)!;
+
+  function withStores(stores: FakeStores, roots: typeof certificates = [], overrides: Partial<RutokenPlugin> = {}) {
+    const plugin = fakePlugin([pem], overrides);
+    return { plugin, session: fakeSession(plugin, new FakePinDialog([userPin]), roots, [], stores) };
+  }
+
+  it("offers the response's root when the stores do not trust it", () => {
+    expect(offeredRoot(user, certificates, [], [])).toEqual({ root, intermediates: [] });
+    expect(offeredRoot(user, certificates, [root], [])).toBeUndefined();
+    // Without the root in the response there is nothing to offer.
+    expect(offeredRoot(user, [user], [], [])).toBeUndefined();
+  });
+
+  it("adds the root the user says yes to, after writing the certificate", async () => {
+    const added: FakeStores["added"] = [];
+    const { plugin, session } = withStores({ offerRoot: true, added });
+    await installLikeTestgost(session);
+    expect(plugin.calls.importCertificate).toHaveLength(1);
+    expect(added).toEqual([{ store: "root", certificate: root }]);
+  });
+
+  it("answers CERT_E_UNTRUSTEDROOT when the user says no, the certificate staying on the token", async () => {
+    const { plugin, session } = withStores({ offerRoot: true, added: [], refuse: new CadesError("Пользователь не разрешил добавить сертификат.", 0x800704c7) });
+    await expect(installLikeTestgost(session)).rejects.toThrow("(0x800B0109)");
+    expect(plugin.calls.importCertificate).toHaveLength(1);
+    expect(plugin.calls.deleteCertificate).toEqual([]);
+  });
+
+  it("asks nothing when the root is trusted, the switch is off or the certificate is not written", async () => {
+    const trusted: FakeStores["added"] = [];
+    await installLikeTestgost(withStores({ offerRoot: true, added: trusted }, [root]).session);
+    const off: FakeStores["added"] = [];
+    await installLikeTestgost(withStores({ offerRoot: false, added: off }).session);
+    const noKey: FakeStores["added"] = [];
+    const failed = installLikeTestgost(
+      withStores({ offerRoot: true, added: noKey }, [], {
+        getKeyByCertificate: async () => {
+          throw new Error("20");
+        },
+      }).session,
+    );
+    await expect(failed).rejects.toThrow("(0x80092004)");
+    expect([trusted, off, noKey]).toEqual([[], [], []]);
   });
 });

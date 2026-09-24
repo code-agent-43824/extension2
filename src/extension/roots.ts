@@ -12,6 +12,10 @@ export const EXTRA_KEY = "extraCertificates";
 // The options page's "Расширенная проверка валидности сертификата": Certificate.IsValid() builds the chain to
 // these stores, as CryptoPro does; off (the default), it checks only the dates (docs/PLAN.md, action 20).
 export const EXTENDED_VALIDITY_KEY = "extendedValidity";
+// The options page's "Предлагать установить корневой сертификат при установке сертификата": X509Enrollment's
+// InstallResponse asks whether to trust the root the CA's response carries, as Windows does (docs/PLAN.md,
+// action 22). On by default: the key is absent until the user turns it off.
+export const OFFER_ROOT_KEY = "offerRootOnInstall";
 
 // Which store: the built-in roots' tab, or the tab of the certificates added from files.
 export type Tab = "roots" | "extra";
@@ -234,4 +238,12 @@ export async function extendedValidity(api: Api = chrome): Promise<boolean> {
 
 export async function setExtendedValidity(enabled: boolean, api: Api = chrome): Promise<void> {
   await api.storage.local.set({ [EXTENDED_VALIDITY_KEY]: enabled });
+}
+
+export async function offerRoot(api: Api = chrome): Promise<boolean> {
+  return (await api.storage.local.get(OFFER_ROOT_KEY))[OFFER_ROOT_KEY] !== false;
+}
+
+export async function setOfferRoot(enabled: boolean, api: Api = chrome): Promise<void> {
+  await api.storage.local.set({ [OFFER_ROOT_KEY]: enabled });
 }

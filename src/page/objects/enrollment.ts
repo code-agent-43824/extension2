@@ -3,6 +3,7 @@
 // makes the key on the Rutoken and returns a PKCS#10 request, and InstallResponse writes the issued
 // certificate next to that key. Only what such pages call is emulated; defaults in docs/PLAN.md, stage 5.
 import { children, decodeOid, expectTag, read } from "../asn1.ts";
+import { CERT_TRUST_IS_NOT_SIGNATURE_VALID, CERT_TRUST_IS_UNTRUSTED_ROOT, validationChain } from "../chain.ts";
 import { constants } from "../constants.ts";
 import { formatName, parseNameString, type Attribute } from "../dn.ts";
 import { CadesError } from "../errors.ts";
@@ -17,6 +18,11 @@ const E_INVALIDARG = 0x80070057;
 const E_NOTIMPL = 0x80004001;
 const E_UNEXPECTED = 0x8000ffff;
 const CRYPT_E_NOT_FOUND = 0x80092004;
+// What Windows' CertEnroll answers when the root of the installed certificate is not trusted; certfnsh.asp then
+// shows «Данный ЦС не является доверенным» with a link to its root (docs/JOURNAL.md, 2026-09-24).
+export const CERT_E_UNTRUSTEDROOT = 0x800b0109;
+// The extension's answer when the user says no to a root (src/extension/install.ts).
+const ERROR_CANCELLED = 0x800704c7;
 
 // X509KeySpec and AlgorithmType values from CertEnroll.
 const AT_KEYEXCHANGE = 1;
@@ -402,6 +408,21 @@ function algorithmOf(plugin: RutokenPlugin, name: Provider["publicKeyAlgorithm"]
   return plugin[name];
 }
 
+const sameDer = (a: X509, b: X509) => a.der.length === b.der.length && a.der.every((byte, i) => byte === b.der[i]);
+
+// The root the CA's response offers for `certificate` and the intermediates on the way to it, when the chain
+// through the extension's stores and the response ends in a self-signed certificate the stores do not trust.
+// Nothing when the chain is trusted, broken, or its top is not in the response.
+export function offeredRoot(certificate: X509, response: readonly X509[], roots: readonly X509[], intermediates: readonly X509[]): { root: X509; intermediates: X509[] } | undefined {
+  const chain = validationChain(certificate, [...intermediates, ...response], roots);
+  const root = chain.certificates.at(-1)!;
+  const statuses = chain.statuses;
+  if (chain.certificates.length < 2 || !(statuses.at(-1)! & CERT_TRUST_IS_UNTRUSTED_ROOT)) return undefined;
+  if (statuses.some((status) => status & CERT_TRUST_IS_NOT_SIGNATURE_VALID) || !response.some((c) => sameDer(c, root))) return undefined;
+  const missing = chain.certificates.slice(1, -1).filter((c) => !intermediates.some((known) => sameDer(known, c)));
+  return { root, intermediates: missing };
+}
+
 // X509Enrollment.CX509Enrollment.
 export class Enrollment {
   readonly #session: Session;
@@ -480,10 +501,16 @@ export class Enrollment {
 
   // Writes the issued certificate onto the token that holds its key. CA certificates in the response
   // are not written: signing needs only the user's certificate (docs/PLAN.md, stage 5).
+  // With the options page's "Предлагать установить корневой сертификат при установке сертификата" (docs/PLAN.md,
+  // action 22), after writing the certificate: when its root comes in the response and the extension's stores do
+  // not trust it, the extension's window asks, as Windows does. Yes adds the root and the response's intermediates
+  // to the stores; no leaves the certificate on the token and answers CERT_E_UNTRUSTEDROOT, as Windows does.
   async InstallResponse(_restrictions: number, response: string, _encoding?: number, _password?: string): Promise<void> {
     let certificate: X509 | undefined;
+    let certificates: X509[];
     try {
-      certificate = endEntity(responseCertificates(response));
+      certificates = responseCertificates(response);
+      certificate = endEntity(certificates);
     } catch (error) {
       throw new CadesError(`Ответ УЦ не разобран: ${(error as Error).message}`, E_INVALIDARG);
     }
@@ -517,6 +544,23 @@ export class Enrollment {
         throw new CadesError(`На Рутокене нет ключа для сертификата «${commonName(certificate.subject)}»`, CRYPT_E_NOT_FOUND);
       }
     });
+    await this.#offerRoot(certificate, certificates);
+  }
+
+  async #offerRoot(certificate: X509, response: X509[]): Promise<void> {
+    const stores = await this.#session.storeCertificates();
+    if (!stores.offerRoot) return;
+    const offer = offeredRoot(certificate, response, stores.roots, stores.intermediates);
+    if (!offer) return;
+    try {
+      await this.#session.addCertificate("root", offer.root);
+    } catch (error) {
+      if (error instanceof CadesError && error.number === ERROR_CANCELLED) {
+        throw new CadesError("Сертификат записан на Рутокен, но корневой сертификат его УЦ не доверенный: пользователь не стал его устанавливать", CERT_E_UNTRUSTEDROOT);
+      }
+      throw error;
+    }
+    for (const intermediate of offer.intermediates) await this.#session.addCertificate("ca", intermediate);
   }
 }
 

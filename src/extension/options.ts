@@ -1,6 +1,6 @@
 // The options page: every enabled site, with a way to turn it off or to add one by address; below it, the
 // extended validity switch and the certificate stores (roots-view.ts).
-import { EXTENDED_VALIDITY_KEY, extendedValidity, setExtendedValidity } from "./roots.ts";
+import { EXTENDED_VALIDITY_KEY, OFFER_ROOT_KEY, extendedValidity, offerRoot, setExtendedValidity, setOfferRoot } from "./roots.ts";
 import { setupRoots } from "./roots-view.ts";
 import { disableSite, enabledSites, enableSite, siteOf, STORAGE_KEY } from "./sites.ts";
 
@@ -46,12 +46,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
 void render();
 setupRoots();
 
-const validity = document.querySelector<HTMLInputElement>("input[name=extended-validity]")!;
-const showValidity = async () => {
-  validity.checked = await extendedValidity();
-};
-validity.addEventListener("change", () => void setExtendedValidity(validity.checked));
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && EXTENDED_VALIDITY_KEY in changes) void showValidity();
-});
-void showValidity();
+// A switch of the "Проверка сертификатов" section, kept in chrome.storage.local under `key`.
+function setupSwitch(name: string, key: string, get: () => Promise<boolean>, set: (enabled: boolean) => Promise<void>): void {
+  const input = document.querySelector<HTMLInputElement>(`input[name=${name}]`)!;
+  const show = async () => {
+    input.checked = await get();
+  };
+  input.addEventListener("change", () => void set(input.checked));
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && key in changes) void show();
+  });
+  void show();
+}
+
+setupSwitch("extended-validity", EXTENDED_VALIDITY_KEY, extendedValidity, setExtendedValidity);
+setupSwitch("offer-root", OFFER_ROOT_KEY, offerRoot, setOfferRoot);

@@ -226,15 +226,18 @@ export async function setRootStore(context: BrowserContext, enabled: boolean, ta
   await page.close();
 }
 
-// Turns the extended certificate validity check on or off on the options page (docs/PLAN.md, action 20).
-export async function setExtendedValidity(context: BrowserContext, enabled: boolean): Promise<void> {
+// Sets a switch of the options page's "Проверка сертификатов" section: `extended-validity` (docs/PLAN.md, action
+// 20) or `offer-root` (action 22).
+export async function setOptionSwitch(context: BrowserContext, name: "extended-validity" | "offer-root", enabled: boolean): Promise<void> {
   const page = await optionsPage(context);
-  const box = page.locator("input[name=extended-validity]");
+  const box = page.locator(`input[name=${name}]`);
   await box.setChecked(enabled);
   // Stored once the page, reloaded, shows it.
   await expect.poll(async () => {
     await page.reload();
-    return page.locator("input[name=extended-validity]").isChecked();
+    return page.locator(`input[name=${name}]`).isChecked();
   }).toBe(enabled);
   await page.close();
 }
+
+export const setExtendedValidity = (context: BrowserContext, enabled: boolean) => setOptionSwitch(context, "extended-validity", enabled);

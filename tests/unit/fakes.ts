@@ -129,6 +129,8 @@ export class FakePinDialog implements PinDialog {
 
 export interface FakeStores {
   extendedValidity?: boolean;
+  // Off unless set, unlike the options page, so tests of other things never see the root offer.
+  offerRoot?: boolean;
   // What Store.Add sent; `refuse` makes it fail with that error, as the extension does when the user says no.
   added?: { store: AddStore; certificate: X509 }[];
   refuse?: Error;
@@ -139,7 +141,7 @@ export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]
     plugin,
     origin: "https://site.example",
     pinDialog: dialog.open,
-    storeCertificates: async () => ({ roots, intermediates, extendedValidity: stores.extendedValidity === true }),
+    storeCertificates: async () => ({ roots, intermediates, extendedValidity: stores.extendedValidity === true, offerRoot: stores.offerRoot === true }),
     addCertificate: async (store, certificate) => {
       if (stores.refuse) throw stores.refuse;
       stores.added?.push({ store, certificate });
