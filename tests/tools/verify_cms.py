@@ -4,7 +4,10 @@ Shares no code with the extension or the Rutoken stack: its own DER walk, Streeb
 GOST signatures from gostcrypto. Checks that
 - the Streebog digest of the content equals the messageDigest signed attribute;
 - the signature over the signed attributes verifies with the signer certificate's key;
-- the signer certificate is signed by the given CA.
+- the signer certificate is signed by the given CA;
+- for a signature with a signature-time-stamp attribute (CAdES-T): the token's message imprint is
+  the Streebog hash of the signature value, the token's own signature verifies with the TSA
+  certificate it carries, and that certificate is signed by the given CA.
 Byte-order conventions are the ones in gost_ca.py. Each key's curve comes from its
 SubjectPublicKeyInfo parameters, so certificates of other CAs (a CryptoPro test CA with a
 512-bit key) verify too.
@@ -27,6 +30,8 @@ OID_CONTENT_TYPE = "1.2.840.113549.1.9.3"
 OID_MESSAGE_DIGEST = "1.2.840.113549.1.9.4"
 OID_SIGNING_TIME = "1.2.840.113549.1.9.5"
 OID_SIGNING_CERTIFICATE_V2 = "1.2.840.113549.1.9.16.2.47"
+OID_SIGNATURE_TIMESTAMP = "1.2.840.113549.1.9.16.2.14"
+OID_TST_INFO = "1.2.840.113549.1.9.16.1.4"
 
 
 def tlv(data, offset=0):
@@ -118,6 +123,54 @@ def certificate_parts(cert_der):
     return tbs_der, sig_bits[1:], serial, (paramset, point_octets)
 
 
+def signed_attributes(attrs_value):
+    """The signed attributes by OID: each one's first value as (tag, contents)."""
+    result = {}
+    for _, attribute, _ in items(attrs_value):
+        (_, attr_oid, _), (_, values, _) = items(attribute)
+        tag, value, _ = tlv(values)
+        result[decode_oid(attr_oid)] = (tag, value)
+    return result
+
+
+def verify_timestamp(token_der, signature, ca_point, checks, report):
+    """Checks a signature-time-stamp token (RFC 3161 ContentInfo) over the signature value."""
+    _, content_info, _ = tlv(token_der)
+    (_, type_oid, _), (_, explicit, _) = items(content_info)
+    if decode_oid(type_oid) != OID_SIGNED_DATA:
+        raise ValueError("the timestamp token is not a SignedData")
+    _, signed_data, _ = tlv(explicit)
+    parts = items(signed_data)
+    (_, content_type, _), (_, wrapped, _) = items(parts[2][1])
+    if decode_oid(content_type) != OID_TST_INFO:
+        raise ValueError("the timestamp token holds no TSTInfo")
+    _, tst_info, _ = tlv(wrapped)
+    fields = items(tlv(tst_info)[1])
+    (_, imprint_algorithm, _), (_, imprint, _) = items(fields[2][1])
+    imprint_oid = decode_oid(items(imprint_algorithm)[0][1])
+    report["timestamp"] = {"policy": decode_oid(fields[1][1]), "gen_time": fields[4][1].decode()}
+    checks["timestamp_imprint"] = imprint == streebog(signature, DIGEST_SIZES[imprint_oid])
+
+    certificates = [raw for tag, _, raw in items(parts[3][1])] if parts[3][0] == 0xA0 else []
+    signer = items(items(parts[-1][1])[0][1])
+    tsa_serial = items(signer[1][1])[1][1]
+    tsa = next((c for c in certificates if certificate_parts(c)[2] == tsa_serial), None)
+    attrs_tag, attrs_value, attrs_raw = signer[3]
+    attributes = signed_attributes(attrs_value) if attrs_tag == 0xA0 else {}
+    digest_oid = decode_oid(items(signer[2][1])[0][1])
+    message_digest = attributes.get(OID_MESSAGE_DIGEST, (None, None))[1]
+    checks["timestamp_signature"] = (
+        tsa is not None
+        and message_digest == streebog(tst_info, DIGEST_SIZES[digest_oid])
+        and gost_verify(certificate_parts(tsa)[3], b"\x31" + attrs_raw[1:], signer[5][1])
+    )
+    if tsa is not None:
+        tsa_tbs, tsa_signature, _, _ = certificate_parts(tsa)
+        checks["timestamp_tsa_by_ca"] = gost_verify(ca_point, tsa_tbs, tsa_signature)
+    else:
+        checks["timestamp_tsa_by_ca"] = False
+
+
 def verify(cms_b64, ca_pem, content=None):
     report = {"valid": False, "detached": None, "attributes": [], "checks": {}}
     data = base64.b64decode("".join(cms_b64.split()))
@@ -171,6 +224,14 @@ def verify(cms_b64, ca_pem, content=None):
     checks["cades_bes_attributes"] = all(
         oid in report["attributes"] for oid in (OID_CONTENT_TYPE, OID_MESSAGE_DIGEST, OID_SIGNING_CERTIFICATE_V2)
     )
+    report["unsigned_attributes"] = []
+    if len(signer) > 6 and signer[6][0] == 0xA1:
+        for _, attribute, _ in items(signer[6][1]):
+            (_, attr_oid, _), (_, values, _) = items(attribute)
+            name = decode_oid(attr_oid)
+            report["unsigned_attributes"].append(name)
+            if name == OID_SIGNATURE_TIMESTAMP:
+                verify_timestamp(values[: tlv(values)[2]], signature, ca_point, checks, report)
     report["valid"] = all(checks.values())
     return report
 
