@@ -91,6 +91,21 @@ export interface SignOptions {
   addUserCertificate: boolean;
   addEssCert: boolean;
   addSignTime: boolean;
+  // CAdES-T: the plugin gets a timestamp of the signature from the service and adds it as an unsigned attribute.
+  tspOptions?: TspOptions;
+}
+
+// The plugin reaches the timestamp service itself, over HTTP only: an https: address is error 2 (checked on the
+// stand, docs/JOURNAL.md 2026-10-08).
+export interface TspOptions {
+  url: string;
+  // One of the HASH_TYPE_* constants: the hash of the signature sent to the service.
+  digestAlg: number;
+  // Asks the service to put its certificate into the timestamp.
+  cert: boolean;
+  // Checking the timestamp needs the service's certificate chain given to the plugin; without it the plugin
+  // refuses with error 12.
+  verifyTsToken: boolean;
 }
 
 // Error codes the plugin rejects with (as the error message), from the Rutoken Plugin 4.12 documentation.
@@ -102,6 +117,10 @@ export const RutokenError = {
   KEY_NOT_FOUND: 20,
   ALREADY_LOGGED_IN: 93,
 } as const;
+
+// The errors of getting a timestamp, from the same documentation: the service's answer (TS_* 170–178,
+// TST_VERIFICATION_ERROR 182) and the connection to it (HOST_NOT_FOUND 180, HTTP_ERROR 181, 191–196).
+export const timestampErrors: ReadonlySet<number> = new Set([170, 171, 172, 173, 174, 175, 176, 177, 178, 180, 181, 182, 191, 192, 193, 194, 195, 196]);
 
 export function rutokenErrorCode(error: unknown): number | undefined {
   const code = Number((error as { message?: unknown } | null)?.message);

@@ -100,8 +100,8 @@ export class CPSigner {
     return Promise.resolve(this.#attributes);
   }
 
-  // The timestamp service's address. Only kept: the signature types that need a timestamp are not made yet
-  // (docs/PLAN.md, action 24), and webtools.html sets it, empty, for every signature.
+  // The timestamp service's address, for CAdES-T (docs/PLAN.md, action 25); webtools.html sets it, empty unless
+  // filled in, for every signature.
   get TSAAddress(): Promise<string> {
     return Promise.resolve(this.#tsaAddress);
   }
@@ -112,16 +112,16 @@ export class CPSigner {
   }
 
   // For CadesSignedData: what the site configured, without going through the async surface.
-  settings(): { token: TokenCertificate | undefined; checkCertificate: boolean; options: number } {
-    return { token: tokenOf(this.#certificate), checkCertificate: this.#checkCertificate, options: this.#options };
+  settings(): { token: TokenCertificate | undefined; checkCertificate: boolean; options: number; tsaAddress: string } {
+    return { token: tokenOf(this.#certificate), checkCertificate: this.#checkCertificate, options: this.#options, tsaAddress: this.#tsaAddress };
   }
 }
 
 // The signer's certificate for signing, with CheckCertificate applied: what SignCades, SignHash and
 // SignedXML.Sign all need first.
-export function signerCertificate(signer: unknown): { token: TokenCertificate; options: number } {
+export function signerCertificate(signer: unknown): { token: TokenCertificate; options: number; tsaAddress: string } {
   if (!(signer instanceof CPSigner)) throw new CadesError("Ожидается объект CAdESCOM.CPSigner", E_INVALIDARG);
-  const { token, checkCertificate, options } = signer.settings();
+  const { token, checkCertificate, options, tsaAddress } = signer.settings();
   if (!token) throw new CadesError("Не задан сертификат подписанта", E_INVALIDARG);
   if (checkCertificate) {
     const now = Date.now();
@@ -129,5 +129,5 @@ export function signerCertificate(signer: unknown): { token: TokenCertificate; o
       throw new CadesError("Срок действия сертификата истёк или ещё не начался", CERT_E_EXPIRED);
     }
   }
-  return { token, options };
+  return { token, options, tsaAddress };
 }

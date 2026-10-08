@@ -17,7 +17,9 @@ import {
 import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
 import { digest, isGostKey, type DigestName } from "../gost.ts";
+import type { RutokenPlugin, SignOptions, TspOptions } from "../rutoken.ts";
 import { signWithToken } from "../signing.ts";
+import type { TokenCertificate } from "../token.ts";
 import type { X509 } from "../x509.ts";
 import { Certificate, Certificates, x509Of } from "./certificate.ts";
 import { binaryBytes, bytesBinary, HashedData, ucs2leBinary } from "./hashed-data.ts";
@@ -38,6 +40,9 @@ const CRYPT_E_ATTRIBUTES_MISSING = 0x8009100f;
 const CRYPT_E_NO_SIGNER = 0x8009200e;
 const TRUST_E_NOSIGNATURE = 0x800b0100;
 const CERT_E_WRONG_USAGE = 0x800b0110;
+// What CryptoPro's plug-in 2.0.15700 answers a type needing a timestamp when TSAAddress is empty (docs/JOURNAL.md,
+// 2026-09-24).
+const TSP_URL_NOT_SPECIFIED = 0xc2100121;
 // Key usage bits (CAPICOM's flags, src/page/x509.ts) that allow a signature on data.
 const SIGNATURE_KEY_USAGE = 0x80 | 0x40;
 // SignCades' type argument carries flags above the type itself (CADES_USE_OCSP_AUTHORIZED_POLICY).
@@ -63,13 +68,29 @@ const hashForKey = new Map<string, number>([
   ["1.2.643.7.1.1.1.2", constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512],
 ]);
 
-// CAdES-BES and PKCS#7 are what the Rutoken Plugin's sign() makes; the other types need a timestamp service.
+// What the Rutoken Plugin's sign() makes: CAdES-BES, PKCS#7 and, with a timestamp service, CAdES-T. X Long and A
+// need revocation data as well; the owner left them out (docs/PLAN.md, action 25).
+const signedKinds = new Set<number>([constants.CADESCOM_CADES_BES, constants.CADESCOM_CADES_T, constants.CADESCOM_PKCS7_TYPE]);
+
 function signatureKind(type: number): number {
   const kind = Number(type) & TYPE_MASK;
-  if (kind !== constants.CADESCOM_CADES_BES && kind !== constants.CADESCOM_PKCS7_TYPE) {
-    throw new CadesError(`Тип подписи ${type} пока не поддерживается: доступны CAdES-BES и PKCS#7`, E_NOTIMPL);
-  }
+  if (!signedKinds.has(kind)) throw new CadesError(`Тип подписи ${type} пока не поддерживается: доступны CAdES-BES, CAdES-T и PKCS#7`, E_NOTIMPL);
   return kind;
+}
+
+// CAdES-T's timestamp, from the signer's TSAAddress. The timestamp is not checked (the owner, docs/PLAN.md action 25):
+// that would need the service's chain given to the plugin. The hash sent to the service is the key's own.
+async function timestampOptions(plugin: RutokenPlugin, token: TokenCertificate, address: string): Promise<TspOptions> {
+  if (!address.trim()) throw new CadesError("The URL of TSP service is not specified", TSP_URL_NOT_SPECIFIED);
+  let url: URL;
+  try {
+    url = new URL(address.trim());
+  } catch {
+    throw new CadesError(`Неверный адрес службы штампов времени: ${address}`, E_INVALIDARG);
+  }
+  if (url.protocol !== "http:") throw new CadesError(`Рутокен Плагин обращается к службе штампов времени только по HTTP: ${address}`, E_INVALIDARG);
+  const digestAlg = await (token.x509.publicKeyAlgorithm === "1.2.643.7.1.1.1.2" ? plugin.HASH_TYPE_GOST3411_12_512 : plugin.HASH_TYPE_GOST3411_12_256);
+  return { url: url.href, digestAlg, cert: true, verifyTsToken: false };
 }
 
 // The unsigned attributes each CAdES type beyond BES needs; the real plug-in answers a signature without them
@@ -146,48 +167,42 @@ export class CadesSignedData {
 
   async SignCades(signer: unknown, type: number = constants.CADESCOM_CADES_DEFAULT, detached: unknown = false): Promise<string> {
     const kind = signatureKind(type);
-    const { token, options } = signerCertificate(signer);
-    const cades = kind === constants.CADESCOM_CADES_BES;
+    const { token, options, tsaAddress } = signerCertificate(signer);
+    const cades = kind !== constants.CADESCOM_PKCS7_TYPE;
     const content = this.#encoding === constants.CADESCOM_BASE64_TO_BINARY ? this.#content.replace(/\s+/g, "") : ucs2leBase64(this.#content);
     if (!content) throw new CadesError("Нет данных для подписи", E_INVALIDARG);
-    return signWithToken(this.#session, {
-      token,
-      content,
-      hash: false,
-      options: {
-        detached: Boolean(detached),
-        addUserCertificate: options !== constants.CAPICOM_CERTIFICATE_INCLUDE_NONE,
-        // CAdES-BES needs the signing-certificate-v2 attribute; the signing time is Rutoken's own.
-        addEssCert: cades,
-        addSignTime: cades,
-      },
-    });
+    const signOptions: SignOptions = {
+      detached: Boolean(detached),
+      addUserCertificate: options !== constants.CAPICOM_CERTIFICATE_INCLUDE_NONE,
+      // CAdES needs the signing-certificate-v2 attribute; the signing time is Rutoken's own.
+      addEssCert: cades,
+      addSignTime: cades,
+    };
+    if (kind === constants.CADESCOM_CADES_T) signOptions.tspOptions = await timestampOptions(this.#session.plugin, token, tsaAddress);
+    return signWithToken(this.#session, { token, content, hash: false, options: signOptions });
   }
 
   // A detached signature of a hash computed by CAdESCOM.HashedData. CryptoPro's plug-in 2.0.15700 puts the
   // same signed attributes (content type, signing time, message digest, signing-certificate-v2) into the
-  // PKCS#7 type as into CAdES-BES, and takes only Base64 output.
+  // PKCS#7 type as into CAdES-BES, and takes only Base64 output. CAdES-T adds the timestamp, as in SignCades.
   async SignHash(hashed: unknown, signer: unknown, type: number = constants.CADESCOM_CADES_DEFAULT, encoding: number = constants.CADESCOM_ENCODE_BASE64): Promise<string> {
     if (!(hashed instanceof HashedData)) throw new CadesError("Ожидается объект CAdESCOM.HashedData", E_INVALIDARG);
-    signatureKind(type);
+    const kind = signatureKind(type);
     if (Number(encoding) !== constants.CADESCOM_ENCODE_BASE64) throw new CadesError("Подпись хеша выдаётся только в Base64", E_INVALIDARG);
-    const { token, options } = signerCertificate(signer);
+    const { token, options, tsaAddress } = signerCertificate(signer);
     const { algorithm, value } = await hashed.hash();
     const required = hashForKey.get(token.x509.publicKeyAlgorithm);
     if (required !== undefined && required !== algorithm) {
       throw new CadesError("Алгоритм хеша не подходит к ключу сертификата", E_INVALIDARG);
     }
-    return signWithToken(this.#session, {
-      token,
-      content: value,
-      hash: true,
-      options: {
-        detached: true,
-        addUserCertificate: options !== constants.CAPICOM_CERTIFICATE_INCLUDE_NONE,
-        addEssCert: true,
-        addSignTime: true,
-      },
-    });
+    const signOptions: SignOptions = {
+      detached: true,
+      addUserCertificate: options !== constants.CAPICOM_CERTIFICATE_INCLUDE_NONE,
+      addEssCert: true,
+      addSignTime: true,
+    };
+    if (kind === constants.CADESCOM_CADES_T) signOptions.tspOptions = await timestampOptions(this.#session.plugin, token, tsaAddress);
+    return signWithToken(this.#session, { token, content: value, hash: true, options: signOptions });
   }
 
   // Signers and Certificates exist once a verification has checked the signature itself; before, or after

@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { constants } from "../../src/page/constants.ts";
-import { CadesError } from "../../src/page/errors.ts";
+import { CadesError, getLastError } from "../../src/page/errors.ts";
 import type { Certificate, Certificates } from "../../src/page/objects/certificate.ts";
 import { createObject } from "../../src/page/objects/index.ts";
 import type { Session } from "../../src/page/objects/session.ts";
@@ -134,7 +134,7 @@ describe("signing through the Rutoken Plugin", () => {
 
   it("refuses types it cannot make, a signer without a certificate and, with CheckCertificate, an expired one", async () => {
     const { plugin, session } = setup([userPin, userPin]);
-    await expect(signLikeDemoPage(session, "eA==", false, constants.CADESCOM_CADES_T)).rejects.toMatchObject({ number: 0x80004001 });
+    await expect(signLikeDemoPage(session, "eA==", false, constants.CADESCOM_CADES_X_LONG_TYPE_1)).rejects.toMatchObject({ number: 0x80004001 });
     const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
     await data.propset_Content("x");
     const bare = createObject("CAdESCOM.CPSigner", session) as CPSigner;
@@ -158,6 +158,58 @@ describe("signing through the Rutoken Plugin", () => {
     await data.propset_Content("x");
     expect(await data.SignCades(signer, BES)).toBe("MIIsignature");
     expect(plugin.calls.sign[0]!.options).toEqual({ detached: false, addUserCertificate: true, addEssCert: true, addSignTime: true });
+  });
+
+  // webtools.html with CAdES-T chosen and the TSA field filled in (docs/PLAN.md, action 25).
+  it("signs CAdES-T with a timestamp from the TSAAddress service, unchecked, naming the service in the PIN window", async () => {
+    const { plugin, dialog, session } = setup([userPin]);
+    const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;
+    await signer.propset_Certificate(await tokenCertificate(session));
+    await signer.propset_TSAAddress(" http://tsa.example:8080/tsp ");
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    await data.propset_Content("x");
+    expect(await data.SignCades(signer, constants.CADESCOM_CADES_T | constants.CADES_USE_OCSP_AUTHORIZED_POLICY)).toBe("MIIsignature");
+    expect(plugin.calls.sign[0]!.options).toEqual({
+      detached: false,
+      addUserCertificate: true,
+      addEssCert: true,
+      addSignTime: true,
+      tspOptions: { url: "http://tsa.example:8080/tsp", digestAlg: 5, cert: true, verifyTsToken: false },
+    });
+    expect(dialog.requests[0]!.details.slice(0, 2)).toEqual(["2 байт, присоединённая подпись со штампом времени.", "Служба штампов времени: tsa.example:8080"]);
+  });
+
+  it("refuses CAdES-T without a timestamp service, with CryptoPro's code, and with one the plugin cannot reach, before the PIN", async () => {
+    const { plugin, dialog, session } = setup([]);
+    const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;
+    await signer.propset_Certificate(await tokenCertificate(session));
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    await data.propset_Content("x");
+    const error = await data.SignCades(signer, constants.CADESCOM_CADES_T).catch((e: unknown) => e);
+    expect(getLastError(error)).toBe("The URL of TSP service is not specified (0xC2100121)");
+    for (const address of ["https://tsa.example/tsp", "tsa.example/tsp"]) {
+      await signer.propset_TSAAddress(address);
+      await expect(data.SignCades(signer, constants.CADESCOM_CADES_T)).rejects.toMatchObject({ number: 0x80070057 });
+    }
+    expect(dialog.requests).toHaveLength(0);
+    expect(plugin.calls.sign).toHaveLength(0);
+  });
+
+  it("says which timestamp service failed, and logs out", async () => {
+    const plugin = fakePlugin(undefined, {
+      sign: async () => {
+        throw new Error("192");
+      },
+    });
+    const { session } = setup([userPin], plugin);
+    const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;
+    await signer.propset_Certificate(await tokenCertificate(session));
+    await signer.propset_TSAAddress("http://tsa.example/tsp");
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    await data.propset_Content("x");
+    const error = await data.SignCades(signer, constants.CADESCOM_CADES_T).catch((e: unknown) => e);
+    expect(getLastError(error)).toBe("Не удалось получить штамп времени от http://tsa.example/tsp: ошибка Рутокен Плагина 192 (0x80004005)");
+    expect(plugin.calls.logout).toBe(1);
   });
 
   it("keeps the attributes a site adds, indexed from 1", async () => {

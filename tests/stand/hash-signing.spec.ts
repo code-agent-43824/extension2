@@ -5,7 +5,7 @@ import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { stand } from "../../scripts/setup-stand.ts";
 import { blankPage, clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
-import { verifyCms } from "./verify.ts";
+import { startTsa, verifyCms } from "./verify.ts";
 
 let server: PageServer;
 let context: BrowserContext;
@@ -114,4 +114,39 @@ test("takes the hash's Value into a new HashedData and signs that (crypto-pro, �
   );
   expect(hash).toMatch(/^[0-9A-F]{64}$/);
   expectValid(signature, content);
+});
+
+// CAdES-T of a hash, the timestamp from the stand's service (docs/PLAN.md, action 25).
+test("signs a hash as CAdES-T with the timestamp service in TSAAddress", async () => {
+  const tsa = await startTsa();
+  try {
+    const page = await openStandPage(context, `${server.url}/`);
+    const text = "Данные со штампом времени";
+    const { signature } = await run(
+      page,
+      `async (certificate) => {
+        const hash = await cadesplugin.CreateObjectAsync("CAdESCOM.HashedData");
+        await hash.propset_Algorithm(cadesplugin.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256);
+        await hash.Hash(${JSON.stringify(text)});
+        const signer = await cadesplugin.CreateObjectAsync("CAdESCOM.CPSigner");
+        await signer.propset_Certificate(certificate);
+        await signer.propset_TSAAddress(${JSON.stringify(tsa.url)});
+        const data = await cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
+        return { signature: await data.SignHash(hash, signer, cadesplugin.CADESCOM_CADES_T) };
+      }`,
+    );
+    const report = verifyCms(signature, Buffer.from(text, "utf16le"));
+    expect(report.checks).toEqual({
+      message_digest: true,
+      signature: true,
+      certificate_by_ca: true,
+      cades_bes_attributes: true,
+      timestamp_imprint: true,
+      timestamp_signature: true,
+      timestamp_tsa_by_ca: true,
+    });
+    expect(report.detached).toBe(true);
+  } finally {
+    tsa.close();
+  }
 });

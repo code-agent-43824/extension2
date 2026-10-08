@@ -142,6 +142,24 @@ describe("CadesSignedData.SignHash", () => {
     expect(dialog.requests[0]).toMatchObject({ action: "просит подписать хеш данных.", details: ["Хеш данных, отсоединённая подпись.", "Сертификат: Stand User", expect.any(String)] });
   });
 
+  it("signs the hash as CAdES-T with the signer's timestamp service", async () => {
+    const { plugin, session } = setup();
+    const hash = hashed(session);
+    await hash.propset_Algorithm(GOST_256);
+    await hash.SetHashValue(HASH_256);
+    const sign = await signer(session);
+    await sign.propset_TSAAddress("http://tsa.example/tsp");
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    expect(await data.SignHash(hash, sign, constants.CADESCOM_CADES_T)).toBe("MIIsignature");
+    expect(plugin.calls.sign[0]!.options).toEqual({
+      detached: true,
+      addUserCertificate: true,
+      addEssCert: true,
+      addSignTime: true,
+      tspOptions: { url: "http://tsa.example/tsp", digestAlg: 5, cert: true, verifyTsToken: false },
+    });
+  });
+
   it("refuses a hash of another algorithm than the key's, other types and binary output, before the PIN", async () => {
     const { plugin, dialog, session } = setup();
     const sign = await signer(session);

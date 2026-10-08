@@ -9,7 +9,7 @@ import { vendorDir } from "../../scripts/fetch-vendor.ts";
 import { stand, standDir, tokenLabel } from "../../scripts/setup-stand.ts";
 import { clearSites, directoryRoutes, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
-import { envelopedInfo, verifyCms, verifyXml } from "./verify.ts";
+import { envelopedInfo, startTsa, verifyCms, verifyXml, type VerifyReport } from "./verify.ts";
 
 const webtools = "/sites/default/files/products/cades/demopage/webtools.html";
 // The page's NTF_LEVEL_ERROR.
@@ -87,6 +87,56 @@ test("signs CMS with the TSA field left empty and XMLDSig, both verifying; XAdES
   await expect(page.locator("#textarea_sign_signed_msg")).toHaveValue(/Попытка подписать XML: Подпись XAdES пока не поддерживается расширением \(0x80004001\)/);
   await page.locator("label:has(input[name=type-xades][value='0'])").click();
   expect(verifyXml(await withPin("#btnSign", "#textarea_sign_signed_msg")).valid).toBe(true);
+  expect(await errors()).toEqual([]);
+});
+
+const SIGNATURE_TIMESTAMP = "1.2.840.113549.1.9.16.2.14";
+
+// CAdES-T with the TSA field filled in (docs/PLAN.md, action 25): the PIN window names the service; the page's
+// settings go back to CAdES-BES and an empty field afterwards.
+async function signCadesT(tsaUrl: string): Promise<VerifyReport> {
+  await page.locator("#navbtnsign").click();
+  await expect(page.locator("#SelectSignCert option")).toHaveCount(1, { timeout: 30_000 });
+  await unfold("collapse-main-sign");
+  await page.locator("label[for=tab-sign-cms]").click();
+  await page.locator("label:has(input[name=type-cades][value='5'])").click();
+  try {
+    await page.locator("#textarea_tsa").fill(tsaUrl);
+    await page.locator("#textarea_sign_data").fill("Данные для подписи со штампом времени");
+    await page.locator("#textarea_sign_signed_msg").fill("");
+    await page.locator("#btnSign").click();
+    await expect(pinDialog(page)).toContainText(`Служба штампов времени: ${new URL(tsaUrl).host}`, { timeout: 30_000 });
+    await enterPin(page);
+    await expect(page.locator("#textarea_sign_signed_msg")).not.toHaveValue("", { timeout: 60_000 });
+    const signature = await page.locator("#textarea_sign_signed_msg").inputValue();
+    expect(signature).not.toMatch(/^Ошибка/);
+    return verifyCms(signature);
+  } finally {
+    await page.locator("#textarea_tsa").fill("");
+    await page.locator("label:has(input[name=type-cades][value='1'])").click();
+  }
+}
+
+test("signs CAdES-T with the stand's timestamp service in the TSA field, the timestamp checking out", async () => {
+  const tsa = await startTsa();
+  try {
+    const report = await signCadesT(tsa.url);
+    expect(report.unsigned_attributes).toEqual([SIGNATURE_TIMESTAMP]);
+    expect(report.checks).toMatchObject({ timestamp_imprint: true, timestamp_signature: true, timestamp_tsa_by_ca: true });
+    expect(report.valid).toBe(true);
+    expect(await errors()).toEqual([]);
+  } finally {
+    tsa.close();
+  }
+});
+
+// CryptoPro's test timestamp service, over the internet: its certificate is not the stand CA's, so the check stops
+// at the timestamp's own signature.
+test("signs CAdES-T with CryptoPro's test timestamp service (online)", async () => {
+  test.skip(!process.env.STAND_ONLINE, "needs the internet: set STAND_ONLINE=1");
+  const report = await signCadesT("http://testca2012.cryptopro.ru/tsp/tsp.srf");
+  expect(report.unsigned_attributes).toEqual([SIGNATURE_TIMESTAMP]);
+  expect(report.checks).toMatchObject({ message_digest: true, signature: true, certificate_by_ca: true, timestamp_imprint: true, timestamp_signature: true });
   expect(await errors()).toEqual([]);
 });
 
