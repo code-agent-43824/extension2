@@ -14,7 +14,8 @@ import { envelopedInfo, startTsa, verifyCms, verifyXml, type VerifyReport } from
 const webtools = "/sites/default/files/products/cades/demopage/webtools.html";
 // The page's NTF_LEVEL_ERROR.
 const ERROR_NOTIFICATION = 0x30;
-const tokenCertificateSerial = new X509Certificate(readFileSync(join(standDir, "user.pem"))).serialNumber.toUpperCase();
+// As enveloped_info.py prints it: the number in upper-case hex, without the leading zeros Node keeps.
+const tokenCertificateSerial = BigInt(`0x${new X509Certificate(readFileSync(join(standDir, "user.pem"))).serialNumber}`).toString(16).toUpperCase();
 
 let server: PageServer;
 let context: BrowserContext;
