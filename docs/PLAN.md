@@ -187,7 +187,7 @@
   `WORKLOG.md`, 2026-10-08). Версия 1.4.0. Сделано: `src/page/objects/csp-information.ts`,
   `src/page/objects/enveloped-data.ts`, модульные тесты, стенд `tests/stand/webtools.spec.ts`; совместимость с
   OpenSSL — опыт `tests/stand/openssl-gost.spec.ts` (`JOURNAL.md`); с КриптоПро — пункты 18–20 `MANUAL-CHECK.md`.
-- [~] **25. Замечания владельца к 1.4.0.** 2026-10-08. (а) Ошибка 147 при расшифровании ГОСТ 28147-89 на стенде:
+- [x] **25. Замечания владельца к 1.4.0.** 2026-10-08. (а) Ошибка 147 при расшифровании ГОСТ 28147-89 на стенде:
   в Рутокен Плагине она или в fake Рутокене — разобрано, `JOURNAL.md`. (б) Шифрованные сообщения для сертификата
   владельца (Рутокен Плагин — всеми пятью алгоритмами, OpenSSL — «Магмой» и «Кузнечиком», по 300 КБ): он
   расшифрует их КриптоПро CSP и нашим расширением на своём Рутокене. (в) CAdES-T: `SignCades` с `TSAAddress` через
@@ -212,7 +212,9 @@
   `tests/tools/tsa.py`, тесты `webtools.spec.ts` и `hash-signing.spec.ts`, со службой КриптоПро testca2012 — опыт
   `STAND_ONLINE=1` (`JOURNAL.md`); (г) — версия 1.6.0: `src/page/gost28147.ts`, `src/page/objects/enveloped-xml.ts`,
   модульные тесты, `tests/stand/enveloped-xml.spec.ts` (с OpenSSL — `STAND_OPENSSL_GOST=1`) и webtools.html;
-  сообщения владельцу в четырёх вариантах режима — пункт 22 `MANUAL-CHECK.md`.
+  сообщения владельцу в четырёх вариантах режима — пункт 22 `MANUAL-CHECK.md`; (д) — версия 1.7.0:
+  `src/page/objects/containers.ts`, модульные тесты, webtools.html на стенде (`webtools.spec.ts`), пункт 23
+  `MANUAL-CHECK.md`.
 - [ ] **26. XAdES.** Решение владельца 2026-10-08 («xades делай»). `SignedXML.Sign` для XAdES-BES
   (`CADESCOM_XADES_BES`) и XAdES-T (`CADESCOM_XADES_T`) со всеми тремя типами XML: к XMLDSig добавляются
   `xades:QualifyingProperties` по ETSI TS 101 903 v1.3.2 (время подписи; сертификат подписанта — его хеш,
