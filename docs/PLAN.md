@@ -215,7 +215,7 @@
   сообщения владельцу в четырёх вариантах режима — пункт 22 `MANUAL-CHECK.md`; (д) — версия 1.7.0:
   `src/page/objects/containers.ts`, модульные тесты, webtools.html на стенде (`webtools.spec.ts`), пункт 23
   `MANUAL-CHECK.md`.
-- [ ] **26. XAdES.** Решение владельца 2026-10-08 («xades делай»). `SignedXML.Sign` для XAdES-BES
+- [~] **26. XAdES.** Решение владельца 2026-10-08 («xades делай»). `SignedXML.Sign` для XAdES-BES
   (`CADESCOM_XADES_BES`) и XAdES-T (`CADESCOM_XADES_T`) со всеми тремя типами XML: к XMLDSig добавляются
   `xades:QualifyingProperties` по ETSI TS 101 903 v1.3.2 (время подписи; сертификат подписанта — его хеш,
   издатель и номер) и ссылка на `SignedProperties`. Образца XAdES плагина КриптоПро не нашлось, критерий — подпись
