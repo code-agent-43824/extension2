@@ -1,3 +1,4 @@
+import { children, expectTag, read } from "../asn1.ts";
 import { CadesError } from "../errors.ts";
 import { About } from "./about.ts";
 import { constants } from "../constants.ts";
@@ -41,15 +42,35 @@ class Oid {
   }
 }
 
-class PublicKey {
+// CAdESCOM.PublicKey. Length is the public key's own size in bits, as CryptoPro counts it: 512 for a 256-bit
+// GOST R 34.10-2012 key (the ALG_ID table of CryptoPro's demo pages, Code.js).
+export class PublicKey {
   readonly #algorithm: string;
+  readonly #length: number;
 
-  constructor(algorithm: string) {
+  constructor(algorithm: string, length: number) {
     this.#algorithm = algorithm;
+    this.#length = length;
   }
 
   get Algorithm(): Promise<Oid> {
     return Promise.resolve(new Oid(this.#algorithm));
+  }
+
+  get Length(): Promise<number> {
+    return Promise.resolve(this.#length);
+  }
+}
+
+// The key's size in bits: a GOST key's point, an RSA key's modulus; 0 for anything else.
+function publicKeyBits(x509: X509): number {
+  try {
+    const key = read(x509.publicKey);
+    if (key.tag === 0x04) return key.value.length * 8;
+    const modulus = children(expectTag(key, 0x30, "RSAPublicKey"))[0]!.value;
+    return (modulus[0] === 0 ? modulus.length - 1 : modulus.length) * 8;
+  } catch {
+    return 0;
   }
 }
 
@@ -250,7 +271,7 @@ export class Certificate {
   }
 
   PublicKey(): Promise<PublicKey> {
-    return Promise.resolve(new PublicKey(this.#x509.publicKeyAlgorithm));
+    return Promise.resolve(new PublicKey(this.#x509.publicKeyAlgorithm, publicKeyBits(this.#x509)));
   }
 
   // Only base64, as the real plug-in: 64-column lines, each ending in LF (2.0.15700 on the stand, docs/JOURNAL.md);

@@ -1,8 +1,8 @@
 import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
+import { Container, containers, Containers, NTE_BAD_KEYSET } from "./containers.ts";
 import type { Session } from "./session.ts";
 
-const E_NOTIMPL = 0x80004001;
 const E_INVALIDARG = 0x80070057;
 // What CryptoPro answers EnumContainers with when there are no containers; webtools.html then says so.
 const ERROR_NO_MORE_ITEMS = 0x80070103;
@@ -59,9 +59,10 @@ class ReaderModes {
   }
 }
 
-// X509Enrollment.CCspInformation. There is no CSP behind us: no settings and no CryptoPro containers, which
-// the Rutoken Plugin cannot see; the readers are the connected Rutokens. The demo page creates it before reading
-// the private key usage period and skips that part if creation fails.
+// X509Enrollment.CCspInformation. There is no CSP behind us: no settings; the readers are the connected Rutokens and
+// the containers their keys (src/page/objects/containers.ts), listed after each token's PIN. CryptoPro's own containers
+// on a Rutoken the Rutoken Plugin cannot see. The demo page creates this before reading the private key usage period
+// and skips that part if creation fails.
 export class CspInformation {
   readonly #session: Session;
   readonly #listeners = new Set<() => unknown>();
@@ -80,12 +81,22 @@ export class CspInformation {
     return Promise.resolve(undefined);
   }
 
-  ContainerByName(name: string): Promise<never> {
-    return Promise.reject(new CadesError(`Контейнер ${name} недоступен через Рутокен Плагин`, E_NOTIMPL));
+  // By its FQCN (\\.\<reader>\ID_…) or its name alone. Any other name is refused before the PIN: the demo page
+  // looks up the certificate's UniqueContainerName (\\.\Rutoken <serial>\<certId>) while showing its card.
+  async ContainerByName(name: unknown): Promise<Container> {
+    const wanted = String(name ?? "").toLowerCase();
+    const notFound = () => new CadesError(`Контейнер ${String(name)} не найден на подключённых Рутокенах`, NTE_BAD_KEYSET);
+    if (!/^(\\\\\.\\[^\\]+\\)?id_[^\\]+$/.test(wanted)) throw notFound();
+    const found = (await containers(this.#session)).find((container) => container.fqcn().toLowerCase() === wanted || container.name().toLowerCase() === wanted);
+    if (!found) throw notFound();
+    return found;
   }
 
-  EnumContainers(): Promise<never> {
-    return Promise.reject(new CadesError("No more data is available.", ERROR_NO_MORE_ITEMS));
+  // No key on any token: the code CryptoPro answers without containers, which webtools.html reports as none.
+  async EnumContainers(): Promise<Containers> {
+    const items = await containers(this.#session);
+    if (items.length === 0) throw new CadesError("No more data is available.", ERROR_NO_MORE_ITEMS);
+    return new Containers(items);
   }
 
   // A token that goes away while being read is left out.

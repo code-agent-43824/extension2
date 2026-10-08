@@ -30,9 +30,10 @@ describe("X509Enrollment.CCspInformation", () => {
     expect(await (await cspInformation(() => []).GetReaderModes()).Count).toBe(0);
   });
 
-  // webtools.html shows "Контейнеры отсутствуют." for this code, rather than an error.
-  it("has no CryptoPro containers to enumerate", async () => {
-    const error = await cspInformation(() => [0])
+  // webtools.html shows "Контейнеры отсутствуют." for this code, rather than an error; the keys of a connected token
+  // are containers (tests/unit/containers.test.ts).
+  it("has no containers to enumerate without a token", async () => {
+    const error = await cspInformation(() => [])
       .EnumContainers()
       .catch((e: unknown) => e);
     expect(getLastError(error)).toContain("0x80070103");

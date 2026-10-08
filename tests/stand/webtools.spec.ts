@@ -28,6 +28,10 @@ test.beforeAll(async () => {
   await enableSite(context, server.url);
   page = await openStandPage(context, `${server.url}${webtools}`);
   await expect(page.locator("#CspEnabledTxt")).toHaveText("Криптопровайдер загружен", { timeout: 30_000 });
+  // The page lists the containers as soon as it loads, and the token's keys come only after its PIN
+  // (docs/PLAN.md, action 25 (e)).
+  await expect(pinDialog(page)).toContainText("просит показать ключи на Рутокене.", { timeout: 30_000 });
+  await enterPin(page);
 });
 
 test.afterAll(async () => {
@@ -57,16 +61,32 @@ async function withPin(button: string, result: string): Promise<string> {
   return page.locator(result).inputValue();
 }
 
-test("the readers tab shows the token, the containers tab says there are none, and nothing raises an error", async () => {
+// The token's key is CryptoPro's container \\.\<reader>\ID_<CKA_ID>; the PIN the page's own listing asked for at
+// load covers the rest of the page.
+test("the readers tab shows the token and its key as a container; the containers tab describes it, with no new PIN", async () => {
   await page.locator("#navbtnreaders").click();
   const reader = page.locator("#UlReaders li");
   await expect(reader).toHaveCount(1);
   await expect(reader).toHaveText(new RegExp(`^ ?Aktiv Rutoken ECP \\d+/${tokenLabel}/Rutoken ECP [\\d.]+ \\d+$`));
   await reader.click();
   await expect(page.locator("#readerflags")).toContainText("CARRIER_FLAG_REMOVABLE");
-  await expect(page.locator("#readerconts")).toHaveText("Контейнеры: -");
+  const fqcn = /\\\\\.\\Aktiv Rutoken ECP \d+\\ID_[0-9a-f]+$/;
+  await expect(page.locator("#readerconts")).toHaveText(new RegExp(`^Контейнеры: ?• ${fqcn.source}`), { timeout: 30_000 });
+
   await page.locator("#navbtnconts").click();
-  await expect(page.locator("#boxNoCont")).toHaveText("Контейнеры отсутствуют.");
+  const container = page.locator("#UlContainer li");
+  await expect(container).toHaveCount(1, { timeout: 30_000 });
+  await expect(container).toHaveText(new RegExp(`^ ?${fqcn.source}`));
+  await container.click();
+  await expect(page.locator("#name")).toHaveText(/^Name: ID_[0-9a-f]+$/);
+  await expect(page.locator("#countKeys")).toHaveText("Ключей: 1");
+  const info = page.locator("#additionalContInfo");
+  await expect(info).toContainText("AT_KEYEXCHANGE");
+  await expect(info).toContainText("0xAA46 (DH 34.10-2012 256, Exchange, 512bit)");
+  await expect(info).toContainText("Сертификат в контейнере: true");
+  // The page shows the serial number as the certificate writes it, perhaps with a leading zero.
+  await expect(info).toContainText(tokenCertificateSerial);
+  await expect(pinDialog(page)).toHaveCount(0);
   expect(await errors()).toEqual([]);
 });
 

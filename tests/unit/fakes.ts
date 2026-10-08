@@ -86,6 +86,11 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     HASH_TYPE_GOST3411_12_512: thenable(6),
     KEY_SPEC_SIGN: thenable(7),
     KEY_SPEC_SIGN_AND_EXCHANGE: thenable(8),
+    KEY_INFO_ALGORITHM: thenable(21),
+    KEY_INFO_SPEC: thenable(22),
+    KEY_INFO_USAGE_PERIOD: thenable(23),
+    PUBLIC_KEY_ALGORITHM_GOST3410_2001: thenable(12),
+    PUBLIC_KEY_ALGORITHM_RSA: thenable(13),
     enumerateDevices: async () => [0],
     enumerateCertificates: async (_device, category) => (category === 1 ? certs.map((_, i) => `${certId}${i || ""}`) : []),
     getCertificate: async (_device, id) => certs[Number(id.slice(certId.length) || 0)]!,
@@ -119,6 +124,22 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
       return "ne:w1";
     },
     getKeyByCertificate: async () => "ke:y1",
+    // Two keys: the certificate's (2012-256, signature and exchange, no usage period) and one without a certificate
+    // (2012-512, signature only, valid until 2030-01-01).
+    enumerateKeys: async () => {
+      if (!loggedIn) throw new Error("19");
+      return ["ke:y1", "0a:bc"];
+    },
+    getKeyInfo: async (_device, keyId, option) => {
+      if (!loggedIn) throw new Error("19");
+      const first = keyId === "ke:y1";
+      return ({ 21: first ? 3 : 4, 22: first ? 8 : 7, 23: first ? {} : { notAfter: Date.UTC(2030, 0, 1) / 1000 } } as Record<number, unknown>)[option];
+    },
+    getPublicKeyValue: async (_device, keyId) => {
+      if (!loggedIn) throw new Error("19");
+      const size = keyId === "ke:y1" ? 64 : 128;
+      return Array.from({ length: size }, (_, i) => (i + (keyId === "ke:y1" ? 1 : 2)).toString(16).padStart(2, "0")).join(":");
+    },
     // 64 bytes: the hash that was signed, twice.
     rawSign: async (_device, _key, data) => `${data}:${data}`,
     deleteCertificate: async (_device, id) => {

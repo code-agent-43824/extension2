@@ -12,6 +12,7 @@ import { certificateLines, commonName } from "../signing.ts";
 import { singleDevice, withLogin } from "../token-login.ts";
 import { derToBase64 as base64, parseCertificate, pemToDer, type X509 } from "../x509.ts";
 import { About } from "./about.ts";
+import { forgetContainers } from "./containers.ts";
 import type { Session } from "./session.ts";
 
 const E_INVALIDARG = 0x80070057;
@@ -494,6 +495,7 @@ export class Enrollment {
         throw error;
       }
     });
+    forgetContainers(this.#session);
     return encodeRequest(pemToDer(pem), encoding);
   }
 
@@ -542,6 +544,7 @@ export class Enrollment {
         throw new CadesError(`На Рутокене нет ключа для сертификата «${commonName(certificate.subject)}»`, CRYPT_E_NOT_FOUND);
       }
     });
+    forgetContainers(this.#session);
     await this.#offerRoot(certificate, certificates);
   }
 

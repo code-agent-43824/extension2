@@ -27,6 +27,12 @@ export interface RutokenPlugin {
   readonly HASH_TYPE_GOST3411_12_512: PromiseLike<number>;
   readonly KEY_SPEC_SIGN: PromiseLike<number>;
   readonly KEY_SPEC_SIGN_AND_EXCHANGE: PromiseLike<number>;
+  // getKeyInfo's options: the key's PUBLIC_KEY_ALGORITHM_* value, its KEY_SPEC_* value, its usage period.
+  readonly KEY_INFO_ALGORITHM: PromiseLike<number>;
+  readonly KEY_INFO_SPEC: PromiseLike<number>;
+  readonly KEY_INFO_USAGE_PERIOD: PromiseLike<number>;
+  readonly PUBLIC_KEY_ALGORITHM_GOST3410_2001: PromiseLike<number>;
+  readonly PUBLIC_KEY_ALGORITHM_RSA: PromiseLike<number>;
   enumerateDevices(): PromiseLike<number[]>;
   enumerateCertificates(deviceId: number, category: number): PromiseLike<string[]>;
   getCertificate(deviceId: number, certId: string): PromiseLike<string>;
@@ -44,6 +50,14 @@ export interface RutokenPlugin {
   importCertificate(deviceId: number, certificate: string, category: number): PromiseLike<string>;
   // Needs a login; returns the key id.
   getKeyByCertificate(deviceId: number, certId: string): PromiseLike<string>;
+  // The ids of the token's private keys (their CKA_ID as colon-separated hex), "" for all of them. Needs a login.
+  enumerateKeys(deviceId: number, marker: string): PromiseLike<string[]>;
+  // A number for KEY_INFO_ALGORITHM and KEY_INFO_SPEC; for KEY_INFO_USAGE_PERIOD an object with notBefore and
+  // notAfter in Unix seconds, each there only when the key has it. Needs a login.
+  getKeyInfo(deviceId: number, keyId: string, option: number): PromiseLike<unknown>;
+  // The public key as colon-separated hex, laid out as in its certificate (x||y little-endian for GOST). Needs a
+  // login (checked on the stand, docs/JOURNAL.md 2026-10-08).
+  getPublicKeyValue(deviceId: number, keyId: string, options: Record<string, never>): PromiseLike<string>;
   // Signs a hash given as colon-separated hex (plain hex is refused); returns the signature as colon-separated
   // hex, laid out as in CMS (checked on the stand, docs/JOURNAL.md 2026-09-24). Needs a login.
   rawSign(deviceId: number, keyId: string, data: string, options: Record<string, never>): PromiseLike<string>;

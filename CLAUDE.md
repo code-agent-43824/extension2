@@ -71,7 +71,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   verification found; `objects/enveloped-data.ts` CMS encryption on the plugin's `cmsEncrypt`/`cmsDecrypt`;
   `objects/enveloped-xml.ts` XML encryption in CryptoPro's format, encrypted in the page, decrypted with the key the
   plugin's `derive` makes on the token;
-  `objects/csp-information.ts` the connected tokens as readers, `tokeninserted` by polling, no containers), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
+  `objects/csp-information.ts` the connected tokens as readers, `tokeninserted` by polling; `objects/containers.ts` their keys as CryptoPro's containers, read after each token's PIN once per page), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing, and `asn1.ts` writes DER too; `dn.ts` holds the CryptoPro name format
   sites match with regexes), `gost.ts` (hashes, GOST R 34.10 signature checks and VKO, on `@li0ard/gost`) +
