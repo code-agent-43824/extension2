@@ -1,5 +1,6 @@
 // CMS SignedData (RFC 5652) taken apart and its signers checked in the page, for CadesSignedData's
-// VerifyCades and VerifyHash. DER, and the BER indefinite lengths some producers write.
+// VerifyCades and VerifyHash; the recipients of an EnvelopedData, for CPEnvelopedData's decryption. DER, and
+// the BER indefinite lengths some producers (the Rutoken Plugin's cmsEncrypt among them) write.
 import { children, decodeOid, decodeTime, expectTag, octets, read, type Node } from "./asn1.ts";
 import { digest, digestOids, verifyHash, type DigestName } from "./gost.ts";
 import { parseCertificate, type X509 } from "./x509.ts";
@@ -14,11 +15,16 @@ export const ATTRIBUTE_SIGNATURE_TIMESTAMP = "1.2.840.113549.1.9.16.2.14";
 export const ATTRIBUTE_CERTIFICATE_REFS = "1.2.840.113549.1.9.16.2.21";
 export const ATTRIBUTE_REVOCATION_REFS = "1.2.840.113549.1.9.16.2.22";
 
-export interface SignerInfo {
-  // The signer's certificate by issuer and serial number (DER of the Name, the serial number's bytes), or by key id.
+// How a CMS message names a certificate: by issuer (DER of the Name) and serial number (the integer's bytes), or by
+// its subject key identifier.
+export interface CertificateId {
   issuer?: Uint8Array;
   serial?: Uint8Array;
   keyId?: Uint8Array;
+}
+
+// A signer, its certificate named as in CertificateId.
+export interface SignerInfo extends CertificateId {
   digestAlgorithm: string;
   // DER of the signed attributes as they are signed (a SET, not the [0] of SignerInfo), and each one's values.
   signedAttributesDer?: Uint8Array;
@@ -44,6 +50,11 @@ function attributes(node: Node): Map<string, Node[]> {
   return result;
 }
 
+function issuerAndSerial(node: Node): CertificateId {
+  const [issuer, serial] = children(node);
+  return { issuer: expectTag(issuer, 0x30, "issuer").der, serial: expectTag(serial, 0x02, "serialNumber").value };
+}
+
 function signerInfo(node: Node): SignerInfo {
   const fields = children(expectTag(node, 0x30, "SignerInfo"));
   const [, sid, digestAlgorithm] = fields;
@@ -55,9 +66,7 @@ function signerInfo(node: Node): SignerInfo {
     signature: new Uint8Array(),
   };
   if (sid?.tag === 0x30) {
-    const [issuer, serial] = children(sid);
-    info.issuer = expectTag(issuer, 0x30, "issuer").der;
-    info.serial = expectTag(serial, 0x02, "serialNumber").value;
+    Object.assign(info, issuerAndSerial(sid));
   } else {
     info.keyId = expectTag(sid, 0x80, "subjectKeyIdentifier").value;
   }
@@ -122,11 +131,40 @@ function subjectKeyId(certificate: X509): Uint8Array | undefined {
   return undefined;
 }
 
+export function identifies(id: CertificateId, certificate: X509): boolean {
+  if (id.keyId) return same(subjectKeyId(certificate) ?? new Uint8Array(), id.keyId);
+  return !!id.issuer && !!id.serial && same(certificate.issuerDer, id.issuer) && same(serialBytes(certificate), id.serial);
+}
+
 // The signer's certificate among `candidates` (the signature's own, then others the caller knows).
 export function findSignerCertificate(info: SignerInfo, candidates: readonly X509[]): X509 | undefined {
-  return candidates.find((certificate) =>
-    info.keyId ? same(subjectKeyId(certificate) ?? new Uint8Array(), info.keyId) : same(certificate.issuerDer, info.issuer!) && same(serialBytes(certificate), info.serial!),
-  );
+  return candidates.find((certificate) => identifies(info, certificate));
+}
+
+const ENVELOPED_DATA = "1.2.840.113549.1.7.3";
+
+// The recipients a CMS EnvelopedData (RFC 5652) is encrypted for: each key transport recipient, and each recipient
+// of a key agreement one; the other kinds name no certificate. Throws on anything that is not an EnvelopedData.
+export function envelopedRecipients(der: Uint8Array): CertificateId[] {
+  const [type, explicit] = children(expectTag(read(der), 0x30, "ContentInfo"));
+  if (decodeOid(expectTag(type, 0x06, "contentType").value) !== ENVELOPED_DATA) throw new Error("CMS: not an EnvelopedData");
+  const fields = children(expectTag(children(expectTag(explicit, 0xa0, "content"))[0], 0x30, "EnvelopedData"));
+  const result: CertificateId[] = [];
+  for (const info of children(expectTag(fields.find((field) => field.tag === 0x31), 0x31, "recipientInfos"))) {
+    if (info.tag === 0x30) {
+      // KeyTransRecipientInfo: the rid is an IssuerAndSerialNumber or a [0] subject key identifier.
+      const rid = children(info)[1]!;
+      result.push(rid.tag === 0x30 ? issuerAndSerial(rid) : { keyId: expectTag(rid, 0x80, "subjectKeyIdentifier").value });
+    } else if (info.tag === 0xa1) {
+      // KeyAgreeRecipientInfo: recipientEncryptedKeys come last; each rid is an IssuerAndSerialNumber or an rKeyId.
+      const keys = children(info).at(-1)!;
+      for (const key of children(expectTag(keys, 0x30, "recipientEncryptedKeys"))) {
+        const rid = children(key)[0]!;
+        result.push(rid.tag === 0x30 ? issuerAndSerial(rid) : { keyId: expectTag(children(expectTag(rid, 0xa0, "rKeyId"))[0], 0x04, "subjectKeyIdentifier").value });
+      }
+    }
+  }
+  return result;
 }
 
 export function signerDigest(info: SignerInfo): DigestName | undefined {

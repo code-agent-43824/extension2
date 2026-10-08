@@ -21,7 +21,8 @@ export function commonName(name: TokenCertificate["x509"]["subject"]): string {
   return cn?.value ?? formatName(name);
 }
 
-function bytes(count: number): string {
+// A data size for the PIN window.
+export function sizeText(count: number): string {
   return count < 1024 ? `${count} байт` : `${(count / 1024).toFixed(1)} КБ`;
 }
 
@@ -33,7 +34,7 @@ export async function signWithToken(session: Session, job: SignJob): Promise<str
   const deviceId = await findDevice(session.plugin, job.token.serial);
   if (deviceId === undefined) throw new CadesError("Рутокен с этим сертификатом не подключён.", SCARD_E_NO_SMARTCARD);
   const size = Math.floor((job.content.replace(/=+$/, "").length * 3) / 4);
-  const what = job.hash ? "Хеш данных" : bytes(size);
+  const what = job.hash ? "Хеш данных" : sizeText(size);
   const request = {
     origin: session.origin,
     action: job.hash ? "просит подписать хеш данных." : "просит подписать данные.",

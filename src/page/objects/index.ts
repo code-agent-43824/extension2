@@ -3,6 +3,7 @@ import { About } from "./about.ts";
 import { CadesTools } from "./cades-tools.ts";
 import { Certificate } from "./certificate.ts";
 import { CspInformation } from "./csp-information.ts";
+import { CPEnvelopedData } from "./enveloped-data.ts";
 import {
   CertificateRequestPkcs10,
   CspInformations,
@@ -31,6 +32,7 @@ const factories = new Map<string, Factory>([
   // Empty until Import; CryptoPro's demo pages import a CA's root to add it to the Root store.
   ["cadescom.certificate", (session) => new Certificate(session)],
   ["cadescom.cpattribute", () => new CPAttribute()],
+  ["cadescom.cpenvelopeddata", (session) => new CPEnvelopedData(session)],
   ["cadescom.cpsigner", () => new CPSigner()],
   ["cadescom.hasheddata", () => new HashedData()],
   ["cadescom.signedxml", (session) => new SignedXML(session)],
