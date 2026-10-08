@@ -2,6 +2,20 @@
 
 Новые записи сверху.
 
+## 2026-10-08 — Страница webtools.html
+
+**План.** Действие 24 `PLAN.md`. Что страница вызывает, видно из её `webtools.js`: вкладка «Считыватели» —
+`CCspInformation.GetReaderModes` и `addEventListener("tokeninserted")`, «Контейнеры» — `EnumContainers`, подпись —
+`CPSigner.propset_TSAAddress` и `SignCades`/`SignedXML.Sign`, шифрование — `CPEnvelopedData` (`Algorithm`,
+`Recipients`, `StreamEncrypt`) и `EnvelopedXML`, расшифрование — сначала `EnvelopedXML.Decrypt`, потом
+`CPEnvelopedData.StreamDecrypt`. Документация КриптоПро (docs.cryptopro.ru) описывает `StreamEncrypt`/`StreamDecrypt`
+как блочное шифрование Base64-строк; Рутокен Плагин 4.12.3 умеет CMS-шифрование (`cmsEncrypt`/`cmsDecrypt`) с ГОСТ
+28147-89, «Магмой» и «Кузнечиком» в режиме CTR-ACPKM, с имитовставкой OMAC и без — тем же набором, что у КриптоПро
+(25, 35, 36, 45, 46). Не берём: XML-шифрование — у Рутокен Плагина его нет, а образцов формата КриптоПро, чтобы
+собрать его самим и сверить, нет; CAdES-T — Рутокен Плагин сам ходит к службе штампов времени (`tspOptions` в
+`sign`, только HTTP), но проверка штампа в нашей `VerifyCades` пока не сделана — отдельный шаг; X Long и A нужны
+ответы OCSP и доказательства, которых Рутокен не делает; XAdES — отдельная работа над XML-подписью.
+
 ## 2026-10-08 — Адрес Рутокен Плагина для стенда
 
 **План.** Стенд не собирается: `Current` на download.rutoken.ru отдаёт 404 для 4.12.3 (`JOURNAL.md`).
