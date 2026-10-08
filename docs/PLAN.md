@@ -186,7 +186,7 @@
   расшифрование. XML-шифрование (`EnvelopedXML`), CAdES-T, X Long и A, XAdES в это действие не входят (почему —
   `WORKLOG.md`, 2026-10-08). Версия 1.4.0. Сделано: `src/page/objects/csp-information.ts`,
   `src/page/objects/enveloped-data.ts`, модульные тесты, стенд `tests/stand/webtools.spec.ts`; совместимость с
-  OpenSSL — опыт `tests/stand/openssl-gost.spec.ts` (`JOURNAL.md`); с КриптоПро — пункты 18–20 `MANUAL-CHECK.md`.
+  OpenSSL — опыт `tests/stand/openssl-gost.spec.ts` (`JOURNAL.md`); с КриптоПро — сценарии W7 и W11 `MANUAL-CHECK.md`.
 - [x] **25. Замечания владельца к 1.4.0.** 2026-10-08. (а) Ошибка 147 при расшифровании ГОСТ 28147-89 на стенде:
   в Рутокен Плагине она или в fake Рутокене — разобрано, `JOURNAL.md`. (б) Шифрованные сообщения для сертификата
   владельца (Рутокен Плагин — всеми пятью алгоритмами, OpenSSL — «Магмой» и «Кузнечиком», по 300 КБ): он
@@ -212,8 +212,8 @@
   `tests/tools/tsa.py`, тесты `webtools.spec.ts` и `hash-signing.spec.ts`, со службой КриптоПро testca2012 — опыт
   `STAND_ONLINE=1` (`JOURNAL.md`); (г) — версия 1.6.0: `src/page/gost28147.ts`, `src/page/objects/enveloped-xml.ts`,
   модульные тесты, `tests/stand/enveloped-xml.spec.ts` (с OpenSSL — `STAND_OPENSSL_GOST=1`) и webtools.html;
-  сообщения владельцу в четырёх вариантах режима — пункт 22 `MANUAL-CHECK.md`; (д) — версия 1.7.0:
-  `src/page/objects/containers.ts`, модульные тесты, webtools.html на стенде (`webtools.spec.ts`), пункт 23
+  сообщения владельцу в четырёх вариантах режима — сценарий W8 `MANUAL-CHECK.md`; (д) — версия 1.7.0:
+  `src/page/objects/containers.ts`, модульные тесты, webtools.html на стенде (`webtools.spec.ts`), сценарий W12
   `MANUAL-CHECK.md`.
 - [x] **26. XAdES.** Решение владельца 2026-10-08 («xades делай»). `SignedXML.Sign` для XAdES-BES
   (`CADESCOM_XADES_BES`) и XAdES-T (`CADESCOM_XADES_T`) со всеми тремя типами XML: к XMLDSig добавляются
@@ -227,14 +227,15 @@
   CAdES, владелец). Версия 1.8.0.
   Сделано, версия 1.8.0: `src/page/objects/xades.ts`, `src/page/tsp.ts`, `src/page/timestamps.ts`,
   `src/extension/timestamps.ts` и окно `tsa-access.html`; модульные тесты, стенд `tests/stand/xades.spec.ts` и
-  webtools.html, со службой КриптоПро — опыт `STAND_ONLINE=1` (`JOURNAL.md`); сверка с КриптоПро — пункт 24
+  webtools.html, со службой КриптоПро — опыт `STAND_ONLINE=1` (`JOURNAL.md`); сверка с КриптоПро — сценарий W6
   `MANUAL-CHECK.md`.
-- [~] **27. Сценарии проверки на webtools.html.** Владелец, 2026-10-08: «напиши мне сценарии проверки в webtools… кнопки
+- [x] **27. Сценарии проверки на webtools.html.** Владелец, 2026-10-08: «напиши мне сценарии проверки в webtools… кнопки
   везде я понажимал с реальным токеном и все отработало». Сценарии с ожидаемыми результатами — в `MANUAL-CHECK.md`;
   ожидаемое снято на стенде, хеши посчитаны независимо (Python, OpenSSL). Найдено при съёмке: подпись, начатая, пока
   после PIN при загрузке страницы ещё читаются ключи контейнеров, падает с ошибкой 19 Рутокен Плагина — выход с
   токена одной операции обрывает вход другой; исправление — операции с токеном по очереди (`token-login.ts`),
-  версия 1.8.1.
+  версия 1.8.1. Сделано: сценарии W1–W15 в `MANUAL-CHECK.md`, очередь в `withLogin` с модульным тестом и тестом
+  стенда (`webtools.spec.ts`).
 - [ ] **7. Прогон владельцем и исправления.** Подпись владельца проверяем `verify_cms.py` с сертификатом его УЦ.
 
 ## Значения по умолчанию, выбранные агентом
