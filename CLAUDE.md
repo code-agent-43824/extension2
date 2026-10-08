@@ -177,6 +177,10 @@ clicked) and turn sites on with `enableSite`, through the options page.
   software, and `lsb-cprocsp-ca-certs` downloads only after logging in to CryptoPro's site, so no pinned fetch can
   get them at build time. The package itself stays out of git.
 
+- **Containers are listed after the token's PIN.** Owner, 2026-10-08: "спрашивай пин". Reason: CryptoPro names a
+  key on a Rutoken `\\.\<reader>\ID_<CKA_ID>`, and the Rutoken Plugin gives key ids only after a login; the owner
+  prefers CryptoPro's names to a list without a PIN.
+
 - **CI publishes the releases** (the `release` job in `.github/workflows/ci.yml`). Owner, 2026-09-24: "make it so
   you can publish releases, and publish". Reason: agents cannot push tags through the proxy (AGENTS.md §12), so a
   workflow with `contents: write` creates the tag and the release after the checks pass on `main`. Each release is
