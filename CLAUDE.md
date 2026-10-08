@@ -38,6 +38,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `node scripts/setup-cryptopro-csp.ts <dir with .deb files>` (root), then
   `STAND_CRYPTOPRO_CSP=1 npx playwright test tests/stand/with-cryptopro-csp.spec.ts` — the opt-in local experiment with
   the real CryptoPro CSP and plug-in installed into the machine; the packages are licensed, never commit them.
+- `STAND_OPENSSL_GOST=1 npx playwright test tests/stand/openssl-gost.spec.ts` — after a build: the opt-in experiment
+  checking CMS encryption against OpenSSL's GOST engine (`apt install libengine-gost-openssl`), both directions.
 - `node scripts/import-roots.ts <lsb-cprocsp-ca-certs .deb>` — regenerate `src/extension/builtin-roots.ts` from a new
   CryptoPro CSP release (the package comes with the CSP download, after logging in to CryptoPro's site).
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
@@ -63,11 +65,12 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
   case-insensitively by ProgID; `objects/cades-tools.ts` the demo pages' Android check; `objects/hashed-data.ts` hashes in the page; `objects/signed-xml.ts`
   makes XMLDSig with xmldsigjs' canonicalizer and `rawSign`, and verifies it; `objects/signers.ts` the signers a
-  verification found), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
+  verification found; `objects/enveloped-data.ts` CMS encryption on the plugin's `cmsEncrypt`/`cmsDecrypt`;
+  `objects/csp-information.ts` the connected tokens as readers, `tokeninserted` by polling, no containers), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing; `dn.ts` holds the CryptoPro name format sites match with regexes),
   `gost.ts` (hashes and GOST R 34.10 signature checks, on `@li0ard/gost`) + `cms.ts` (SignedData parsing and signer
-  checks, BER included) + `chain.ts` (chains to the root store; `validationChain` for `IsValid()` in the extended mode) — verification never touches the plugin,
+  checks, BER included; the recipients of an EnvelopedData) + `chain.ts` (chains to the root store; `validationChain` for `IsValid()` in the extended mode) — verification never touches the plugin,
   `signing.ts` (the plugin's `sign`, data or a hash) + `token-login.ts` (PIN window, login, logout, the single connected token) +
   `pin-dialog.ts` (the PIN window, in a shadow root), `roots.ts` (asks the bridge for the "Root" and "CA" stores and adds to them), `root-links.ts` (after
   InstallResponse's CERT_E_UNTRUSTEDROOT, a click on the CA page's link to its certificate adds the root through
@@ -98,10 +101,11 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `verification.spec.ts` verifies ours and CryptoPro's signatures in the page; `roots.spec.ts` drives the root store
   on the options page; `validity.spec.ts` the extended validity check and the demo page adding its root; `enrollment.spec.ts` the
   certsrv calls offline on a copy of the token, with the question about the root; `with-cryptopro-csp.spec.ts` (opt-in)
-  does the same with the real CryptoPro plug-in behind it; `verify.ts` runs the
-  independent verifier on a signature.
+  does the same with the real CryptoPro plug-in behind it; `webtools.spec.ts` runs CryptoPro's `webtools.html`
+  (readers, signing, encryption); `openssl-gost.spec.ts` (opt-in) checks encryption against OpenSSL's GOST engine;
+  `verify.ts` runs the independent tools on a signature or an encrypted message.
 - `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier,
-  `verify_xmldsig.py` XMLDSig verifier on lxml),
+  `verify_xmldsig.py` XMLDSig verifier on lxml, `enveloped_info.py` what an EnvelopedData is encrypted with and for),
   hash-pinned in `requirements.txt`.
 
 Stand pitfalls (details in `docs/JOURNAL.md`): the native host finds the plugin only via `$HOME/.mozilla/plugins`,

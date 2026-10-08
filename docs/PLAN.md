@@ -171,7 +171,7 @@
   только вторая галочка. Версия 1.3.1. Сделано: (а) `src/page/root-links.ts`, стенд `enrollment.spec.ts` и
   настоящий testgost2012; (б) незаконченное включение доделывает фоновый скрипт, проверено модульным тестом, на
   стенде окно Chrome не нажать.
-- [~] **24. Страница КриптоПро webtools.html.** Владелец 2026-10-08 нашёл на
+- [x] **24. Страница КриптоПро webtools.html.** Владелец 2026-10-08 нашёл на
   <https://www.cryptopro.ru/sites/default/files/products/cades/demopage/webtools.html> ошибки: `GetReaderModes` и
   `addEventListener` у `X509Enrollment.CCspInformation` (вкладка «Считыватели»), `propset_TSAAddress` у
   `CAdESCOM.CPSigner` (подпись), `CAdESCOM.CPEnvelopedData` не поддерживается (шифрование). Делаем:
@@ -184,7 +184,9 @@
   `StreamEncrypt`, `StreamDecrypt`; ГОСТ 28147-89, «Магма» и «Кузнечик», с имитовставкой и без. (д) Страница
   webtools — в `vendor-lock.json`, тест стенда: без ошибок на вкладках, подпись CMS с пустым TSA, шифрование и
   расшифрование. XML-шифрование (`EnvelopedXML`), CAdES-T, X Long и A, XAdES в это действие не входят (почему —
-  `WORKLOG.md`, 2026-10-08). Версия 1.4.0.
+  `WORKLOG.md`, 2026-10-08). Версия 1.4.0. Сделано: `src/page/objects/csp-information.ts`,
+  `src/page/objects/enveloped-data.ts`, модульные тесты, стенд `tests/stand/webtools.spec.ts`; совместимость с
+  OpenSSL — опыт `tests/stand/openssl-gost.spec.ts` (`JOURNAL.md`); с КриптоПро — пункты 18–20 `MANUAL-CHECK.md`.
 - [ ] **7. Прогон владельцем и исправления.** Подпись владельца проверяем `verify_cms.py` с сертификатом его УЦ.
 
 ## Значения по умолчанию, выбранные агентом

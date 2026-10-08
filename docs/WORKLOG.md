@@ -16,6 +16,18 @@
 `sign`, только HTTP), но проверка штампа в нашей `VerifyCades` пока не сделана — отдельный шаг; X Long и A нужны
 ответы OCSP и доказательства, которых Рутокен не делает; XAdES — отдельная работа над XML-подписью.
 
+**Сделано.** Версия 1.4.0. `CPSigner.TSAAddress`; `CCspInformation.GetReaderModes`, `addEventListener` (опрос списка
+токенов раз в 2 секунды), `EnumContainers` (`0x80070103`); `SignedXML.Sign` для XAdES — `0x80004001` с объяснением;
+`CAdESCOM.CPEnvelopedData` (`src/page/objects/enveloped-data.ts`), получатели сообщения ищутся в `cms.ts`.
+webtools.html закреплена в `vendor-lock.json`, тест стенда `webtools.spec.ts`: вкладки без ошибок, подписи CMS и
+XMLDSig проходят проверяльщики, шифрование и расшифрование «Магмой» и «Кузнечиком», 28147-89 — только
+шифрование (fake Рутокен его не расшифровывает). Состав сообщения проверяет новый `tests/tools/enveloped_info.py`
+(asn1crypto). Опыт с OpenSSL и GOST-движком — `openssl-gost.spec.ts` и `JOURNAL.md`. Модульные тесты 159, стенд
+50 из 50 (20 опциональных пропущены), опыт с OpenSSL 9 из 9.
+
+**Дальше.** Проверка владельцем пунктов 18–20 `MANUAL-CHECK.md` на настоящем Рутокене и, если есть, с КриптоПро;
+перенос ветки в `main` — с его согласия.
+
 ## 2026-10-08 — Адрес Рутокен Плагина для стенда
 
 **План.** Стенд не собирается: `Current` на download.rutoken.ru отдаёт 404 для 4.12.3 (`JOURNAL.md`).
