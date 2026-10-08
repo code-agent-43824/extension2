@@ -215,7 +215,7 @@
   сообщения владельцу в четырёх вариантах режима — пункт 22 `MANUAL-CHECK.md`; (д) — версия 1.7.0:
   `src/page/objects/containers.ts`, модульные тесты, webtools.html на стенде (`webtools.spec.ts`), пункт 23
   `MANUAL-CHECK.md`.
-- [~] **26. XAdES.** Решение владельца 2026-10-08 («xades делай»). `SignedXML.Sign` для XAdES-BES
+- [x] **26. XAdES.** Решение владельца 2026-10-08 («xades делай»). `SignedXML.Sign` для XAdES-BES
   (`CADESCOM_XADES_BES`) и XAdES-T (`CADESCOM_XADES_T`) со всеми тремя типами XML: к XMLDSig добавляются
   `xades:QualifyingProperties` по ETSI TS 101 903 v1.3.2 (время подписи; сертификат подписанта — его хеш,
   издатель и номер) и ссылка на `SignedProperties`. Образца XAdES плагина КриптоПро не нашлось, критерий — подпись
@@ -225,6 +225,10 @@
   содержимое; доступ к адресу службы — разрешение Chrome, которое расширение просит в своём окне один раз на службу.
   `Verify` подписей XAdES — как XMLDSig, со ссылкой на `SignedProperties`. XAdES-X Long Type 1 — нет (как X Long у
   CAdES, владелец). Версия 1.8.0.
+  Сделано, версия 1.8.0: `src/page/objects/xades.ts`, `src/page/tsp.ts`, `src/page/timestamps.ts`,
+  `src/extension/timestamps.ts` и окно `tsa-access.html`; модульные тесты, стенд `tests/stand/xades.spec.ts` и
+  webtools.html, со службой КриптоПро — опыт `STAND_ONLINE=1` (`JOURNAL.md`); сверка с КриптоПро — пункт 24
+  `MANUAL-CHECK.md`.
 - [ ] **7. Прогон владельцем и исправления.** Подпись владельца проверяем `verify_cms.py` с сертификатом его УЦ.
 
 ## Значения по умолчанию, выбранные агентом
