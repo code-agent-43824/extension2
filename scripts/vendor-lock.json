@@ -1,7 +1,7 @@
 {
   "rutoken-plugin": {
     "file": "libnpRutokenPlugin_4.12.3-1_amd64.deb",
-    "url": "https://download.rutoken.ru/Rutoken_Plugin/Current/Linux/libnpRutokenPlugin_4.12.3-1_amd64.deb",
+    "url": "https://download.rutoken.ru/Rutoken_Plugin/4.12.3.0/Linux/libnpRutokenPlugin_4.12.3-1_amd64.deb",
     "sha256": "784e5e13ee04c25568befed9791727b5d9a0987db3d052dac395ac0a64aefe74"
   },
   "rutoken-adapter": {
