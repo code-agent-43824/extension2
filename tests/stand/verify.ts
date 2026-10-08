@@ -1,4 +1,5 @@
-// Runs the independent Python verifiers (tests/tools/verify_cms.py, verify_xmldsig.py) on signatures.
+// Runs the independent Python tools on what the extension made: the verifiers (tests/tools/verify_cms.py,
+// verify_xmldsig.py) on signatures, enveloped_info.py on encrypted messages.
 import { spawnSync } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -48,6 +49,25 @@ export function verifyXml(xml: string, caPem = join(caDir, "ca.pem")): XmlVerify
     const run = spawnSync(venvPython, [join(repoRoot, "tests", "tools", "verify_xmldsig.py"), xmlPath, caPem], { encoding: "utf8" });
     if (!run.stdout.trim()) throw new Error(`verify_xmldsig.py failed: ${run.stderr}`);
     return JSON.parse(run.stdout) as XmlVerifyReport;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+export interface EnvelopedInfo {
+  content_encryption: string;
+  recipients: { kind: string; key_encryption?: string; serial?: string; key_id?: string }[];
+}
+
+// What tests/tools/enveloped_info.py reads from a CMS EnvelopedData: the algorithms and the recipients.
+export function envelopedInfo(cmsBase64: string): EnvelopedInfo {
+  const dir = mkdtempSync(join(tmpdir(), "enveloped-"));
+  try {
+    const cmsPath = join(dir, "cms.b64");
+    writeFileSync(cmsPath, cmsBase64);
+    const run = spawnSync(venvPython, [join(repoRoot, "tests", "tools", "enveloped_info.py"), cmsPath], { encoding: "utf8" });
+    if (run.status !== 0) throw new Error(`enveloped_info.py failed: ${run.stderr}`);
+    return JSON.parse(run.stdout) as EnvelopedInfo;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

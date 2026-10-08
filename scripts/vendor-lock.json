@@ -88,5 +88,25 @@
     "file": "cryptopro/products/cades/demopage/verify.html",
     "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/verify.html",
     "sha256": "396361091c2c189a5b6ab9d2e2354283367728e2e86e82f63353b42ef234eac5"
+  },
+  "cryptopro-demopage-webtools-html": {
+    "file": "cryptopro/products/cades/demopage/webtools.html",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/webtools.html",
+    "sha256": "d8ec0a2428f2e4e7da37482924256401c5c229809ad71a9289e581927e761af2"
+  },
+  "cryptopro-demopage-webtools-js": {
+    "file": "cryptopro/products/cades/demopage/webtools.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/webtools.js",
+    "sha256": "6021720b4c5d9c69b1aa18eea3188c35420d23cd9e1d2b4582b38eb5b2659cac"
+  },
+  "cryptopro-demopage-webtools-css": {
+    "file": "cryptopro/products/cades/demopage/webtools.css",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/webtools.css",
+    "sha256": "4f261fb900501a1660fad84dece3523cd039de01fb7f3db83a20f94fdb2673c2"
+  },
+  "cryptopro-demopage-basic_certificates-js": {
+    "file": "cryptopro/products/cades/demopage/basic_certificates.js",
+    "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/basic_certificates.js",
+    "sha256": "d4bc3e108ccdc5e0b2e6af4214766fa4a782402b9a0bcbe5cc8aac39c2c4e82e"
   }
 }
