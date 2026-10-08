@@ -5,6 +5,9 @@ import { tokenOf } from "./certificate.ts";
 
 const E_INVALIDARG = 0x80070057;
 const CERT_E_EXPIRED = 0x800b0101;
+// What CryptoPro's plug-in 2.0.15700 answers a type needing a timestamp when TSAAddress is empty (docs/JOURNAL.md,
+// 2026-09-24).
+const TSP_URL_NOT_SPECIFIED = 0xc2100121;
 
 // CADESCOM.CPAttribute. Kept so sites can build their attribute lists; what reaches the signature
 // is decided in CadesSignedData (docs/PLAN.md of stage 4).
@@ -130,4 +133,16 @@ export function signerCertificate(signer: unknown): { token: TokenCertificate; o
     }
   }
   return { token, options, tsaAddress };
+}
+
+// The signer's TSAAddress for a signature that needs a timestamp (CAdES-T, XAdES-T).
+export function tsaUrl(address: string): URL {
+  if (!address.trim()) throw new CadesError("The URL of TSP service is not specified", TSP_URL_NOT_SPECIFIED);
+  try {
+    const url = new URL(address.trim());
+    if (url.protocol === "http:" || url.protocol === "https:") return url;
+  } catch {
+    // Reported below with the address as given.
+  }
+  throw new CadesError(`Неверный адрес службы штампов времени: ${address}`, E_INVALIDARG);
 }

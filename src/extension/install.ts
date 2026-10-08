@@ -6,6 +6,7 @@
 // it off or remove it.
 import type { AddStore } from "../page/roots.ts";
 import { parseCertificate, type X509 } from "../page/x509.ts";
+import { PromptWindows } from "./prompt-windows.ts";
 import { base64ToDer, certificatesInFile, installCertificate, isSelfSigned } from "./roots.ts";
 import { enabledSites, siteOf } from "./sites.ts";
 
@@ -50,10 +51,11 @@ export function needsConfirmation(store: AddStore, certificate: X509): boolean {
 
 export class Installer {
   readonly #api: Api;
-  readonly #pending = new Map<string, { details: ConfirmDetails; windowId?: number; resolve: (install: boolean) => void }>();
+  readonly #windows: PromptWindows<ConfirmDetails>;
 
   constructor(api: Api = chrome) {
     this.#api = api;
+    this.#windows = new PromptWindows("confirm.html", { width: 520, height: 600 }, api);
   }
 
   // A request from the content script of the page at `url`.
@@ -70,43 +72,23 @@ export class Installer {
     } catch {
       return failure("The parameter is incorrect.", E_INVALIDARG);
     }
-    if (needsConfirmation(store, parseCertificate(der)) && !(await this.#confirm({ origin, store, certificate: String(certificate) }))) {
+    if (needsConfirmation(store, parseCertificate(der)) && !(await this.#windows.ask({ origin, store, certificate: String(certificate) }))) {
       return failure("Пользователь не разрешил добавить сертификат.", ERROR_CANCELLED);
     }
     await installCertificate(der, this.#api);
     return {};
   }
 
-  #confirm(details: ConfirmDetails): Promise<boolean> {
-    const id = crypto.randomUUID();
-    return new Promise((resolve) => {
-      const request: { details: ConfirmDetails; windowId?: number; resolve: (install: boolean) => void } = {
-        details,
-        resolve: (install) => {
-          this.#pending.delete(id);
-          resolve(install);
-        },
-      };
-      this.#pending.set(id, request);
-      this.#api.windows.create({ url: this.#api.runtime.getURL(`confirm.html?id=${id}`), type: "popup", width: 520, height: 600 }).then(
-        (window) => {
-          request.windowId = window?.id;
-        },
-        () => request.resolve(false),
-      );
-    });
-  }
-
   details(id: unknown): ConfirmDetails | undefined {
-    return this.#pending.get(String(id))?.details;
+    return this.#windows.details(id);
   }
 
   answer(id: unknown, install: boolean): void {
-    this.#pending.get(String(id))?.resolve(install);
+    this.#windows.answer(id, install);
   }
 
   // A window closed without an answer is a no.
   windowClosed(windowId: number): void {
-    for (const request of [...this.#pending.values()]) if (request.windowId === windowId) request.resolve(false);
+    this.#windows.windowClosed(windowId);
   }
 }

@@ -52,17 +52,39 @@ describe("CAdESCOM.SignedXML", () => {
     expect(await xml.Sign(await signer(session))).toBe("");
   });
 
-  it("refuses XAdES, which the real plug-in makes, with a reason, before the PIN", async () => {
+  it("refuses XAdES-X Long Type 1, its default alias and XAdES-A with a reason, before the PIN", async () => {
     const { plugin, dialog, session } = setup();
     const xml = signedXml(session);
     await xml.propset_Content("<r/>");
-    // webtools.html's default: XAdES-BES, enveloped.
-    for (const type of [constants.CADESCOM_XADES_BES, constants.CADESCOM_XADES_T | constants.CADESCOM_XML_SIGNATURE_TYPE_ENVELOPING, constants.CADESCOM_XADES_X_LONG_TYPE_1]) {
+    const cases: [number, string][] = [
+      [constants.CADESCOM_XADES_X_LONG_TYPE_1, "XAdES-X Long Type 1"],
+      [constants.CADESCOM_XADES_DEFAULT | constants.CADESCOM_XML_SIGNATURE_TYPE_ENVELOPING, "XAdES-X Long Type 1"],
+      // CADESCOM_XADES_A, which cadesplugin_api.js does not define.
+      [0x7d0 | constants.CADESCOM_XML_SIGNATURE_TYPE_TEMPLATE, "XAdES-A"],
+    ];
+    for (const [type, name] of cases) {
       await xml.propset_SignatureType(type);
-      await expect(xml.Sign(await signer(session))).rejects.toMatchObject({ number: E_NOTIMPL, message: expect.stringContaining("XAdES") });
+      await expect(xml.Sign(await signer(session))).rejects.toMatchObject({ number: E_NOTIMPL, message: expect.stringContaining(`${name} не поддерживается расширением: доступны XAdES-BES и XAdES-T`) });
     }
     expect(dialog.requests).toEqual([]);
     expect(plugin.calls.login).toEqual([]);
+  });
+
+  it("asks XAdES-T for the timestamp service's address as the real plug-in does, before the PIN and the access", async () => {
+    const plugin = fakePlugin();
+    const dialog = new FakePinDialog([]);
+    const tsaAccess: string[] = [];
+    const session = fakeSession(plugin, dialog, [], [], { tsaAccess });
+    const xml = signedXml(session);
+    await xml.propset_Content("<r/>");
+    await xml.propset_SignatureType(constants.CADESCOM_XADES_T);
+    const sign = await signer(session);
+    await expect(xml.Sign(sign)).rejects.toMatchObject({ number: 0xc2100121 });
+    for (const address of ["not an address", "ftp://tsa.example/tsp"]) {
+      await sign.propset_TSAAddress(address);
+      await expect(xml.Sign(sign)).rejects.toMatchObject({ number: E_INVALIDARG, message: expect.stringContaining(address) });
+    }
+    expect([tsaAccess, dialog.requests, plugin.calls.login]).toEqual([[], [], []]);
   });
 
   it("refuses a missing signer, a signature method of another key and unknown methods, before the PIN", async () => {

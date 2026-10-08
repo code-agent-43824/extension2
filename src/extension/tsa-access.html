@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <title>Доступ к службе штампов времени</title>
+  <link rel="stylesheet" href="ui.css">
+</head>
+<body class="confirm">
+  <div class="warning">
+    <svg class="icon" viewBox="0 0 48 48" width="48" height="48" aria-hidden="true">
+      <circle cx="24" cy="24" r="21" fill="#e6eefc" stroke="#1a3d8f" stroke-width="2"/>
+      <path d="M24 11v14l9 6" fill="none" stroke="#1a3d8f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    <div>
+      <p id="request"></p>
+      <p id="what"></p>
+      <p id="where" class="note"></p>
+      <p class="question">Разрешить расширению обращаться к этой службе?</p>
+    </div>
+  </div>
+  <div class="toolbar">
+    <button type="button" name="allow" disabled>Разрешить</button>
+    <button type="button" name="cancel">Отмена</button>
+  </div>
+  <script src="tsa-access.js"></script>
+</body>
+</html>

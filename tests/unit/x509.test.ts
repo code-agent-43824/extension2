@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
-import { decodeTime } from "../../src/page/asn1.ts";
-import { formatName } from "../../src/page/dn.ts";
+import { decodeTime, encode, encodeOid } from "../../src/page/asn1.ts";
+import { formatName, rfc4514 } from "../../src/page/dn.ts";
 import { sha1 } from "../../src/page/sha1.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
 
@@ -55,6 +55,32 @@ describe("formatName", () => {
 
   it("joins a multi-valued RDN with +", () => {
     expect(formatName([[{ oid: "2.5.4.3", value: "a" }, { oid: "2.5.4.11", value: "b" }]])).toBe("CN=a + OU=b");
+  });
+});
+
+describe("rfc4514", () => {
+  const utf8 = (text: string) => encode(0x0c, new TextEncoder().encode(text));
+  const attribute = (oid: string, value: Uint8Array) => encode(0x30, encode(0x06, encodeOid(oid)), value);
+  const nameDer = (...rdns: Uint8Array[][]) => encode(0x30, ...rdns.map((rdn) => encode(0x31, ...rdn)));
+
+  it("reverses DER order, keeps RFC 4514's short names and writes other types as the OID and the value's BER", () => {
+    const der = nameDer(
+      [attribute("2.5.4.6", encode(0x13, new TextEncoder().encode("RU")))],
+      [attribute("1.2.643.100.4", encode(0x12, new TextEncoder().encode("7710474375")))],
+      [attribute("2.5.4.3", utf8("Минцифры России"))],
+    );
+    expect(rfc4514(der)).toBe("CN=Минцифры России,1.2.643.100.4=#120A37373130343734333735,C=RU");
+    expect(rfc4514(parseCertificate(pemToDer(readFileSync(userPem, "utf8"))).issuerDer)).toBe("CN=Stand Test CA,O=Стенд,C=RU");
+  });
+
+  it("escapes the special characters, a leading # or space and a trailing space; joins a multi-valued RDN with +", () => {
+    expect(rfc4514(nameDer([attribute("2.5.4.10", utf8('ООО "Рога", +;<>\\'))]))).toBe('O=ООО \\"Рога\\"\\, \\+\\;\\<\\>\\\\');
+    expect(rfc4514(nameDer([attribute("2.5.4.3", utf8("#1 "))]))).toBe("CN=\\#1\\ ");
+    expect(rfc4514(nameDer([attribute("2.5.4.3", utf8("a")), attribute("2.5.4.11", utf8("b"))]))).toBe("CN=a+OU=b");
+  });
+
+  it("writes a short-named attribute of a non-string type as BER too", () => {
+    expect(rfc4514(nameDer([attribute("2.5.4.3", encode(0x04, Uint8Array.of(1, 2)))]))).toBe("2.5.4.3=#04020102");
   });
 });
 

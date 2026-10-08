@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { vendorDir } from "../../scripts/fetch-vendor.ts";
 import { stand, standDir, tokenLabel } from "../../scripts/setup-stand.ts";
-import { clearSites, directoryRoutes, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { clearSites, directoryRoutes, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
 import { envelopedInfo, startTsa, verifyCms, verifyXml, type VerifyReport } from "./verify.ts";
 
@@ -90,7 +90,7 @@ test("the readers tab shows the token and its key as a container; the containers
   expect(await errors()).toEqual([]);
 });
 
-test("signs CMS with the TSA field left empty and XMLDSig, both verifying; XAdES is refused with a reason", async () => {
+test("signs CMS with the TSA field left empty, and XML as XAdES-BES, the page's default, and XMLDSig, all verifying", async () => {
   await page.locator("#navbtnsign").click();
   await expect(page.locator("#SelectSignCert option")).toHaveCount(1, { timeout: 30_000 });
   await expect(page.locator("#textarea_tsa")).toHaveValue("");
@@ -103,12 +103,80 @@ test("signs CMS with the TSA field left empty and XMLDSig, both verifying; XAdES
   await page.locator("label[for=tab-sign-xml]").click();
   await page.locator("#textarea_sign_data").fill("<document>Документ</document>");
   // XAdES-BES is the page's default for XML.
-  await page.locator("#textarea_sign_signed_msg").fill("");
-  await page.locator("#btnSign").click();
-  await expect(page.locator("#textarea_sign_signed_msg")).toHaveValue(/Попытка подписать XML: Подпись XAdES пока не поддерживается расширением \(0x80004001\)/);
+  const xades = await withPin("#btnSign", "#textarea_sign_signed_msg");
+  expect(xades).toContain("<xades:SignedProperties Id=");
+  const report = verifyXml(xades);
+  expect(report.signatures[0]!.checks).toMatchObject({ xades_signed_properties_covered: true, xades_certificate_digest: true, xades_issuer_serial: true });
+  expect(report.valid).toBe(true);
   await page.locator("label:has(input[name=type-xades][value='0'])").click();
-  expect(verifyXml(await withPin("#btnSign", "#textarea_sign_signed_msg")).valid).toBe(true);
+  try {
+    const xmldsig = await withPin("#btnSign", "#textarea_sign_signed_msg");
+    expect(xmldsig).not.toContain("xades");
+    expect(verifyXml(xmldsig).valid).toBe(true);
+  } finally {
+    await page.locator("label:has(input[name=type-xades][value='32'])").click();
+  }
   expect(await errors()).toEqual([]);
+});
+
+// XAdES-T with the TSA field filled in (docs/PLAN.md, action 26): the user says yes to the stand's service in the
+// extension's window (Chrome itself does not ask: the stand build has access to 127.0.0.1), the service worker asks
+// the service; the page's own verification tab takes the result.
+test("signs XAdES-T with the stand's timestamp service in the TSA field and verifies it on the page's verification tab", async () => {
+  const tsa = await startTsa();
+  await page.locator("#navbtnsign").click();
+  await expect(page.locator("#SelectSignCert option")).toHaveCount(1, { timeout: 30_000 });
+  await unfold("collapse-main-sign");
+  await page.locator("label[for=tab-sign-xml]").click();
+  await page.locator("label:has(input[name=type-xades][value='80'])").click();
+  let signed: string;
+  try {
+    await page.locator("#textarea_tsa").fill(tsa.url);
+    await page.locator("#textarea_sign_data").fill("<document>Документ со штампом</document>");
+    await page.locator("#textarea_sign_signed_msg").fill("");
+    const origin = await extensionOrigin(context);
+    const window = context.waitForEvent("page", (candidate) => candidate.url().startsWith(`${origin}/tsa-access.html`));
+    await page.locator("#btnSign").click();
+    await (await window).locator("button[name=allow]").click();
+    await expect(pinDialog(page)).toContainText(`Служба штампов времени: ${new URL(tsa.url).host}`, { timeout: 30_000 });
+    await enterPin(page);
+    await expect(page.locator("#textarea_sign_signed_msg")).not.toHaveValue("", { timeout: 60_000 });
+    signed = await page.locator("#textarea_sign_signed_msg").inputValue();
+  } finally {
+    tsa.close();
+    await page.locator("#textarea_tsa").fill("");
+    await page.locator("label:has(input[name=type-xades][value='32'])").click();
+  }
+  expect(signed).toContain("<xades:EncapsulatedTimeStamp>");
+  const report = verifyXml(signed);
+  expect(report.signatures[0]!.checks).toMatchObject({ timestamp_imprint: true, timestamp_signature: true, timestamp_tsa_by_ca: true });
+  expect(report.valid).toBe(true);
+
+  await page.locator("#navbtnverify").click();
+  await page.locator("#textarea_verify_signed_msg").fill(signed);
+  await page.locator("#btnVerify").click();
+  // The page writes the signers over its first line, the type and result.
+  await expect(page.locator("#fieldVerifyResult")).toContainText("Владелец: CN=Stand User", { timeout: 30_000 });
+  await expect(page.locator("#fieldVerifyResult")).toContainText("Статус подписи: Подпись проверена успешно");
+  expect(await errors()).toEqual([]);
+});
+
+test("refuses XAdES-X Long Type 1 with a reason", async () => {
+  await page.locator("#navbtnsign").click();
+  await unfold("collapse-main-sign");
+  await page.locator("label[for=tab-sign-xml]").click();
+  await page.locator("label:has(input[name=type-xades][value='1488'])").click();
+  try {
+    await page.locator("#textarea_sign_data").fill("<document/>");
+    await page.locator("#textarea_sign_signed_msg").fill("");
+    await page.locator("#btnSign").click();
+    await expect(page.locator("#textarea_sign_signed_msg")).toHaveValue(
+      /Попытка подписать XML: Подпись XAdES-X Long Type 1 не поддерживается расширением: доступны XAdES-BES и XAdES-T \(0x80004001\)/,
+    );
+  } finally {
+    await page.locator("label:has(input[name=type-xades][value='32'])").click();
+  }
+  await expect(pinDialog(page)).toHaveCount(0);
 });
 
 const SIGNATURE_TIMESTAMP = "1.2.840.113549.1.9.16.2.14";

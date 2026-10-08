@@ -3,7 +3,7 @@
 // order ("CN=…" first, "C=RU" last). Russian OIDs carry the names CryptoPro CSP registers for them.
 // Sites match these strings with regular expressions. Built from public samples and CryptoAPI
 // rules, not yet compared with a real CryptoPro installation: see docs/JOURNAL.md.
-import { children, decodeOid, expectTag, hex, type Node } from "./asn1.ts";
+import { children, decodeOid, expectTag, hex, read, type Node } from "./asn1.ts";
 
 const names = new Map<string, string>([
   ["2.5.4.3", "CN"],
@@ -141,4 +141,47 @@ export function parseNameString(text: string): Attribute[] {
     i++;
     result.push({ oid, value });
   }
+}
+
+// The short names RFC 4514 (3) knows; any other attribute is written as its OID with the value's BER in hex.
+const rfc4514Names = new Map<string, string>([
+  ["2.5.4.3", "CN"],
+  ["2.5.4.7", "L"],
+  ["2.5.4.8", "ST"],
+  ["2.5.4.10", "O"],
+  ["2.5.4.11", "OU"],
+  ["2.5.4.6", "C"],
+  ["2.5.4.9", "STREET"],
+  ["0.9.2342.19200300.100.1.25", "DC"],
+  ["0.9.2342.19200300.100.1.1", "UID"],
+]);
+
+// The string types RFC 4514 writes as text: UTF8String, NumericString, PrintableString, IA5String, BMPString.
+const rfc4514Strings = new Set([0x0c, 0x12, 0x13, 0x16, 0x1e]);
+
+// RFC 4514 (2.4): the characters a string value escapes, and a leading "#" or space and a trailing space.
+function escape4514(value: string): string {
+  return value
+    .replace(/[\\"+,;<>]/g, "\\$&")
+    .replace(/\0/g, "\\00")
+    .replace(/^[ #]/, "\\$&")
+    .replace(/ $/, "\\ ");
+}
+
+// A Name (DER) as an RFC 4514 string, which XMLDSig's X509IssuerName holds (XAdES SigningCertificate): the RDNs in
+// reverse DER order, a short name where RFC 4514 has one and the value is a string, "OID=#hex" of the BER otherwise.
+export function rfc4514(der: Uint8Array): string {
+  return children(expectTag(read(der), 0x30, "Name"))
+    .toReversed()
+    .map((rdn) =>
+      children(expectTag(rdn, 0x31, "RelativeDistinguishedName"))
+        .map((pair) => {
+          const [type, value] = children(expectTag(pair, 0x30, "AttributeTypeAndValue"));
+          const oid = decodeOid(expectTag(type, 0x06, "attribute type").value);
+          const name = rfc4514Names.get(oid);
+          return name && rfc4514Strings.has(value!.tag) ? `${name}=${escape4514(decodeString(value!))}` : `${oid}=#${hex(value!.der)}`;
+        })
+        .join("+"),
+    )
+    .join(",");
 }

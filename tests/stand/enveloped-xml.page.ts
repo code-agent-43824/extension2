@@ -53,6 +53,10 @@ function session(token: FakeToken): Session {
     storeCertificates: async () => ({ roots: [], intermediates: [], extendedValidity: false, offerRoot: false }),
     addCertificate: async () => undefined,
     offerRootByLink: () => undefined,
+    timestampAccess: async () => undefined,
+    timestamp: async () => {
+      throw new Error("no timestamp service on this page");
+    },
   };
 }
 

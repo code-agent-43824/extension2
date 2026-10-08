@@ -9,13 +9,16 @@ import { digest, GOST_2001, GOST_2012_256, GOST_2012_512, verifyHash, type Diges
 import { certificateLines } from "../signing.ts";
 import { findDevice } from "../token.ts";
 import { SCARD_E_NO_SMARTCARD, withLogin } from "../token-login.ts";
+import { timestampRequest, timestampToken } from "../tsp.ts";
 import { derToBase64, parseCertificate, type X509 } from "../x509.ts";
 import { binaryBytes, bytesBinary } from "./hashed-data.ts";
 import type { Session } from "./session.ts";
-import { signerCertificate } from "./signer.ts";
+import { signerCertificate, tsaUrl } from "./signer.ts";
 import { Signers, type VerifiedSignature } from "./signers.ts";
+import { addQualifyingProperties, addSignatureTimeStamp, fillSigningTime, signingCertificateDigests } from "./xades.ts";
 
 const E_NOTIMPL = 0x80004001;
+const E_FAIL = 0x80004005;
 // HRESULTs the real plug-in answers with (docs/JOURNAL.md, 2026-09-24).
 const ERROR_XML_PARSE_ERROR = 0x800705b9;
 const ERROR_NOT_FOUND = 0x80070490;
@@ -67,8 +70,29 @@ const typeNames = new Map<number, string>([
   [constants.CADESCOM_XML_SIGNATURE_TYPE_TEMPLATE, "по шаблону"],
 ]);
 
-// XAdES, which sites ask for by adding one of these to an XML signature type (webtools.html does by default).
-const xadesTypes = new Set<number>([constants.CADESCOM_XADES_DEFAULT, constants.CADESCOM_XADES_BES, constants.CADESCOM_XADES_T, constants.CADESCOM_XADES_X_LONG_TYPE_1]);
+// XAdES, which sites ask for by adding one of these to an XML signature type (webtools.html does XAdES-BES by default).
+const xadesNames = new Map<number, string>([
+  [constants.CADESCOM_XADES_BES, "XAdES-BES"],
+  [constants.CADESCOM_XADES_T, "XAdES-T"],
+]);
+// XAdES-A (docs.cryptopro.ru, CADESCOM_XADES_TYPE; cadesplugin_api.js has no constant for it).
+const CADESCOM_XADES_A = 0x7d0;
+// The types that need revocation data as well, which the owner left out, as for CAdES (docs/PLAN.md, action 26);
+// XADES_DEFAULT is XAdES-X Long Type 1.
+const refusedXades = new Map<number, string>([
+  [constants.CADESCOM_XADES_DEFAULT, "XAdES-X Long Type 1"],
+  [constants.CADESCOM_XADES_X_LONG_TYPE_1, "XAdES-X Long Type 1"],
+  [CADESCOM_XADES_A, "XAdES-A"],
+]);
+
+// CertDigest of foreign XAdES signatures may use the SHA family (XML Encryption's and XMLDSig's own URIs).
+const certificateDigestMethods = new Map<string, DigestName>([
+  ...digestMethods,
+  ["http://www.w3.org/2000/09/xmldsig#sha1", "sha1"],
+  ["http://www.w3.org/2001/04/xmlenc#sha256", "sha256"],
+  ["http://www.w3.org/2001/04/xmldsig-more#sha384", "sha384"],
+  ["http://www.w3.org/2001/04/xmlenc#sha512", "sha512"],
+]);
 
 function signatureMethod(uri: string, keyAlgorithm: string): { key: string; hash: DigestName } {
   const method = signatureMethods.get(uri);
@@ -332,6 +356,10 @@ function verifySignature(signature: Element): VerifiedSignature {
   const canonicalization = child(signedInfo, "CanonicalizationMethod")?.getAttribute("Algorithm") ?? INCLUSIVE_C14N;
   const value = base64Bytes(child(signature, "SignatureValue")?.textContent ?? "");
   valid &&= value !== undefined && verifyHash(certificate, utf8Digest(method.hash, canonicalize(signedInfo, canonicalization, null)), value);
+  // XAdES: the signing certificate the signed properties name is the one in KeyInfo. The timestamp of XAdES-T is not
+  // checked, as CAdES-T's is not.
+  const named = signingCertificateDigests(signature).filter(({ method }) => certificateDigestMethods.has(method));
+  if (named.length > 0) valid &&= named.some(({ method, value }) => same(digest(certificateDigestMethods.get(method)!, certificate.der), base64Bytes(value)));
   return { certificate, valid };
 }
 
@@ -412,56 +440,77 @@ export class SignedXML {
 
   async Sign(signer?: unknown, xpath?: unknown): Promise<string> {
     this.#signers = [];
-    const type = this.#type;
-    // The real plug-in makes XAdES; an empty answer would leave the site without a reason.
-    if (xadesTypes.has(type & ~0x3)) throw new CadesError("Подпись XAdES пока не поддерживается расширением", E_NOTIMPL);
+    const xmlType = this.#type & 0x3;
+    const xades = this.#type & ~0x3;
+    const refused = refusedXades.get(xades);
+    if (refused) throw new CadesError(`Подпись ${refused} не поддерживается расширением: доступны XAdES-BES и XAdES-T`, E_NOTIMPL);
     // The real plug-in answers an unknown type with an empty string rather than an error.
-    if (!typeNames.has(type)) return "";
-    const { token } = signerCertificate(signer);
+    if (!typeNames.has(xmlType) || (xades !== 0 && !xadesNames.has(xades))) return "";
+    const { token, tsaAddress } = signerCertificate(signer);
     const keyAlgorithm = token.x509.publicKeyAlgorithm;
     const defaults = defaultMethods.get(keyAlgorithm);
     if (!defaults) throw new CadesError("XML-подпись делается только ключами ГОСТ", NTE_BAD_ALGID);
     const methods = { signature: this.#signatureMethod ?? defaults.signature, digest: this.#digestMethod ?? defaults.digest };
-    if (type !== constants.CADESCOM_XML_SIGNATURE_TYPE_TEMPLATE) {
+    if (xmlType !== constants.CADESCOM_XML_SIGNATURE_TYPE_TEMPLATE) {
       signatureMethod(methods.signature, keyAlgorithm);
       digestMethod(methods.digest);
     }
+    const tsa = xades === constants.CADESCOM_XADES_T ? tsaUrl(tsaAddress) : undefined;
     const { xml, base64 } = decodeContent(this.#content);
     const source = parse(xml);
     const id = randomId();
     // The enveloped and enveloping types become templates first, put together in the DOM (which keeps each
     // element's namespace) and reparsed, so the DOM is exactly what the returned text will say.
     let doc: XMLDocument;
-    if (type === constants.CADESCOM_XML_SIGNATURE_TYPE_ENVELOPED) {
+    if (xmlType === constants.CADESCOM_XML_SIGNATURE_TYPE_ENVELOPED) {
       const template = parse(signatureTemplate(id, methods, "", [ENVELOPED_SIGNATURE, EXC_C14N], "")).documentElement;
       source.documentElement.appendChild(source.importNode(template, true));
       doc = parse(new XMLSerializer().serializeToString(source));
-    } else if (type === constants.CADESCOM_XML_SIGNATURE_TYPE_ENVELOPING) {
+    } else if (xmlType === constants.CADESCOM_XML_SIGNATURE_TYPE_ENVELOPING) {
       const template = parse(signatureTemplate(id, methods, `#Object1-${id}`, [EXC_C14N], `<Object Id="Object1-${id}"></Object>\n`));
       child(template.documentElement, "Object")!.appendChild(template.importNode(source.documentElement, true));
       doc = parse(new XMLSerializer().serializeToString(template));
     } else {
       doc = source;
     }
-    const signatures =
-      type === constants.CADESCOM_XML_SIGNATURE_TYPE_TEMPLATE
+    let signatures =
+      xmlType === constants.CADESCOM_XML_SIGNATURE_TYPE_TEMPLATE
         ? this.#targets(doc, xpath)
         : Array.from(doc.getElementsByTagNameNS(DS, "Signature")).filter((signature) => signature.getAttribute("Id") === `Signature1-${id}`);
+    if (xades) {
+      // The qualifying properties go in through the DOM, which is then reparsed as the templates are.
+      const certificateDigest = wrap(btoa(bytesBinary(digest(digestMethod(methods.digest), token.x509.der))));
+      const ids = signatures.map((signature, i) =>
+        addQualifyingProperties(signature, { signature: `Signature${i + 1}-${id}`, signedProperties: `SignedProperties${i + 1}-${id}` }, token.x509, methods.digest, certificateDigest),
+      );
+      doc = parse(new XMLSerializer().serializeToString(doc));
+      const byId = new Map(Array.from(doc.getElementsByTagNameNS(DS, "Signature"), (signature) => [signature.getAttribute("Id"), signature]));
+      signatures = ids.map((signatureId) => byId.get(signatureId)!);
+    }
     const pending = signatures.map((signature) => prepare(signature, keyAlgorithm, methods));
 
     const plugin = this.#session.plugin;
     const deviceId = await findDevice(plugin, token.serial);
     if (deviceId === undefined) throw new CadesError("Рутокен с этим сертификатом не подключён.", SCARD_E_NO_SMARTCARD);
+    // Access to the timestamp service before the PIN: a refusal then costs the user nothing.
+    if (tsa) await this.#session.timestampAccess(tsa.href);
+    const kind = `XML-подпись${xades ? ` ${xadesNames.get(xades)}` : ""} ${typeNames.get(xmlType)}`;
     const request = {
       origin: this.#session.origin,
       action: "просит подписать XML-документ.",
-      details: [`XML-подпись ${typeNames.get(type)}, ${xml.length < 1024 ? `${xml.length} символов` : `${(xml.length / 1024).toFixed(1)} КБ`}.`, ...certificateLines(token.x509)],
+      details: [
+        `${kind}, ${xml.length < 1024 ? `${xml.length} символов` : `${(xml.length / 1024).toFixed(1)} КБ`}.`,
+        ...(tsa ? [`Служба штампов времени: ${tsa.host}`] : []),
+        ...certificateLines(token.x509),
+      ],
       confirm: "Подписать",
     };
     await withLogin(this.#session, deviceId, request, async () => {
       const keyId = await plugin.getKeyByCertificate(deviceId, token.certId);
+      const now = new Date();
       // One signature after another, in document order: a later one may cover an earlier one.
       for (const item of pending) {
+        fillSigningTime(item.signature, now);
         for (const reference of item.references) {
           reference.value.textContent = wrap(btoa(bytesBinary(utf8Digest(reference.hash, referenceData(item.signature, reference)))));
         }
@@ -473,8 +522,27 @@ export class SignedXML {
         fillKeyInfo(item.signature, derToBase64(token.x509.der));
       }
     });
+    if (tsa) {
+      for (const [i, item] of pending.entries()) await this.#timestamp(tsa, item, `SignatureTimeStamp${i + 1}-${id}`);
+    }
     const signed = serialize(doc, xml);
     return base64 ? wrap(btoa(utf8Binary(signed))) : signed;
+  }
+
+  // XAdES-T: the service's timestamp of the canonical SignatureValue (exclusive C14N, as SignatureTimeStamp says), with
+  // the signature's own hash.
+  async #timestamp(tsa: URL, item: Pending, id: string): Promise<void> {
+    const hashed = utf8Digest(item.hash, canonicalize(child(item.signature, "SignatureValue")!, EXC_C14N, null));
+    const request = timestampRequest(item.hash, hashed, crypto.getRandomValues(new Uint8Array(8)));
+    let token: Uint8Array;
+    try {
+      token = timestampToken(await this.#session.timestamp(tsa.href, request.der), request);
+    } catch (error) {
+      // A CadesError of the extension carries its code at the end of the message already.
+      const reason = (error instanceof Error ? error.message : String(error)).replace(/ \(0x[0-9A-F]{1,8}\)$/, "");
+      throw new CadesError(`Не удалось получить штамп времени от ${tsa.href}: ${reason}`, error instanceof CadesError ? error.number : E_FAIL);
+    }
+    addSignatureTimeStamp(item.signature, wrap(btoa(bytesBinary(token))), id);
   }
 
   // The ds:Signature elements to fill: every one without a SignatureValue, or with an empty one, unless the

@@ -197,6 +197,10 @@ export interface FakeStores {
   refuse?: Error;
   // The roots InstallResponse left to the page's link.
   offered?: RootOffer[];
+  // XAdES-T: the timestamp services asked for access, a refusal, and the service's answers.
+  tsaAccess?: string[];
+  refuseTsa?: Error;
+  tsa?: (url: string, request: Uint8Array) => Promise<Uint8Array>;
 }
 
 export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]), roots: X509[] = [], intermediates: X509[] = [], stores: FakeStores = {}): Session {
@@ -210,5 +214,13 @@ export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]
       stores.added?.push({ store, certificate });
     },
     offerRootByLink: (offer) => void stores.offered?.push(offer),
+    timestampAccess: async (url) => {
+      stores.tsaAccess?.push(url);
+      if (stores.refuseTsa) throw stores.refuseTsa;
+    },
+    timestamp: async (url, request) => {
+      if (!stores.tsa) throw new Error("no timestamp service in this test");
+      return stores.tsa(url, request);
+    },
   };
 }

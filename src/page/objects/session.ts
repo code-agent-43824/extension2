@@ -16,4 +16,8 @@ export interface Session {
   addCertificate(store: AddStore, certificate: X509): Promise<void>;
   // Lets the page's link to this root install it (src/page/root-links.ts).
   offerRootByLink(offer: RootOffer): void;
+  // XAdES-T: access to a timestamp service, which the user grants once per service in the extension's window, and the
+  // service's answer to a TimeStampReq (src/page/timestamps.ts).
+  timestampAccess(url: string): Promise<void>;
+  timestamp(url: string, request: Uint8Array): Promise<Uint8Array>;
 }
