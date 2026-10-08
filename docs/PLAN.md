@@ -204,7 +204,9 @@
   репозиторий не кладутся: в его сертификате личные данные); (в) — версия 1.5.0: `SignCades` и `SignHash` типа
   CAdES-T, штамп не проверяется ни при подписи, ни в `VerifyCades`; на стенде своя служба штампов
   `tests/tools/tsa.py`, тесты `webtools.spec.ts` и `hash-signing.spec.ts`, со службой КриптоПро testca2012 — опыт
-  `STAND_ONLINE=1` (`JOURNAL.md`). XML-шифрование — версия 1.6.0.
+  `STAND_ONLINE=1` (`JOURNAL.md`); (г) — версия 1.6.0: `src/page/gost28147.ts`, `src/page/objects/enveloped-xml.ts`,
+  модульные тесты, `tests/stand/enveloped-xml.spec.ts` (с OpenSSL — `STAND_OPENSSL_GOST=1`) и webtools.html;
+  сообщения владельцу в четырёх вариантах режима — пункт 22 `MANUAL-CHECK.md`.
 - [ ] **7. Прогон владельцем и исправления.** Подпись владельца проверяем `verify_cms.py` с сертификатом его УЦ.
 
 ## Значения по умолчанию, выбранные агентом

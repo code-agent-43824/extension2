@@ -40,8 +40,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   the real CryptoPro CSP and plug-in installed into the machine; the packages are licensed, never commit them.
 - `STAND_ONLINE=1 npx playwright test tests/stand/webtools.spec.ts -g CAdES-T` — after a build: CAdES-T with CryptoPro's
   test timestamp service (testca2012.cryptopro.ru) besides the stand's own.
-- `STAND_OPENSSL_GOST=1 npx playwright test tests/stand/openssl-gost.spec.ts` — after a build: the opt-in experiment
-  checking CMS encryption against OpenSSL's GOST engine (`apt install libengine-gost-openssl`), both directions.
+- `STAND_OPENSSL_GOST=1 npx playwright test tests/stand/openssl-gost.spec.ts tests/stand/enveloped-xml.spec.ts` —
+  after a build: the opt-in experiment checking CMS and XML encryption against OpenSSL's GOST engine
+  (`apt install libengine-gost-openssl`), both directions.
 - `node scripts/import-roots.ts <lsb-cprocsp-ca-certs .deb>` — regenerate `src/extension/builtin-roots.ts` from a new
   CryptoPro CSP release (the package comes with the CSP download, after logging in to CryptoPro's site).
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
@@ -68,10 +69,13 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   case-insensitively by ProgID; `objects/cades-tools.ts` the demo pages' Android check; `objects/hashed-data.ts` hashes in the page; `objects/signed-xml.ts`
   makes XMLDSig with xmldsigjs' canonicalizer and `rawSign`, and verifies it; `objects/signers.ts` the signers a
   verification found; `objects/enveloped-data.ts` CMS encryption on the plugin's `cmsEncrypt`/`cmsDecrypt`;
+  `objects/enveloped-xml.ts` XML encryption in CryptoPro's format, encrypted in the page, decrypted with the key the
+  plugin's `derive` makes on the token;
   `objects/csp-information.ts` the connected tokens as readers, `tokeninserted` by polling, no containers), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
-  `dn.ts` + `sha1.ts` (certificate parsing; `dn.ts` holds the CryptoPro name format sites match with regexes),
-  `gost.ts` (hashes and GOST R 34.10 signature checks, on `@li0ard/gost`) + `cms.ts` (SignedData parsing and signer
+  `dn.ts` + `sha1.ts` (certificate parsing, and `asn1.ts` writes DER too; `dn.ts` holds the CryptoPro name format
+  sites match with regexes), `gost.ts` (hashes, GOST R 34.10 signature checks and VKO, on `@li0ard/gost`) +
+  `gost28147.ts` (GOST 28147-89 CBC and the key transport of XML encryption) + `cms.ts` (SignedData parsing and signer
   checks, BER included; the recipients of an EnvelopedData) + `chain.ts` (chains to the root store; `validationChain` for `IsValid()` in the extended mode) — verification never touches the plugin,
   `signing.ts` (the plugin's `sign`, data or a hash; CAdES-T through its `tspOptions`) + `token-login.ts` (PIN window, login, logout, the single connected token) +
   `pin-dialog.ts` (the PIN window, in a shadow root), `roots.ts` (asks the bridge for the "Root" and "CA" stores and adds to them), `root-links.ts` (after
@@ -105,7 +109,10 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   certsrv calls offline on a copy of the token, with the question about the root; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `webtools.spec.ts` runs CryptoPro's `webtools.html`
   (readers, signing with CAdES-T, encryption); `openssl-gost.spec.ts` (opt-in) checks encryption against OpenSSL's GOST
-  engine; `verify.ts` runs the independent tools on a signature or an encrypted message, and starts `tsa.py`.
+  engine; `enveloped-xml.spec.ts` runs XML encryption in Chromium without the extension or the token: esbuild bundles
+  `enveloped-xml.page.ts`, the page code with a fake plugin whose `derive` the spec answers with the stand CA's key
+  (the fake token cannot make that key); `verify.ts` runs the independent tools on a signature or an encrypted
+  message, and starts `tsa.py`.
 - `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier with CAdES-T
   timestamps, `tsa.py` RFC 3161 timestamp service with a certificate from the test CA, `verify_xmldsig.py` XMLDSig
   verifier on lxml, `enveloped_info.py` what an EnvelopedData is encrypted with and for), hash-pinned in
