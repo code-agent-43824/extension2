@@ -52,6 +52,19 @@ describe("CAdESCOM.SignedXML", () => {
     expect(await xml.Sign(await signer(session))).toBe("");
   });
 
+  it("refuses XAdES, which the real plug-in makes, with a reason, before the PIN", async () => {
+    const { plugin, dialog, session } = setup();
+    const xml = signedXml(session);
+    await xml.propset_Content("<r/>");
+    // webtools.html's default: XAdES-BES, enveloped.
+    for (const type of [constants.CADESCOM_XADES_BES, constants.CADESCOM_XADES_T | constants.CADESCOM_XML_SIGNATURE_TYPE_ENVELOPING, constants.CADESCOM_XADES_X_LONG_TYPE_1]) {
+      await xml.propset_SignatureType(type);
+      await expect(xml.Sign(await signer(session))).rejects.toMatchObject({ number: E_NOTIMPL, message: expect.stringContaining("XAdES") });
+    }
+    expect(dialog.requests).toEqual([]);
+    expect(plugin.calls.login).toEqual([]);
+  });
+
   it("refuses a missing signer, a signature method of another key and unknown methods, before the PIN", async () => {
     const { plugin, dialog, session } = setup();
     const sign = await signer(session);

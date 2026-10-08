@@ -7,13 +7,17 @@ import type { Session } from "../../src/page/objects/session.ts";
 import type { PinDialog, PinRequest } from "../../src/page/pin-dialog.ts";
 import type { RootOffer } from "../../src/page/root-links.ts";
 import type { AddStore } from "../../src/page/roots.ts";
-import type { RutokenPlugin, SignOptions } from "../../src/page/rutoken.ts";
+import type { EncryptOptions, RutokenPlugin, SignOptions } from "../../src/page/rutoken.ts";
 import type { X509 } from "../../src/page/x509.ts";
 
 export const pem = readFileSync(join(repoRoot, "tests", "fixtures", "stand-user.pem"), "utf8");
 export const certId = "cd:ea:7e:ab:5b:e6:b1:67:f2:2b:71:3b:f3:76:e9:b2:8a:db:14:a3";
 export const tokenSerial = "1669552163";
 export const userPin = "12345678";
+// What the Rutoken Plugin reports for the stand's fake token (docs/JOURNAL.md, 2026-10-08).
+export const tokenReader = "Aktiv Rutoken ECP 0";
+export const tokenLabel = "stand";
+export const tokenModel = "Rutoken ECP 3.0";
 
 export interface SignCall {
   deviceId: number;
@@ -32,6 +36,8 @@ export interface FakeCalls {
   deleteKeyPair: string[];
   importCertificate: string[];
   deleteCertificate: string[];
+  cmsEncrypt: { deviceId: number; recipients: string[]; data: string; options: EncryptOptions }[];
+  cmsDecrypt: { deviceId: number; keyId: string; cms: string; options: { base64: boolean } }[];
 }
 
 export type FakePlugin = RutokenPlugin & { calls: FakeCalls };
@@ -52,12 +58,24 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     deleteKeyPair: [],
     importCertificate: [],
     deleteCertificate: [],
+    cmsEncrypt: [],
+    cmsDecrypt: [],
   };
+  let loggedIn = false;
   return {
     calls,
     version: Promise.resolve("4.12.3.0"),
     CERT_CATEGORY_USER: thenable(1),
     TOKEN_INFO_SERIAL: thenable(2),
+    TOKEN_INFO_READER: thenable(9),
+    TOKEN_INFO_LABEL: thenable(10),
+    TOKEN_INFO_MODEL: thenable(11),
+    // The real plugin's values (Rutoken Plugin 4.12.3 on the stand).
+    CIPHER_ALGORITHM_GOST28147: thenable(32),
+    CIPHER_ALGORITHM_MAGMA_CTR_ACPKM: thenable(64),
+    CIPHER_ALGORITHM_MAGMA_CTR_ACPKM_OMAC: thenable(128),
+    CIPHER_ALGORITHM_KUZNECHIK_CTR_ACPKM: thenable(256),
+    CIPHER_ALGORITHM_KUZNECHIK_CTR_ACPKM_OMAC: thenable(512),
     DATA_FORMAT_BASE64: thenable(1),
     DATA_FORMAT_HASH: thenable(2),
     PUBLIC_KEY_ALGORITHM_GOST3410_2012_256: thenable(3),
@@ -69,13 +87,15 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     enumerateDevices: async () => [0],
     enumerateCertificates: async (_device, category) => (category === 1 ? certs.map((_, i) => `${certId}${i || ""}`) : []),
     getCertificate: async (_device, id) => certs[Number(id.slice(certId.length) || 0)]!,
-    getDeviceInfo: async (_device, option) => (option === 2 ? tokenSerial : null),
+    getDeviceInfo: async (_device, option) => ({ 2: tokenSerial, 9: tokenReader, 10: tokenLabel, 11: tokenModel })[option] ?? null,
     login: async (_device, pin) => {
       calls.login.push(pin);
       if (pin !== userPin) throw new Error("17");
+      loggedIn = true;
     },
     logout: async () => {
       calls.logout++;
+      loggedIn = false;
     },
     sign: async (deviceId, id, data, format, options) => {
       calls.sign.push({ deviceId, certId: id, data, format, options });
@@ -101,6 +121,17 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     rawSign: async (_device, _key, data) => `${data}:${data}`,
     deleteCertificate: async (_device, id) => {
       calls.deleteCertificate.push(id);
+    },
+    // Like the real plugin, both refuse without a login (error 19); the "message" is not real CMS.
+    cmsEncrypt: async (deviceId, _certId, recipients, data, options) => {
+      if (!loggedIn) throw new Error("19");
+      calls.cmsEncrypt.push({ deviceId, recipients, data, options });
+      return "MIAGCSqGSIb3DQEHA6CAenveloped\nAAAA\n";
+    },
+    cmsDecrypt: async (deviceId, keyId, cms, options) => {
+      if (!loggedIn) throw new Error("19");
+      calls.cmsDecrypt.push({ deviceId, keyId, cms, options });
+      return options.base64 ? "0J/RgNC40LLQtdGC" : "Привет";
     },
     ...overrides,
   };

@@ -67,6 +67,9 @@ const typeNames = new Map<number, string>([
   [constants.CADESCOM_XML_SIGNATURE_TYPE_TEMPLATE, "по шаблону"],
 ]);
 
+// XAdES, which sites ask for by adding one of these to an XML signature type (webtools.html does by default).
+const xadesTypes = new Set<number>([constants.CADESCOM_XADES_DEFAULT, constants.CADESCOM_XADES_BES, constants.CADESCOM_XADES_T, constants.CADESCOM_XADES_X_LONG_TYPE_1]);
+
 function signatureMethod(uri: string, keyAlgorithm: string): { key: string; hash: DigestName } {
   const method = signatureMethods.get(uri);
   if (!method) throw new CadesError(`Неизвестный алгоритм подписи ${uri}`, CRYPT_E_NOT_FOUND);
@@ -410,6 +413,8 @@ export class SignedXML {
   async Sign(signer?: unknown, xpath?: unknown): Promise<string> {
     this.#signers = [];
     const type = this.#type;
+    // The real plug-in makes XAdES; an empty answer would leave the site without a reason.
+    if (xadesTypes.has(type & ~0x3)) throw new CadesError("Подпись XAdES пока не поддерживается расширением", E_NOTIMPL);
     // The real plug-in answers an unknown type with an empty string rather than an error.
     if (!typeNames.has(type)) return "";
     const { token } = signerCertificate(signer);

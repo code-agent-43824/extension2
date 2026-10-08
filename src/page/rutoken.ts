@@ -11,6 +11,14 @@ export interface RutokenPlugin {
   readonly version: PromiseLike<string>;
   readonly CERT_CATEGORY_USER: PromiseLike<number>;
   readonly TOKEN_INFO_SERIAL: PromiseLike<number>;
+  readonly TOKEN_INFO_READER: PromiseLike<number>;
+  readonly TOKEN_INFO_LABEL: PromiseLike<number>;
+  readonly TOKEN_INFO_MODEL: PromiseLike<number>;
+  readonly CIPHER_ALGORITHM_GOST28147: PromiseLike<number>;
+  readonly CIPHER_ALGORITHM_MAGMA_CTR_ACPKM: PromiseLike<number>;
+  readonly CIPHER_ALGORITHM_MAGMA_CTR_ACPKM_OMAC: PromiseLike<number>;
+  readonly CIPHER_ALGORITHM_KUZNECHIK_CTR_ACPKM: PromiseLike<number>;
+  readonly CIPHER_ALGORITHM_KUZNECHIK_CTR_ACPKM_OMAC: PromiseLike<number>;
   readonly DATA_FORMAT_BASE64: PromiseLike<number>;
   readonly DATA_FORMAT_HASH: PromiseLike<number>;
   readonly PUBLIC_KEY_ALGORITHM_GOST3410_2012_256: PromiseLike<number>;
@@ -40,6 +48,19 @@ export interface RutokenPlugin {
   // hex, laid out as in CMS (checked on the stand, docs/JOURNAL.md 2026-09-24). Needs a login.
   rawSign(deviceId: number, keyId: string, data: string, options: Record<string, never>): PromiseLike<string>;
   deleteCertificate(deviceId: number, certId: string): PromiseLike<void>;
+  // CMS EnvelopedData for the recipients' certificates (PEM), as Base64 with line breaks, BER with indefinite
+  // lengths. Needs a login although no key of the token is used (checked on the stand, docs/JOURNAL.md 2026-10-08);
+  // `certId` is reserved and must be empty.
+  cmsEncrypt(deviceId: number, certId: "", recipientCerts: string[], data: string, options: EncryptOptions): PromiseLike<string>;
+  // The content of a CMS EnvelopedData (Base64 or PEM) for the key `keyId`; Base64 with `base64`. Needs a login.
+  cmsDecrypt(deviceId: number, keyId: string, cmsData: string, options: { base64: boolean }): PromiseLike<string>;
+}
+
+export interface EncryptOptions {
+  // `data` is Base64 rather than text.
+  base64: boolean;
+  // One of the CIPHER_ALGORITHM_* constants.
+  cipherAlgorithm: number;
 }
 
 export interface KeyPairOptions {

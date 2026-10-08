@@ -145,6 +145,21 @@ describe("signing through the Rutoken Plugin", () => {
     expect(plugin.calls.sign).toHaveLength(0);
   });
 
+  // webtools.html: the TSA field's value, empty unless filled in, set before every signature.
+  it("keeps the timestamp service address and signs CAdES-BES with it set, without asking it for a timestamp", async () => {
+    const { plugin, session } = setup([userPin]);
+    const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;
+    expect(await signer.TSAAddress).toBe("");
+    await signer.propset_TSAAddress("http://testca2012.cryptopro.ru/tsp/tsp.srf");
+    expect(await signer.TSAAddress).toBe("http://testca2012.cryptopro.ru/tsp/tsp.srf");
+    await signer.propset_TSAAddress("");
+    await signer.propset_Certificate(await tokenCertificate(session));
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    await data.propset_Content("x");
+    expect(await data.SignCades(signer, BES)).toBe("MIIsignature");
+    expect(plugin.calls.sign[0]!.options).toEqual({ detached: false, addUserCertificate: true, addEssCert: true, addSignTime: true });
+  });
+
   it("keeps the attributes a site adds, indexed from 1", async () => {
     const session = fakeSession(fakePlugin());
     const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;

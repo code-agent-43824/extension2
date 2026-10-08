@@ -66,6 +66,7 @@ export class CPSigner {
   #certificate: object | undefined;
   #checkCertificate = false;
   #options: number = constants.CAPICOM_CERTIFICATE_INCLUDE_CHAIN_EXCEPT_ROOT;
+  #tsaAddress = "";
   readonly #attributes = new CPAttributes();
 
   get Certificate(): Promise<object | undefined> {
@@ -97,6 +98,17 @@ export class CPSigner {
 
   get AuthenticatedAttributes2(): Promise<CPAttributes> {
     return Promise.resolve(this.#attributes);
+  }
+
+  // The timestamp service's address. Only kept: the signature types that need a timestamp are not made yet
+  // (docs/PLAN.md, action 24), and webtools.html sets it, empty, for every signature.
+  get TSAAddress(): Promise<string> {
+    return Promise.resolve(this.#tsaAddress);
+  }
+
+  propset_TSAAddress(address: unknown): Promise<void> {
+    this.#tsaAddress = address === undefined || address === null ? "" : String(address);
+    return Promise.resolve();
   }
 
   // For CadesSignedData: what the site configured, without going through the async surface.
