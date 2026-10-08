@@ -95,9 +95,11 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     enumerateCertificates: async (_device, category) => (category === 1 ? certs.map((_, i) => `${certId}${i || ""}`) : []),
     getCertificate: async (_device, id) => certs[Number(id.slice(certId.length) || 0)]!,
     getDeviceInfo: async (_device, option) => ({ 2: tokenSerial, 9: tokenReader, 10: tokenLabel, 11: tokenModel })[option] ?? null,
+    // The login is the token's, as with the real plugin: a second one while it lasts is error 93 (ALREADY_LOGGED_IN).
     login: async (_device, pin) => {
       calls.login.push(pin);
       if (pin !== userPin) throw new Error("17");
+      if (loggedIn) throw new Error("93");
       loggedIn = true;
     },
     logout: async () => {
@@ -105,6 +107,7 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
       loggedIn = false;
     },
     sign: async (deviceId, id, data, format, options) => {
+      if (!loggedIn) throw new Error("19");
       calls.sign.push({ deviceId, certId: id, data, format, options });
       return "MIIsignature";
     },

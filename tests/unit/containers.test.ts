@@ -6,6 +6,10 @@ import type { Certificate } from "../../src/page/objects/certificate.ts";
 import type { Container, ContainerKey, Containers } from "../../src/page/objects/containers.ts";
 import type { CspInformation } from "../../src/page/objects/csp-information.ts";
 import { createObject } from "../../src/page/objects/index.ts";
+import type { CadesSignedData } from "../../src/page/objects/signed-data.ts";
+import type { CPSigner } from "../../src/page/objects/signer.ts";
+import type { Store } from "../../src/page/objects/store.ts";
+import type { Certificates } from "../../src/page/objects/certificate.ts";
 import { certId, fakePlugin, FakePinDialog, fakeSession, tokenModel, tokenReader, tokenSerial, userPin, type FakePlugin } from "./fakes.ts";
 
 function setup(answers: (string | null)[], plugin: FakePlugin = fakePlugin()) {
@@ -97,6 +101,32 @@ describe("containers of the keys on a Rutoken", () => {
     expect(plugin.calls.deleteCertificate).toEqual([certId]);
     await information().EnumContainers();
     expect(dialog.requests).toHaveLength(3);
+  });
+
+  it("signs after a listing that is still reading the keys, instead of losing the login to its logout", async () => {
+    // A token as slow as a real one: reading keys and signing take a while, during which the other operation goes on.
+    const plugin = fakePlugin();
+    const pause = () => new Promise((resolve) => setTimeout(resolve, 20));
+    const enumerateKeys = plugin.enumerateKeys;
+    plugin.enumerateKeys = async (...args) => (await pause(), enumerateKeys(...args));
+    const sign = plugin.sign;
+    plugin.sign = async (...args) => (await pause(), await pause(), sign(...args));
+    const { dialog, session, information } = setup([userPin, userPin], plugin);
+    const listing = information().EnumContainers();
+    // What webtools.html allows: "Подписать" while the containers it lists at load are still being read.
+    const store = createObject("CAdESCOM.Store", session) as Store;
+    await store.Open();
+    const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;
+    await signer.propset_Certificate(await (await (store.Certificates as Promise<Certificates>)).Item(1));
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    await data.propset_ContentEncoding(constants.CADESCOM_BASE64_TO_BINARY);
+    await data.propset_Content("SGVsbG8=");
+    const signing = data.SignCades(signer, constants.CADESCOM_CADES_BES, false);
+    expect(await (await listing).Count).toBe(2);
+    expect(await signing).toBe("MIIsignature");
+    // One PIN window after the other, each operation with a login of its own.
+    expect(dialog.requests.map((request) => request.action)).toEqual(["просит показать ключи на Рутокене.", "просит подписать данные."]);
+    expect([plugin.calls.login, plugin.calls.logout]).toEqual([[userPin, userPin], 2]);
   });
 
   it("answers CryptoPro's code for no containers, and the user's cancel as such", async () => {

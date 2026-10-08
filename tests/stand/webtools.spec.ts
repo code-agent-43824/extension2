@@ -90,6 +90,38 @@ test("the readers tab shows the token and its key as a container; the containers
   expect(await errors()).toEqual([]);
 });
 
+// The page lists the containers as it loads, after the PIN; a signature asked for meanwhile used to lose its login to
+// the listing's logout (the Rutoken Plugin's error 19). Now its PIN window comes once the listing is done.
+test("signs right after the PIN the page asks for at load, while the containers are still being read", async () => {
+  const fresh = await openStandPage(context, `${server.url}${webtools}`);
+  try {
+    await expect(pinDialog(fresh)).toContainText("просит показать ключи на Рутокене.", { timeout: 30_000 });
+    await enterPin(fresh);
+    const signing = fresh.evaluate(async () => {
+      const cadesplugin = (window as unknown as { cadesplugin: any }).cadesplugin;
+      try {
+        const store = await cadesplugin.CreateObjectAsync("CAdESCOM.Store");
+        await store.Open(cadesplugin.CAPICOM_CURRENT_USER_STORE, cadesplugin.CAPICOM_MY_STORE, cadesplugin.CAPICOM_STORE_OPEN_MAXIMUM_ALLOWED);
+        const signer = await cadesplugin.CreateObjectAsync("CAdESCOM.CPSigner");
+        await signer.propset_Certificate(await (await store.Certificates).Item(1));
+        const data = await cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
+        await data.propset_ContentEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
+        await data.propset_Content(btoa("Hello"));
+        return { signed: await data.SignCades(signer, cadesplugin.CADESCOM_CADES_BES, false) };
+      } catch (e) {
+        return { error: cadesplugin.getLastError(e) };
+      }
+    });
+    await expect(pinDialog(fresh)).toContainText("просит подписать данные.", { timeout: 30_000 });
+    await enterPin(fresh);
+    const { signed, error } = await signing;
+    expect(error).toBeUndefined();
+    expect(verifyCms(signed!).valid).toBe(true);
+  } finally {
+    await fresh.close();
+  }
+});
+
 test("signs CMS with the TSA field left empty, and XML as XAdES-BES, the page's default, and XMLDSig, all verifying", async () => {
   await page.locator("#navbtnsign").click();
   await expect(page.locator("#SelectSignCert option")).toHaveCount(1, { timeout: 30_000 });

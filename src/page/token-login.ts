@@ -36,18 +36,31 @@ async function login(session: Session, deviceId: number, request: PinRequest): P
   }
 }
 
-export async function withLogin<T>(session: Session, deviceId: number, request: PinRequest, work: () => Promise<T>): Promise<T> {
-  await login(session, deviceId, request);
-  try {
-    return await work();
-  } finally {
-    // Leave no login behind for the page to reuse.
+// The operations of a page that log in, chained: each starts once the one before it has logged out.
+const queues = new WeakMap<Session, Promise<unknown>>();
+
+// One operation at a time per page, its PIN window included. The Rutoken Plugin's login belongs to the token, not to
+// an operation: a second operation's login finds it there (ALREADY_LOGGED_IN), and the first one's logout then ends
+// it under the second one, which fails with error 19 — webtools.html lists the containers after the PIN as it loads,
+// and a signature started meanwhile did (docs/JOURNAL.md, 2026-10-08).
+export function withLogin<T>(session: Session, deviceId: number, request: PinRequest, work: () => Promise<T>): Promise<T> {
+  const run = async () => {
+    await login(session, deviceId, request);
     try {
-      await session.plugin.logout(deviceId);
-    } catch {
-      // The token may have been removed; nothing is left logged in then.
+      return await work();
+    } finally {
+      // Leave no login behind for the page to reuse.
+      try {
+        await session.plugin.logout(deviceId);
+      } catch {
+        // The token may have been removed; nothing is left logged in then.
+      }
     }
-  }
+  };
+  const previous = queues.get(session) ?? Promise.resolve();
+  const result = previous.then(run, run);
+  queues.set(session, result.catch(() => undefined));
+  return result;
 }
 
 // The one connected token, for operations where the site names none (creating a key, writing a
