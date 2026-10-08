@@ -84,7 +84,7 @@ function digestMethod(uri: string): DigestName {
 }
 
 // Base64 in lines of 64, as the real plug-in writes it.
-function wrap(base64: string): string {
+export function wrap(base64: string): string {
   return base64.replace(/(.{64})(?=.)/g, "$1\n");
 }
 
@@ -92,7 +92,7 @@ function hexToBase64(hex: string): string {
   return btoa(bytesBinary(Uint8Array.from(hex.replace(/:/g, "").match(/../g) ?? [], (byte) => parseInt(byte, 16))));
 }
 
-function utf8Binary(text: string): string {
+export function utf8Binary(text: string): string {
   return bytesBinary(new TextEncoder().encode(text));
 }
 
@@ -100,7 +100,7 @@ function utf8Digest(name: DigestName, text: string): Uint8Array {
   return digest(name, new TextEncoder().encode(text));
 }
 
-function base64Bytes(text: string): Uint8Array | undefined {
+export function base64Bytes(text: string): Uint8Array | undefined {
   try {
     return binaryBytes(atob(text.replace(/\s+/g, "")));
   } catch {
@@ -118,7 +118,7 @@ function randomId(): string {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-function parse(xml: string): XMLDocument {
+export function parse(xml: string): XMLDocument {
   const doc = new DOMParser().parseFromString(xml, "application/xml");
   if (!xml.trim() || doc.getElementsByTagNameNS("http://www.w3.org/1999/xhtml", "parsererror").length > 0) {
     throw new CadesError("Не удалось разобрать XML-документ.", ERROR_XML_PARSE_ERROR);
@@ -128,7 +128,7 @@ function parse(xml: string): XMLDocument {
 
 // Content is an XML string, or Base64 of the document's bytes (the real plug-in's way for other encodings;
 // only UTF-8 is taken here). The result goes back the same way.
-function decodeContent(content: string): { xml: string; base64: boolean } {
+export function decodeContent(content: string): { xml: string; base64: boolean } {
   if (content.trimStart().startsWith("<") || !/^[A-Za-z0-9+/=\s]+$/.test(content)) return { xml: content, base64: false };
   let bytes: Uint8Array;
   try {
@@ -147,7 +147,7 @@ function decodeContent(content: string): { xml: string; base64: boolean } {
 
 // The document as the real plug-in returns it: the XML declaration (the site's, or a plain one), then the
 // top-level nodes one per line.
-function serialize(doc: XMLDocument, source: string): string {
+export function serialize(doc: XMLDocument, source: string): string {
   const declaration = /^(?:﻿)?\s*(<\?xml[^>]*\?>)/.exec(source)?.[1] ?? '<?xml version="1.0"?>';
   const serializer = new XMLSerializer();
   return `${[declaration, ...Array.from(doc.childNodes, (node) => serializer.serializeToString(node))].join("\n")}\n`;

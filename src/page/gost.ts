@@ -98,10 +98,7 @@ export function verifyHash(key: X509, hash: Uint8Array, signature: Uint8Array): 
   const curve = curves.get(key.publicKeyParameters ?? "");
   const xy = size && point(key, size);
   if (!size || !curve || !xy || signature.length !== 2 * size || hash.length !== size) return false;
-  const publicKey = new Uint8Array(1 + 2 * size);
-  publicKey[0] = 0x04;
-  publicKey.set(reversed(xy.subarray(0, size)), 1);
-  publicKey.set(reversed(xy.subarray(size)), 1 + size);
+  const publicKey = noblePoint(xy);
   const rs = new Uint8Array(2 * size);
   rs.set(signature.subarray(size), 0);
   rs.set(signature.subarray(0, size), size);
@@ -110,6 +107,41 @@ export function verifyHash(key: X509, hash: Uint8Array, signature: Uint8Array): 
   } catch {
     return false;
   }
+}
+
+// A public key x||y (each little-endian, as in a certificate) as @noble/curves takes it: 04, then x and y big-endian.
+function noblePoint(xy: Uint8Array): Uint8Array {
+  const size = xy.length / 2;
+  const result = new Uint8Array(1 + xy.length);
+  result[0] = 0x04;
+  result.set(reversed(xy.subarray(0, size)), 1);
+  result.set(reversed(xy.subarray(size)), 1 + size);
+  return result;
+}
+
+// VKO GOST R 34.10-2012 with Streebog-256 (RFC 7836, 4.3.1), the key-encryption key for GOST 28147-89, for 512-bit
+// keys too: the shared key of `secretKey` (little-endian) and `publicKey` (x||y, each little-endian) on the curve of
+// `paramSet`, the UKM read as a little-endian number, as OpenSSL's GOST engine does.
+export function vko256(paramSet: string, secretKey: Uint8Array, publicKey: Uint8Array, ukm: Uint8Array): Uint8Array {
+  const curve = curves.get(paramSet);
+  if (!curve) throw new Error(`GOST R 34.10: unknown curve ${paramSet}`);
+  return curve.getSharedSecret(streebog256, reversed(secretKey), noblePoint(publicKey), reversed(ukm));
+}
+
+// VKO with a fresh ephemeral key on the recipient's curve: the key-encryption key and the ephemeral public key (x||y,
+// each little-endian); undefined for keys other than GOST R 34.10-2012 on a known curve.
+export function ephemeralAgreement(recipient: X509, ukm: Uint8Array): { publicKey: Uint8Array; kek: Uint8Array } | undefined {
+  const size = keySizes.get(recipient.publicKeyAlgorithm);
+  const paramSet = recipient.publicKeyParameters ?? "";
+  const curve = curves.get(paramSet);
+  const xy = size && point(recipient, size);
+  if (!size || !curve || !xy || recipient.publicKeyAlgorithm === GOST_2001) return undefined;
+  const { secretKey } = curve.keygen();
+  const uncompressed = curve.getPublicKey(secretKey, false);
+  const publicKey = new Uint8Array(2 * size);
+  publicKey.set(reversed(uncompressed.subarray(1, 1 + size)), 0);
+  publicKey.set(reversed(uncompressed.subarray(1 + size)), size);
+  return { publicKey, kek: vko256(paramSet, reversed(secretKey), xy, ukm) };
 }
 
 // Whether `issuer`'s key signed `certificate`.

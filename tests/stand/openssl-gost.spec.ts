@@ -14,6 +14,7 @@ import { caDir } from "../../scripts/provision-token.ts";
 import { stand, standDir } from "../../scripts/setup-stand.ts";
 import { blankPage, clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
+import { standCaKeyPem } from "./verify.ts";
 
 test.skip(!process.env.STAND_OPENSSL_GOST, "needs OpenSSL's GOST engine: set STAND_OPENSSL_GOST=1");
 
@@ -32,22 +33,6 @@ let context: BrowserContext;
 let page: Page;
 let dir: string;
 
-function der(tag: number, ...parts: Buffer[]): Buffer {
-  const body = Buffer.concat(parts);
-  const length = body.length < 0x80 ? [body.length] : [0x81, body.length];
-  return Buffer.concat([Buffer.from([tag, ...length]), body]);
-}
-
-// The stand CA's key (gost_ca.py keeps it as big-endian hex) as PKCS#8 for OpenSSL's GOST engine: GOST R 34.10-2012
-// 256 bit with the CryptoPro-A curve, the private key a little-endian OCTET STRING.
-function caKeyPem(): string {
-  const key = Buffer.from(readFileSync(join(caDir, "ca.key"), "utf8").trim(), "hex").reverse();
-  const oid = (hex: string) => der(0x06, Buffer.from(hex, "hex"));
-  const algorithm = der(0x30, oid("2a85030701010101"), der(0x30, oid("2a850302022301"), oid("2a85030701010202")));
-  const pkcs8 = der(0x30, der(0x02, Buffer.of(0)), algorithm, der(0x04, der(0x04, key)));
-  return `-----BEGIN PRIVATE KEY-----\n${pkcs8.toString("base64")}\n-----END PRIVATE KEY-----\n`;
-}
-
 function openssl(args: string[], input?: Buffer): Buffer {
   const run = spawnSync("openssl", ["cms", "-engine", "gost", ...args], { input });
   if (run.status !== 0) throw new Error(`openssl cms ${args.join(" ")}: ${run.stderr.toString()}`);
@@ -56,7 +41,7 @@ function openssl(args: string[], input?: Buffer): Buffer {
 
 test.beforeAll(async () => {
   dir = mkdtempSync(join(tmpdir(), "openssl-gost-"));
-  writeFileSync(join(dir, "ca-key.pem"), caKeyPem());
+  writeFileSync(join(dir, "ca-key.pem"), standCaKeyPem());
   server = await servePages({ "/": blankPage });
   context = await launchStand({ extensions: [stand.adapter, standExtension()] });
   await clearSites(context);

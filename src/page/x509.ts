@@ -30,6 +30,8 @@ export interface X509 {
   subjectDer: Uint8Array;
   publicKeyParameters: string | null;
   publicKey: Uint8Array;
+  // The SubjectPublicKeyInfo's AlgorithmIdentifier as encoded: an ephemeral key on the same curve reuses it.
+  publicKeyAlgorithmDer: Uint8Array;
 }
 
 // Friendly names CryptoPro gives the GOST public key algorithms; other algorithms show their OID.
@@ -119,5 +121,6 @@ export function parseCertificate(der: Uint8Array): X509 {
     subjectDer: subject!.der,
     publicKeyParameters: parameterSet?.tag === 0x06 ? decodeOid(parameterSet.value) : null,
     publicKey: expectTag(keyBits, 0x03, "subjectPublicKey").value.subarray(1),
+    publicKeyAlgorithmDer: keyAlgorithm!.der,
   };
 }

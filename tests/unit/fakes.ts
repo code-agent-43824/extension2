@@ -38,6 +38,7 @@ export interface FakeCalls {
   deleteCertificate: string[];
   cmsEncrypt: { deviceId: number; recipients: string[]; data: string; options: EncryptOptions }[];
   cmsDecrypt: { deviceId: number; keyId: string; cms: string; options: { base64: boolean } }[];
+  derive: { deviceId: number; keyId: string; publicKey: string; ukm: string }[];
 }
 
 export type FakePlugin = RutokenPlugin & { calls: FakeCalls };
@@ -60,6 +61,7 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     deleteCertificate: [],
     cmsEncrypt: [],
     cmsDecrypt: [],
+    derive: [],
   };
   let loggedIn = false;
   return {
@@ -132,6 +134,12 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
       if (!loggedIn) throw new Error("19");
       calls.cmsDecrypt.push({ deviceId, keyId, cms, options });
       return options.base64 ? "0J/RgNC40LLQtdGC" : "Привет";
+    },
+    // As the stand's fake token answers (docs/JOURNAL.md, 2026-10-08); tests that need a key replace it.
+    derive: async (deviceId, keyId, publicKey, options) => {
+      if (!loggedIn) throw new Error("19");
+      calls.derive.push({ deviceId, keyId, publicKey, ukm: options.ukm });
+      throw new Error("147");
     },
     ...overrides,
   };

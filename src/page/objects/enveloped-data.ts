@@ -39,7 +39,7 @@ const ciphers = new Map<number, { constant: CipherConstant; name: string }>([
 
 // The Algorithm property: which cipher Encrypt uses, GOST 28147-89 unless the site says otherwise
 // (docs/PLAN.md, action 24); an algorithm without a GOST cipher is refused when encrypting.
-class Algorithm {
+export class Algorithm {
   #name: number = constants.CADESCOM_ENCRYPTION_ALGORITHM_GOST_28147_89;
   #keyLength = CAPICOM_ENCRYPTION_KEY_LENGTH_MAXIMUM;
 
@@ -70,7 +70,7 @@ class Algorithm {
 }
 
 // The Recipients property: the certificates to encrypt for, indexed from 1 like every CAPICOM collection.
-class Recipients {
+export class Recipients {
   readonly #items: Certificate[] = [];
 
   get Count(): Promise<number> {
@@ -127,7 +127,7 @@ function complete(bytes: Uint8Array): Uint8Array | undefined {
   }
 }
 
-function pluginFailure(action: string, error: unknown, code: number): unknown {
+export function pluginFailure(action: string, error: unknown, code: number): unknown {
   const rutoken = rutokenErrorCode(error);
   return rutoken === undefined ? error : new CadesError(`Рутокен Плагин не ${action} сообщение: ошибка ${rutoken}`, code);
 }

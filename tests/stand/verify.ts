@@ -2,7 +2,7 @@
 // verify_xmldsig.py) on signatures, enveloped_info.py on encrypted messages; and the stand's timestamp service
 // (tsa.py) for CAdES-T.
 import { spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
@@ -93,4 +93,20 @@ export async function startTsa(): Promise<TimestampService> {
     });
   });
   return { url: `http://127.0.0.1:${port}/tsp`, close: () => void tsa.kill() };
+}
+
+function der(tag: number, ...parts: Buffer[]): Buffer {
+  const body = Buffer.concat(parts);
+  const length = body.length < 0x80 ? [body.length] : [0x81, body.length];
+  return Buffer.concat([Buffer.from([tag, ...length]), body]);
+}
+
+// The stand CA's key (gost_ca.py keeps it as big-endian hex) as PKCS#8 for OpenSSL's GOST engine: GOST R 34.10-2012
+// 256 bit with the CryptoPro-A curve, the private key a little-endian OCTET STRING.
+export function standCaKeyPem(): string {
+  const key = Buffer.from(readFileSync(join(caDir, "ca.key"), "utf8").trim(), "hex").reverse();
+  const oid = (hex: string) => der(0x06, Buffer.from(hex, "hex"));
+  const algorithm = der(0x30, oid("2a85030701010101"), der(0x30, oid("2a850302022301"), oid("2a85030701010202")));
+  const pkcs8 = der(0x30, der(0x02, Buffer.of(0)), algorithm, der(0x04, der(0x04, key)));
+  return `-----BEGIN PRIVATE KEY-----\n${pkcs8.toString("base64")}\n-----END PRIVATE KEY-----\n`;
 }

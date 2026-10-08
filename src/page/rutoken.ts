@@ -54,6 +54,10 @@ export interface RutokenPlugin {
   cmsEncrypt(deviceId: number, certId: "", recipientCerts: string[], data: string, options: EncryptOptions): PromiseLike<string>;
   // The content of a CMS EnvelopedData (Base64 or PEM) for the key `keyId`; Base64 with `base64`. Needs a login.
   cmsDecrypt(deviceId: number, keyId: string, cmsData: string, options: { base64: boolean }): PromiseLike<string>;
+  // VKO on the token: the key agreed between the key `keyId` and `publicKey` (x||y as in a certificate), for `ukm`;
+  // both are colon-separated hex (plain hex is error 2), and so is the answer. Needs a login (docs/JOURNAL.md,
+  // 2026-10-08; the fake token answers 147).
+  derive(deviceId: number, keyId: string, publicKey: string, options: { ukm: string }): PromiseLike<string>;
 }
 
 export interface EncryptOptions {

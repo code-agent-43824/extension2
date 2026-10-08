@@ -183,3 +183,37 @@ test("encrypts with GOST 28147-89, the page's default, for the token's certifica
   expect(info.content_encryption).toBe("1.2.643.2.2.21");
   expect(info.recipients).toEqual([expect.objectContaining({ kind: "ktri", serial: tokenCertificateSerial })]);
 });
+
+// XML encryption (docs/PLAN.md, action 25): done in the page, so no PIN window; decrypting needs the token's VKO key,
+// which the fake token cannot make (error 147, docs/JOURNAL.md 2026-10-08) — the whole round trip runs in
+// tests/stand/enveloped-xml.spec.ts. The settings go back to CMS afterwards.
+test("encrypts XML for the token's certificate without the PIN; decrypting reaches the token's key", async () => {
+  await page.locator("#navbtnencrypt").click();
+  await expect(page.locator("#SelectEncryptCert option")).toHaveCount(1, { timeout: 30_000 });
+  await unfold("collapse-main-encrypt");
+  await page.locator("label[for=enc-1]").click();
+  await page.locator("label[for=enc-type-2]").click();
+  try {
+    await page.locator("#textarea_encrypt_plain_msg").fill('<?xml version="1.0" encoding="UTF-8"?><Документ><Текст>Секрет</Текст></Документ>');
+    await page.locator("#textarea_encrypt_encrypted_msg").fill("");
+    await page.locator("#btnEncrypt").click();
+    await expect(page.locator("#textarea_encrypt_encrypted_msg")).not.toHaveValue("", { timeout: 30_000 });
+    const encrypted = await page.locator("#textarea_encrypt_encrypted_msg").inputValue();
+    expect(encrypted).toMatch(/^<\?xml version="1.0" encoding="UTF-8"\?>\n<EncryptedData xmlns="http:\/\/www.w3.org\/2001\/04\/xmlenc#" Type="http:\/\/www.w3.org\/2001\/04\/xmlenc#Element">/);
+    expect(encrypted).toContain("urn:ietf:params:xml:ns:cpxmlsec:algorithms:transport-gost2012-256");
+    expect(encrypted.replace(/\s+/g, "")).toContain(readFileSync(join(standDir, "user.pem"), "utf8").replace(/-----[^-]+-----|\s+/g, ""));
+    await expect(pinDialog(page)).toHaveCount(0);
+
+    await page.locator("#navbtndecrypt").click();
+    await page.locator("#textarea_encrypted_msg").fill(encrypted);
+    await page.locator("#textarea_decrypted_msg").fill("");
+    await page.locator("#btnDecrypt").click();
+    await expect(pinDialog(page)).toContainText("Зашифрованный XML-документ", { timeout: 30_000 });
+    await enterPin(page);
+    await expect(page.locator("#textarea_decrypted_msg")).toHaveValue(/Попытка расшифровать XML: Рутокен Плагин не расшифровал сообщение: ошибка 147 \(0x80090005\)/, { timeout: 30_000 });
+    expect(await errors()).toEqual([]);
+  } finally {
+    await page.locator("#navbtnencrypt").click();
+    await page.locator("label[for=enc-type-1]").click();
+  }
+});

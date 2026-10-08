@@ -1,5 +1,6 @@
 // A minimal DER reader: enough to take X.509 certificates and CMS messages apart. Of BER it takes the
 // indefinite lengths CMS producers may use for signed data; high tag numbers are rejected, which neither uses.
+// And a writer for the few structures the page builds itself (encode, encodeOid).
 
 export interface Node {
   tag: number;
@@ -99,4 +100,32 @@ export function decodeTime(node: Node): Date {
   const ms = Number((match[7] ?? "").padEnd(3, "0"));
   const year = utc ? (y < 50 ? 2000 + y : 1900 + y) : y;
   return new Date(Date.UTC(year, mo - 1, d, h, mi, s, ms));
+}
+
+// One DER element: the tag, the definite length, the contents.
+export function encode(tag: number, ...contents: Uint8Array[]): Uint8Array {
+  const length = contents.reduce((sum, part) => sum + part.length, 0);
+  const lengthBytes: number[] = [];
+  for (let rest = length; rest > 0; rest = Math.floor(rest / 256)) lengthBytes.unshift(rest % 256);
+  const header = length < 0x80 ? [tag, length] : [tag, 0x80 | lengthBytes.length, ...lengthBytes];
+  const result = new Uint8Array(header.length + length);
+  result.set(header);
+  let offset = header.length;
+  for (const part of contents) {
+    result.set(part, offset);
+    offset += part.length;
+  }
+  return result;
+}
+
+// An OBJECT IDENTIFIER's contents.
+export function encodeOid(oid: string): Uint8Array {
+  const [first, second, ...rest] = oid.split(".").map(Number);
+  const bytes: number[] = [];
+  for (const arc of [first! * 40 + second!, ...rest]) {
+    const group = [arc % 128];
+    for (let value = Math.floor(arc / 128); value > 0; value = Math.floor(value / 128)) group.unshift(0x80 | (value % 128));
+    bytes.push(...group);
+  }
+  return Uint8Array.from(bytes);
 }

@@ -4,6 +4,7 @@ import { CadesTools } from "./cades-tools.ts";
 import { Certificate } from "./certificate.ts";
 import { CspInformation } from "./csp-information.ts";
 import { CPEnvelopedData } from "./enveloped-data.ts";
+import { EnvelopedXML } from "./enveloped-xml.ts";
 import {
   CertificateRequestPkcs10,
   CspInformations,
@@ -34,6 +35,7 @@ const factories = new Map<string, Factory>([
   ["cadescom.cpattribute", () => new CPAttribute()],
   ["cadescom.cpenvelopeddata", (session) => new CPEnvelopedData(session)],
   ["cadescom.cpsigner", () => new CPSigner()],
+  ["cadescom.envelopedxml", (session) => new EnvelopedXML(session)],
   ["cadescom.hasheddata", () => new HashedData()],
   ["cadescom.signedxml", (session) => new SignedXML(session)],
   ["cadescom.store", (session) => new Store(session)],
