@@ -19,9 +19,13 @@ export const stand = {
   // CryptoPro plug-in and CSP it talks to are not on the stand.
   cryptoproExtension: join(standDir, "cryptopro-extension"),
   pluginDir: join(standDir, "plugin", "opt", "aktivco", "rutokenplugin"),
+  // Firefox from Mozilla's archive (tests/stand/firefox.ts drives it), with the Rutoken adapter for Firefox, which
+  // the tests install from vendor/ as it is: it is signed by AMO.
+  firefox: join(standDir, "firefox", "firefox"),
   softhsm: join(standDir, "softhsm"),
 };
 export const adapterId = "ohedcglhbbfdgaogjhcclacoccbagkjg";
+export const firefoxAdapterId = "rutokenplugin@rutoken.ru";
 // The Manifest V3 CryptoPro extension, one of the ids cadesplugin_api.js loads nmcades_plugin_api.js from.
 export const cryptoproExtensionId = "pfhgbfnnjiafkhfdkmpiflachepdcjod";
 export const nativeHostName = "ru.rutoken.firewyrmhost";
@@ -92,6 +96,16 @@ function setupNativeHost(): void {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${nativeHostName}.json`), text);
   }
+  // Firefox's manifest, for its adapter's id, in the user's directory Firefox reads (docs/JOURNAL.md, 2026-10-16).
+  const firefox = JSON.parse(readFileSync(join(stand.pluginDir, `${nativeHostName}.firefox.json`), "utf8"));
+  firefox.path = manifest.path;
+  const mozilla = join(stand.home, ".mozilla", "native-messaging-hosts");
+  mkdirSync(mozilla, { recursive: true });
+  writeFileSync(join(mozilla, `${nativeHostName}.json`), JSON.stringify(firefox, null, 2));
+}
+
+function setupFirefox(): void {
+  run("tar", ["-xJf", vendorPath("firefox"), "-C", standDir]);
 }
 
 export const venvPython = join(standDir, "venv", "bin", "python");
@@ -109,6 +123,7 @@ export function setupStand(): void {
   setupStoreExtension("rutoken-adapter", adapterId, stand.adapter);
   setupStoreExtension("cryptopro-extension", cryptoproExtensionId, stand.cryptoproExtension);
   setupNativeHost();
+  setupFirefox();
   setupPythonTools();
 }
 

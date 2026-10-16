@@ -21,10 +21,12 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `scripts/vendor-lock.json`.
 - `npm run stand` — fetch vendor files, rebuild `stand/` from scratch (Rutoken Plugin, fake Rutoken, adapter,
   Python venv) and provision the token with a key and a test-CA certificate. Needs network (vendor files, PyPI).
-- `npm run build` — build the extension into `dist/extension/` (load it unpacked in Chrome).
-- `npm run package` — build, then pack it into `dist/cryptopro-via-rutoken-<version>.zip` for installing by hand;
-  CI uploads the same archive as the `cryptopro-via-rutoken` artifact, and its `release` job publishes a version
-  that has no GitHub release yet as a pre-release with that archive.
+- `npm run build` — build the extension into `dist/extension/` for Chrome (load it unpacked) and `dist/firefox/` for
+  Firefox, from the same code.
+- `npm run package` — build, then pack them into `dist/cryptopro-via-rutoken-<version>.zip` (Chrome, a folder inside)
+  and `dist/cryptopro-via-rutoken-<version>-firefox.xpi` (Firefox, the manifest at the root) for installing by hand;
+  CI uploads both as the `cryptopro-via-rutoken` artifact, and its `release` job publishes a version that has no
+  GitHub release yet as a pre-release with them.
 - `node scripts/gen-constants.ts` — regenerate `src/page/constants.ts` after pinning a new `cadesplugin_api.js`.
 - `npm run check` — typecheck (Node code, then `src/page/` with DOM types, then `src/extension/` with Chrome types)
   and unit tests; must pass before every commit.
@@ -51,10 +53,14 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 
 ## Map of the code
 
-- `src/manifest.json` — extension manifest; the build fills in the version. No static content script: page.js is
-  registered at run time for the enabled sites only.
-- `src/extension/` — the extension's own side, with Chrome types (`src/extension/tsconfig.json`): `sites.ts` (the
-  enabled-site list in `chrome.storage.local`, optional host permissions, registering page.js; Chrome's permission
+- `src/manifest.json` — extension manifest; the build fills in the version, and `firefoxManifest` in
+  `scripts/build.ts` makes Firefox's from it (background script, add-on id, minimum version). No static content
+  script: page.js is registered at run time for the enabled sites only.
+- `src/extension/` — the extension's own side, with Chrome types (`src/extension/tsconfig.json`): `browser.ts` (which
+  browser the build is for, `__BROWSER__` from `scripts/build.ts`), `sites.ts` (the
+  enabled-site list in `chrome.storage.local`, optional host permissions — in Firefox without the port, its
+  patterns with one inject nothing —, the confirmed timestamp services' list, taking access back only when nothing
+  listed needs it, registering page.js; Chrome's permission
   prompt can close the popup, so `finishPendingSite` in the service worker finishes an interrupted enabling), `background.ts`
   (service worker keeping the registration in sync and running `install.ts` and `timestamps.ts`), `popup.*` (the button's window), `options.*` (site list, the extended validity and root offer switches, the confirmed timestamp services, certificate stores), `roots.ts` (the two certificate stores in
   `chrome.storage.local`: the built-in roots, and the roots of other CAs and intermediates added from files, a
@@ -111,7 +117,10 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   file-signing, XMLDSig and verification pages (`cades_bes_file.html`, `cades_xmldsig_sample.html`, `verify.html`); `testgost.spec.ts`
   (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `nalog.spec.ts` (opt-in,
   online) signs in by certificate on the FNS personal accounts up to the server refusing the CA; `crpt.spec.ts`
-  (opt-in, online) does the same on Честный знак; `testgost-certs.ts` issues their certificates; `with-cryptopro.spec.ts`
+  (opt-in, online) does the same on Честный знак; `testgost-certs.ts` issues their certificates; `firefox.ts` drives
+  the stand's Firefox over WebDriver BiDi (its own small client) with the Rutoken adapter for Firefox and our
+  `dist/firefox`, and `firefox.spec.ts` runs the plug-in, site enabling, the demo page, XAdES-T and webtools.html in
+  it; `with-cryptopro.spec.ts`
   loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `xades.spec.ts` XAdES-BES and XAdES-T, with the stand's timestamp service and the window asking for access to another;
   `verification.spec.ts` verifies ours and CryptoPro's signatures in the page; `roots.spec.ts` drives the root store
   on the options page; `validity.spec.ts` the extended validity check and the demo page adding its root; `enrollment.spec.ts` the
@@ -132,12 +141,24 @@ and the plugin loads `librtpkcs11ecp.so` from that same directory, so the stand 
 use the `chromium` channel, not the headless shell; the stand profile outlives builds and Chromium would keep
 running its cached service worker, so `launchStand` deletes `Default/Service Worker` first; wait for the adapter object with `openStandPage`. Tests load
 `standExtension()` (the build with the stand's host access pre-granted, since Chrome's permission prompt cannot be
-clicked) and turn sites on with `enableSite`, through the options page.
+clicked) and turn sites on with `enableSite`, through the options page. Firefox (`firefox.ts`): Playwright cannot drive
+Mozilla's Firefox, so the tests talk WebDriver BiDi themselves; our extension's pages open only with
+`-remote-allow-system-access`, and while one is open in a tab the adapter answers in seconds — close it before using a
+site page.
 
 ## Settled decisions
 
 - **Chrome first; other browsers later.** Owner, 2026-09-23. Do not add Firefox/Safari code paths before the
-  roadmap stage for them.
+  roadmap stage for them. Stage 7 started with Firefox: owner, 2026-10-16, «делай firefox». Firefox is a second build of
+  the same code (`firefoxManifest`, `__BROWSER__`), not a fork; the next browser is the owner's call.
+
+- **The Firefox add-on id is `FIREFOX_ID` in `scripts/build.ts`.** Agent, 2026-10-16. Reason: Firefox keeps an
+  add-on's storage under it and AMO would sign under it, so changing it loses the users' enabled sites and stores.
+
+- **Firefox on the stand is Mozilla's build driven over WebDriver BiDi by `tests/stand/firefox.ts`, not
+  Playwright.** Agent, 2026-10-16. Reason: Playwright drives only its own patched Firefox, which the environment
+  cannot download, and users run Mozilla's; BiDi needs no new dependency (Node's `WebSocket`) and installs
+  extensions with `webExtension.install`. Firefox and the adapter are pinned in `vendor-lock.json`.
 - **Target keys are PKCS#11 objects on the token that the Rutoken Plugin can see.** Owner, 2026-09-23. CryptoPro
   containers written onto a Rutoken and CryptoPro FKN keys are out of scope: the Rutoken Plugin cannot use them.
 - **First target site is the CryptoPro demo page `cades_bes_sample.html`.** Owner, 2026-09-23.

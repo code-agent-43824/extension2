@@ -2,6 +2,7 @@
 // extended validity switch, the confirmed timestamp services and the certificate stores (roots-view.ts).
 import { EXTENDED_VALIDITY_KEY, OFFER_ROOT_KEY, extendedValidity, offerRoot, setExtendedValidity, setOfferRoot } from "./roots.ts";
 import { setupRoots } from "./roots-view.ts";
+import { BROWSER_NAME } from "./browser.ts";
 import { disableSite, enabledSites, enableSite, siteOf, STORAGE_KEY } from "./sites.ts";
 import { forgetTsaService, TSA_KEY, tsaServices } from "./timestamps.ts";
 
@@ -45,7 +46,7 @@ form.addEventListener("submit", async (event) => {
   }
   error.textContent = "";
   if (await enableSite(site)) input.value = "";
-  else error.textContent = "Chrome не дал доступ к сайту.";
+  else error.textContent = `${BROWSER_NAME} не дал доступ к сайту.`;
 });
 
 chrome.storage.onChanged.addListener((changes, area) => {

@@ -31,5 +31,9 @@ describe("extension archive", () => {
       "folder/manifest.json": '{"name": "КриптоПро через Рутокен"}\n',
       "folder/sub/page.js": "x".repeat(10_000),
     });
+    // Firefox's add-on file: the manifest at the root.
+    writeFileSync(archive, zip(directoryEntries(source)));
+    const root = spawnSync("python3", ["-c", script, archive], { encoding: "utf8" });
+    expect(Object.keys(JSON.parse(root.stdout))).toEqual(["empty.css", "manifest.json", "sub/page.js"]);
   });
 });

@@ -260,19 +260,25 @@
 Начат 2026-10-16 по слову владельца: «делай firefox» (после «почини мелочи сначала, потом займемся другими
 браузерами»). Этап 5 остаётся открытым до прогона владельцем (действие 7).
 
-- [~] **30. Сборка для Firefox.** Тот же код, вторая сборка `dist/firefox/`: манифест Firefox (фоновый скрипт —
+- [x] **30. Сборка для Firefox.** Тот же код, вторая сборка `dist/firefox/`: манифест Firefox (фоновый скрипт —
   `background.scripts`, служебных воркеров Firefox не запускает; `browser_specific_settings.gecko` с id и
   `strict_min_version` 128 — с этой версии мир `MAIN` в `scripting.registerContentScripts`), название браузера в
   надписях; шаблоны доступа к сайту и службе штампов — без порта: по шаблону с портом Firefox не подставляет скрипты
   (опыт, `JOURNAL.md`); архив для установки вручную рядом с архивом Chrome. Версия 1.10.0.
-- [ ] **31. Стенд Firefox.** Firefox из закреплённого архива ftp.mozilla.org, «Адаптер Рутокен Плагин» для Firefox с
+  Сделано: `scripts/build.ts` (`firefoxManifest`, `__BROWSER__`), `src/extension/browser.ts`, `matchPattern` и
+  `releaseAccess` в `sites.ts` (доступ отзывается, только когда шаблон не нужен другому сайту или службе), файл
+  `.xpi` (`scripts/package.ts`), выпуск CI прикладывает его.
+- [x] **31. Стенд Firefox.** Firefox из закреплённого архива ftp.mozilla.org, «Адаптер Рутокен Плагин» для Firefox с
   AMO, оба по SHA-256 в `vendor-lock.json`; native host в `~/.mozilla/native-messaging-hosts` HOME стенда. Браузер
   ведут тесты по WebDriver BiDi — своим небольшим клиентом на `WebSocket` Node, без новых зависимостей (Playwright
   с обычным Firefox не работает). Тесты: дымовой (адаптер, плагин, токен), включение сайта в настройках,
   демо-страница (подпись проходит `verify_cms.py`), XAdES-T со службой стенда, основное на webtools.html; в CI.
-- [ ] **32. Установка и документы.** `MANUAL-CHECK.md` — установка в Firefox и проверка; `STATUS.md`. Обычный Firefox
+  Сделано: `tests/stand/firefox.ts` и `firefox.spec.ts` (6 тестов), Firefox и адаптер в `vendor-lock.json`,
+  `setup-stand.ts` распаковывает Firefox и кладёт манифест native host для Firefox.
+- [x] **32. Установка и документы.** `MANUAL-CHECK.md` — установка в Firefox и проверка; `STATUS.md`. Обычный Firefox
   ставит насовсем только подписанные дополнения: подпись на AMO (ключи API AMO владельца) — его решение; до неё —
   временная установка через about:debugging.
+  Сделано: раздел «В Firefox» в `MANUAL-CHECK.md`, `STATUS.md`. Ждёт решения владельца: подписывать ли на AMO.
 
 ## Значения по умолчанию, выбранные агентом
 

@@ -1,6 +1,7 @@
 // The window asking whether the extension may reach a timestamp service for a site's XAdES-T signature
 // (timestamps.ts). «Разрешить» makes Chrome's own permission request for the service's address, which only a click in
 // an extension page may do, and reports what Chrome answered; «Отмена» and closing the window are a no.
+import { BROWSER, BROWSER_NAME } from "./browser.ts";
 import { CONFIRM_PING, CONFIRM_PING_MS } from "./install.ts";
 import { matchPattern, siteOf } from "./sites.ts";
 import { TSA_ANSWER, TSA_DETAILS, type TsaAccessDetails } from "./timestamps.ts";
@@ -23,9 +24,12 @@ async function show(): Promise<void> {
   byId("what").append(
     "Чтобы получить штамп, расширению нужен доступ к ",
     strong(service),
-    ": туда уходит только хеш подписи. Если у расширения ещё нет доступа к этому адресу, после «Разрешить» Chrome спросит о нём сам.",
+    `: туда уходит только хеш подписи. Если у расширения ещё нет доступа к этому адресу, после «Разрешить» ${BROWSER_NAME} спросит о нём сам.`,
   );
-  byId("where").textContent = "Доступ можно забрать в Chrome: «Расширения» → это расширение → «Доступ к сайтам».";
+  byId("where").textContent =
+    BROWSER === "firefox"
+      ? "Доступ можно забрать в Firefox на странице этого расширения в «Дополнениях» (about:addons)."
+      : "Доступ можно забрать в Chrome: «Расширения» → это расширение → «Доступ к сайтам».";
   button("allow").disabled = false;
   button("cancel").focus();
 }

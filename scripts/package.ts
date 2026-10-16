@@ -1,17 +1,22 @@
-// Packs the built extension into dist/<name>-<version>.zip for installing by hand: unzip, then
-// chrome://extensions → developer mode → "Load unpacked" on the folder inside. A plain ZIP writer
-// (deflate, no extras): the format needs nothing more, and it saves a dependency.
+// Packs the built extension for installing by hand: dist/<name>-<version>.zip for Chrome (unzip, then
+// chrome://extensions → developer mode → "Load unpacked" on the folder inside) and dist/<name>-<version>-firefox.xpi
+// for Firefox (the manifest at the archive's root, as an add-on file must have it). A plain ZIP writer (deflate, no
+// extras): the format needs nothing more, and it saves a dependency.
 import { crc32, deflateRawSync } from "node:zlib";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildExtension, extensionDir, packageVersion } from "./build.ts";
+import { buildExtension, extensionDir, firefoxDir, packageVersion } from "./build.ts";
 import { repoRoot } from "./fetch-vendor.ts";
 
 export const packageName = "cryptopro-via-rutoken";
 
 export function packagePath(version = packageVersion()): string {
   return join(repoRoot, "dist", `${packageName}-${version}.zip`);
+}
+
+export function firefoxPackagePath(version = packageVersion()): string {
+  return join(repoRoot, "dist", `${packageName}-${version}-firefox.xpi`);
 }
 
 interface Entry {
@@ -69,23 +74,26 @@ export function zip(entries: Entry[]): Buffer {
   return Buffer.concat([...locals, directory, end]);
 }
 
-// Every file under `dir`, sorted, named `folder/<path>` with forward slashes.
-export function directoryEntries(dir: string, folder: string): Entry[] {
+// Every file under `dir`, sorted, named `folder/<path>` with forward slashes, or `<path>` without a folder.
+export function directoryEntries(dir: string, folder = ""): Entry[] {
+  const prefix = folder ? `${folder}/` : "";
   return readdirSync(dir, { recursive: true, withFileTypes: true })
     .filter((entry) => entry.isFile())
     .map((entry) => join(entry.parentPath, entry.name))
     .sort()
-    .map((path) => ({ name: `${folder}/${relative(dir, path).split(sep).join("/")}`, data: readFileSync(path) }));
+    .map((path) => ({ name: `${prefix}${relative(dir, path).split(sep).join("/")}`, data: readFileSync(path) }));
 }
 
-export async function packageExtension(): Promise<string> {
+export async function packageExtension(): Promise<string[]> {
   await buildExtension();
   const version = packageVersion();
-  const target = packagePath(version);
-  writeFileSync(target, zip(directoryEntries(extensionDir, `${packageName}-${version}`)));
-  return target;
+  const chrome = packagePath(version);
+  writeFileSync(chrome, zip(directoryEntries(extensionDir, `${packageName}-${version}`)));
+  const firefox = firefoxPackagePath(version);
+  writeFileSync(firefox, zip(directoryEntries(firefoxDir)));
+  return [chrome, firefox];
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  console.log(`packed ${await packageExtension()}`);
+  for (const target of await packageExtension()) console.log(`packed ${target}`);
 }

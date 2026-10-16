@@ -20,6 +20,7 @@
     "scripts",
     "tests",
     "*.config.ts",
-    "src/page/globals.d.ts"
+    "src/page/globals.d.ts",
+    "src/extension/globals.d.ts"
   ]
 }

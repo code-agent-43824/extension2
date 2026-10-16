@@ -12,6 +12,7 @@ import {
   SCRIPT_ID,
   siteOf,
   syncContentScript,
+  TSA_KEY,
 } from "../../src/extension/sites.ts";
 
 // The parts of chrome.* the site list uses. `granted` holds host permissions; `grant` decides what
@@ -72,6 +73,13 @@ describe("site list", () => {
     expect(siteOf("not a url")).toBeUndefined();
     expect(siteOf(undefined)).toBeUndefined();
     expect(matchPattern("https://example.ru")).toBe("https://example.ru/*");
+    expect(matchPattern("http://127.0.0.1:8080")).toBe("http://127.0.0.1:8080/*");
+  });
+
+  it("gives Firefox patterns without the port, which it injects by", () => {
+    expect(matchPattern("https://example.ru", "firefox")).toBe("https://example.ru/*");
+    expect(matchPattern("http://127.0.0.1:8080", "firefox")).toBe("http://127.0.0.1/*");
+    expect(matchPattern("https://[::1]:8443", "firefox")).toBe("https://[::1]/*");
   });
 
   it("enables a site only when Chrome grants access, and registers page.js for exactly the enabled sites", async () => {
@@ -132,6 +140,15 @@ describe("site list", () => {
     expect(chrome.granted.has("https://a.example/*")).toBe(false);
     await syncContentScript(chrome.api);
     expect(chrome.scripts()).toEqual([]);
+  });
+
+  it("disabling keeps the access a confirmed timestamp service at the same address still needs", async () => {
+    const chrome = fakeChrome();
+    await enableSite("https://a.example", chrome.api);
+    chrome.store[TSA_KEY] = ["https://a.example"];
+    await disableSite("https://a.example", chrome.api);
+    expect(await enabledSites(chrome.api)).toEqual([]);
+    expect(chrome.granted.has("https://a.example/*")).toBe(true);
   });
 
   it("disabling still works when the access cannot be removed", async () => {

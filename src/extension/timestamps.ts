@@ -6,7 +6,9 @@
 // where the user can take it back. Only an address the user said yes to as a timestamp service is posted to: access
 // alone is not enough, since the enabled sites have it too, and a site must not read another one's answers through us.
 import { PromptWindows } from "./prompt-windows.ts";
-import { enabledSites, matchPattern, siteOf } from "./sites.ts";
+import { enabledSites, matchPattern, releaseAccess, siteOf, TSA_KEY, tsaServices } from "./sites.ts";
+
+export { TSA_KEY, tsaServices };
 
 export const TSA_ACCESS_MESSAGE = "cryptopro-via-rutoken:tsa-access-check";
 export const TSA_FETCH_MESSAGE = "cryptopro-via-rutoken:tsa-fetch";
@@ -18,8 +20,6 @@ const E_ACCESSDENIED = 0x80070005;
 const E_FAIL = 0x80004005;
 // The user's no, as for a root certificate (install.ts).
 const ERROR_CANCELLED = 0x800704c7;
-// The origins of the services the user let the extension reach, in chrome.storage.local.
-export const TSA_KEY = "tsaServices";
 // A TimeStampReq is a few hundred bytes; an answer with the service's chain a few kilobytes.
 const MAX_REQUEST = 4096;
 const MAX_RESPONSE = 1 << 20;
@@ -67,21 +67,11 @@ function serviceOf(url: unknown): Service | undefined {
   return origin ? { url: String(url), origin, pattern: matchPattern(origin) } : undefined;
 }
 
-export async function tsaServices(api: Api = chrome): Promise<string[]> {
-  const stored = (await api.storage.local.get(TSA_KEY))[TSA_KEY];
-  return Array.isArray(stored) ? stored.filter((origin): origin is string => typeof origin === "string") : [];
-}
-
-// The options page's «Забыть»: the next XAdES-T with the service asks again. Chrome's access to it goes too, unless
-// it is an enabled site's: taking that away would turn the site off.
+// The options page's «Забыть»: the next XAdES-T with the service asks again. The browser's access to it goes too,
+// unless an enabled site needs it: taking that away would turn the site off.
 export async function forgetTsaService(origin: string, api: Api = chrome): Promise<void> {
   await api.storage.local.set({ [TSA_KEY]: (await tsaServices(api)).filter((service) => service !== origin) });
-  if ((await enabledSites(api)).includes(origin)) return;
-  try {
-    await api.permissions.remove({ origins: [matchPattern(origin)] });
-  } catch {
-    // A permission the manifest requires cannot be removed; the service is forgotten anyway, being unlisted.
-  }
+  await releaseAccess(origin, api);
 }
 
 // Drops the services whose access the user took back in Chrome's own settings, as pruneSites does for sites.

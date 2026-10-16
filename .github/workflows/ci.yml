@@ -31,7 +31,9 @@ jobs:
       - uses: actions/upload-artifact@v6
         with:
           name: cryptopro-via-rutoken
-          path: dist/cryptopro-via-rutoken-*.zip
+          path: |
+            dist/cryptopro-via-rutoken-*.zip
+            dist/cryptopro-via-rutoken-*-firefox.xpi
           if-no-files-found: error
       - uses: actions/upload-artifact@v6
         if: failure()
@@ -78,13 +80,15 @@ jobs:
         run: |
           docs="$GITHUB_SERVER_URL/$GITHUB_REPOSITORY/blob/v$VERSION/docs"
           {
-            echo "Сборка расширения «КриптоПро через Рутокен» $VERSION для установки вручную в Chrome."
+            echo "Сборка расширения «КриптоПро через Рутокен» $VERSION для установки вручную в Chrome и Firefox."
             echo
             echo "- Установка и чек-лист ручной проверки: [MANUAL-CHECK.md]($docs/MANUAL-CHECK.md)."
             echo "- Что проверено, на чём и какие проблемы известны: [STATUS.md]($docs/STATUS.md)."
             echo
-            echo "Архив \`cryptopro-via-rutoken-$VERSION.zip\` распаковать, открыть chrome://extensions, включить"
+            echo "Chrome: архив \`cryptopro-via-rutoken-$VERSION.zip\` распаковать, открыть chrome://extensions, включить"
             echo "«Режим разработчика» и загрузить распакованную папку кнопкой «Загрузить распакованное расширение»."
+            echo
+            echo "Firefox: \`cryptopro-via-rutoken-$VERSION-firefox.xpi\` не подписан Mozilla — как его поставить, в MANUAL-CHECK.md."
           } > notes.md
-          gh release create "v$VERSION" "dist/cryptopro-via-rutoken-$VERSION.zip" \
+          gh release create "v$VERSION" "dist/cryptopro-via-rutoken-$VERSION.zip" "dist/cryptopro-via-rutoken-$VERSION-firefox.xpi" \
             --target "$GITHUB_SHA" --title "$VERSION" --notes-file notes.md --prerelease

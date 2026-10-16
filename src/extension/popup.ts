@@ -1,4 +1,5 @@
 // The window on the extension's button: the current site and its switch.
+import { BROWSER_NAME } from "./browser.ts";
 import { disableSite, enabledSites, enableSite, hasAccess, siteOf } from "./sites.ts";
 
 const byId = (id: string) => document.getElementById(id)!;
@@ -21,7 +22,7 @@ async function main(): Promise<void> {
     // close this window; the service worker then turns the site on and reloads the tab (sites.ts).
     if (checkbox.checked && !(await enableSite(site, chrome, tab.id))) {
       checkbox.checked = false;
-      note.textContent = "Chrome не дал доступ к сайту.";
+      note.textContent = `${BROWSER_NAME} не дал доступ к сайту.`;
       return;
     }
     if (!checkbox.checked) await disableSite(site);

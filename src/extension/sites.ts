@@ -2,11 +2,14 @@
 // an optional host permission, requested when the user enables it. page.js is registered only for sites
 // that are both listed and accessible, so a site the user never enabled sees no window.cadesplugin from
 // us (docs/PLAN.md of stage 5).
+import { BROWSER, type Browser } from "./browser.ts";
 
 export const SCRIPT_ID = "cades-shim";
 // The isolated-world script handing page.js the root store (roots-bridge.ts).
 export const BRIDGE_ID = "cades-roots";
 export const STORAGE_KEY = "sites";
+// The origins of the timestamp services the user let the extension reach (timestamps.ts).
+export const TSA_KEY = "tsaServices";
 // The site being enabled while Chrome asks for access. Chrome's prompt can close the popup that asked, and with
 // it the rest of enableSite; the service worker then finishes the job when the access arrives (finishPendingSite).
 export const PENDING_KEY = "pendingSite";
@@ -29,13 +32,39 @@ export function siteOf(url: string | undefined): string | undefined {
   }
 }
 
-export function matchPattern(site: string): string {
-  return `${site}/*`;
+// The match pattern of the access to a site or a timestamp service. Chrome's is the origin's, port included. Firefox
+// injects no content script by a pattern with a port, whatever access it holds (docs/JOURNAL.md, 2026-10-16), so
+// there the access to a site covers every port of its host.
+export function matchPattern(site: string, browser: Browser = BROWSER): string {
+  if (browser !== "firefox") return `${site}/*`;
+  const url = new URL(site);
+  return `${url.protocol}//${url.hostname}/*`;
 }
 
-export async function enabledSites(api: Api = chrome): Promise<string[]> {
-  const stored = (await api.storage.local.get(STORAGE_KEY))[STORAGE_KEY];
-  return Array.isArray(stored) ? stored.filter((site): site is string => typeof site === "string") : [];
+async function origins(key: string, api: Api): Promise<string[]> {
+  const stored = (await api.storage.local.get(key))[key];
+  return Array.isArray(stored) ? stored.filter((origin): origin is string => typeof origin === "string") : [];
+}
+
+export function enabledSites(api: Api = chrome): Promise<string[]> {
+  return origins(STORAGE_KEY, api);
+}
+
+export function tsaServices(api: Api = chrome): Promise<string[]> {
+  return origins(TSA_KEY, api);
+}
+
+// Takes the access to `origin` back once no enabled site or timestamp service needs its pattern: in Firefox, an
+// enabled site and a service on the same host share one, whatever their ports.
+export async function releaseAccess(origin: string, api: Api = chrome): Promise<void> {
+  const pattern = matchPattern(origin);
+  const listed = [...(await enabledSites(api)), ...(await tsaServices(api))];
+  if (listed.some((other) => matchPattern(other) === pattern)) return;
+  try {
+    await api.permissions.remove({ origins: [pattern] });
+  } catch {
+    // A permission the manifest requires cannot be removed; the origin is off anyway, being unlisted.
+  }
 }
 
 export async function hasAccess(site: string, api: Api = chrome): Promise<boolean> {
@@ -73,11 +102,7 @@ export async function finishPendingSite(api: Api = chrome): Promise<void> {
 export async function disableSite(site: string, api: Api = chrome): Promise<void> {
   const sites = await enabledSites(api);
   await api.storage.local.set({ [STORAGE_KEY]: sites.filter((s) => s !== site) });
-  try {
-    await api.permissions.remove({ origins: [matchPattern(site)] });
-  } catch {
-    // A permission the manifest requires cannot be removed; the site is off anyway, being unlisted.
-  }
+  await releaseAccess(site, api);
 }
 
 // Drops sites whose access the user revoked in Chrome's own settings.
