@@ -4,7 +4,7 @@
 // service and posting the request (src/extension/timestamps.ts).
 import { describe, expect, it } from "vitest";
 import { STORAGE_KEY } from "../../src/extension/sites.ts";
-import { Timestamps, TSA_KEY, tsaServices } from "../../src/extension/timestamps.ts";
+import { forgetTsaService, pruneTsaServices, Timestamps, TSA_KEY, tsaServices } from "../../src/extension/timestamps.ts";
 import { children, decodeOid, encode, encodeOid, read } from "../../src/page/asn1.ts";
 import type { Clock } from "../../src/page/rutoken.ts";
 import { timestampAccess, timestampResponse, TSA_ACCESS_REQUEST, TSA_ACCESS_RESPONSE, TSA_REQUEST, TSA_RESPONSE } from "../../src/page/timestamps.ts";
@@ -127,7 +127,10 @@ function fakeChrome(granted: string[] = [], services: string[] = []) {
         set: async (items: Record<string, unknown>) => void Object.assign(store, structuredClone(items)),
       },
     },
-    permissions: { contains: async ({ origins }: { origins: string[] }) => origins.every((origin) => permissions.has(origin)) },
+    permissions: {
+      contains: async ({ origins }: { origins: string[] }) => origins.every((origin) => permissions.has(origin)),
+      remove: async ({ origins }: { origins: string[] }) => origins.every((origin) => permissions.delete(origin)),
+    },
     runtime: { getURL: (path: string) => `chrome-extension://id/${path}` },
     windows: {
       create: async ({ url }: { url: string }) => {
@@ -213,6 +216,32 @@ describe("the service worker's access to a timestamp service", () => {
     expect((await timestamps.access({ url: "ftp://tsa.example/" }, site)).error?.code).toBe(E_INVALIDARG);
     expect((await timestamps.access({}, site)).error?.code).toBe(E_INVALIDARG);
     expect(windows).toEqual([]);
+  });
+});
+
+describe("the confirmed timestamp services on the options page", () => {
+  it("forgets a service: the next XAdES-T asks again, and Chrome's access goes, but not an enabled site's", async () => {
+    const { api, windows, permissions } = fakeChrome([tsaPattern, `${site}/*`], [tsaOrigin, site]);
+    await forgetTsaService(tsaOrigin, api);
+    expect(await tsaServices(api)).toEqual([site]);
+    expect(permissions.has(tsaPattern)).toBe(false);
+    const timestamps = new Timestamps(api);
+    void timestamps.access({ url: tsa }, `${site}/page`);
+    await tick();
+    expect(windows).toHaveLength(1);
+
+    await forgetTsaService(site, api);
+    expect(await tsaServices(api)).toEqual([]);
+    expect(permissions.has(`${site}/*`)).toBe(true);
+  });
+
+  it("drops the services whose access the user took back in Chrome", async () => {
+    const { api, permissions } = fakeChrome([tsaPattern, "http://other.example/*"], [tsaOrigin, "http://other.example"]);
+    await pruneTsaServices(api);
+    expect(await tsaServices(api)).toEqual([tsaOrigin, "http://other.example"]);
+    permissions.delete(tsaPattern);
+    await pruneTsaServices(api);
+    expect(await tsaServices(api)).toEqual(["http://other.example"]);
   });
 });
 

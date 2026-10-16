@@ -25,11 +25,15 @@ testca2012.cryptopro.ru. Run as an ordinary user, not root.
 
 ## 2. The stand: Rutoken Plugin with the fork in place of its library
 
+The release under check is the one the owner names, otherwise the newest at
+<https://github.com/code-agent-43824/extension2/releases>. Set its version once and keep it in every shell below:
+
 ```sh
+VERSION=X.Y.Z                # the release under check, without the "v"
 mkdir -p ~/rutoken-check && cd ~/rutoken-check
 git clone https://github.com/code-agent-43824/extension2.git
 cd extension2
-git checkout v1.8.1          # the release under check
+git checkout "v$VERSION"
 npm ci
 npx playwright install chromium
 npm run stand
@@ -64,17 +68,16 @@ Write down which fork release each result came from.
 
 ## 3. The extension under test
 
-The release archive, not a build: `cryptopro-via-rutoken-1.8.1.zip` from
-<https://github.com/code-agent-43824/extension2/releases/tag/v1.8.1>, unpacked:
+The release archive, not a build: `cryptopro-via-rutoken-$VERSION.zip` from the release's page, unpacked:
 
 ```sh
 cd ~/rutoken-check
-curl -LO https://github.com/code-agent-43824/extension2/releases/download/v1.8.1/cryptopro-via-rutoken-1.8.1.zip
-unzip -q cryptopro-via-rutoken-1.8.1.zip -d ext   # gives ext/cryptopro-via-rutoken-1.8.1
+curl -LO "https://github.com/code-agent-43824/extension2/releases/download/v$VERSION/cryptopro-via-rutoken-$VERSION.zip"
+unzip -q "cryptopro-via-rutoken-$VERSION.zip" -d ext   # gives ext/cryptopro-via-rutoken-$VERSION
 ```
 
-If the download needs access you do not have, `gh release download v1.8.1 -R code-agent-43824/extension2` does the
-same; failing that, `npm run package` in the checkout of step 2 builds the archive into `dist/`.
+If the download needs access you do not have, `gh release download "v$VERSION" -R code-agent-43824/extension2` does
+the same; failing that, `npm run package` in the checkout of step 2 builds the archive into `dist/`.
 
 ## 4. Chromium on the fake token
 
@@ -83,7 +86,7 @@ cd ~/rutoken-check/extension2
 PROFILE="$HOME/rutoken-check/profile"
 mkdir -p "$PROFILE" && cp -r stand/profile/NativeMessagingHosts "$PROFILE/"
 CHROME=$(node -e 'import("playwright").then((p) => console.log(p.chromium.executablePath()))')
-EXT="$PWD/stand/adapter,$HOME/rutoken-check/ext/cryptopro-via-rutoken-1.8.1"
+EXT="$PWD/stand/adapter,$HOME/rutoken-check/ext/cryptopro-via-rutoken-$VERSION"
 HOME="$PWD/stand/home" "$CHROME" --user-data-dir="$PROFILE" --no-first-run \
   --disable-extensions-except="$EXT" --load-extension="$EXT"
 ```

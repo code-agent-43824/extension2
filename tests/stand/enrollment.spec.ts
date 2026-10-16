@@ -11,8 +11,8 @@ import { cpSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { join } from "node:path";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { caDir } from "../../scripts/provision-token.ts";
-import { stand, standDir, venvPython } from "../../scripts/setup-stand.ts";
-import { blankPage, clearSites, enableSite, extensionOrigin, launchStand, openStandPage, servePages, setOptionSwitch, standExtension, type PageServer } from "./harness.ts";
+import { stand, standDir, userPin, venvPython } from "../../scripts/setup-stand.ts";
+import { blankPage, clearSites, enableSite, extensionOrigin, launchStand, loadPluginSource, openStandPage, servePages, setOptionSwitch, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
 
 const outDir = join(standDir, "enrollment");
@@ -57,7 +57,9 @@ async function result(page: Page): Promise<{ value?: string; error?: string }> {
   return page.evaluate(() => (window as unknown as { flowResult: { value?: string; error?: string } }).flowResult);
 }
 
-// certrqma.asp's calls (async_code.js) for its default form: the type-80 provider, key usage "both".
+// certrqma.asp's calls (async_code.js) for its default form: the type-80 provider, key usage "both", and
+// «Понятное имя» filled in.
+const friendlyName = "Сертификат стенда";
 const createRequest = `
   const create = (name) => cadesplugin.CreateObjectAsync(name);
   const csps = await create("X509Enrollment.CCspInformations");
@@ -79,6 +81,7 @@ const createRequest = `
   await request.propset_Subject(dn);
   const enroll = await create("X509Enrollment.CX509Enrollment");
   await enroll.InitializeFromRequest(request);
+  await enroll.propset_CertificateFriendlyName(${JSON.stringify(friendlyName)});
   return enroll.CreateRequest(3);`;
 
 // certfnsh.asp's Install() (XE_Enroll_InstallPKCS7Ex): AllowUntrustedRoot, CRYPT_STRING_ANY.
@@ -109,6 +112,25 @@ async function confirmWindow(): Promise<Page> {
   // For a look at the window afterwards.
   await window.screenshot({ path: join(outDir, "confirm.png") });
   return window;
+}
+
+// The labels of the token's certificates, read with the Rutoken Plugin itself.
+async function certificateLabels(page: Page): Promise<string[]> {
+  return page.evaluate(
+    async ({ load, pin }) => {
+      const plugin = await (0, eval)(load)();
+      const [device] = await plugin.enumerateDevices();
+      await plugin.login(device, pin);
+      try {
+        const labels: string[] = [];
+        for (const id of await plugin.enumerateCertificates(device, await plugin.CERT_CATEGORY_USER)) labels.push(await plugin.getCertLabel(device, id));
+        return labels;
+      } finally {
+        await plugin.logout(device);
+      }
+    },
+    { load: loadPluginSource, pin: userPin },
+  );
 }
 
 async function extraTab(): Promise<string[]> {
@@ -161,6 +183,8 @@ test("the page gets CERT_E_UNTRUSTEDROOT at once, the certificate on the token a
   context.off("page", onPage);
   expect(asked).toBe(false);
   expect(await extraTab()).not.toContain(caThumbprint);
+  // The request's friendly name, kept as its key's label, names the certificate; the stand's own keeps the plugin's.
+  expect((await certificateLabels(page)).sort()).toEqual(["Rutoken Plugin", friendlyName]);
   await page.close();
 });
 

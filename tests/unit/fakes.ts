@@ -36,6 +36,8 @@ export interface FakeCalls {
   deleteKeyPair: string[];
   importCertificate: string[];
   deleteCertificate: string[];
+  setKeyLabel: [string, string][];
+  setCertLabel: [string, string][];
   cmsEncrypt: { deviceId: number; recipients: string[]; data: string; options: EncryptOptions }[];
   cmsDecrypt: { deviceId: number; keyId: string; cms: string; options: { base64: boolean } }[];
   derive: { deviceId: number; keyId: string; publicKey: string; ukm: string }[];
@@ -59,6 +61,8 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     deleteKeyPair: [],
     importCertificate: [],
     deleteCertificate: [],
+    setKeyLabel: [],
+    setCertLabel: [],
     cmsEncrypt: [],
     cmsDecrypt: [],
     derive: [],
@@ -125,6 +129,18 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
     importCertificate: async (_device, certificate) => {
       calls.importCertificate.push(certificate);
       return "ne:w1";
+    },
+    setKeyLabel: async (_device, keyId, label) => {
+      if (!loggedIn) throw new Error("19");
+      calls.setKeyLabel.push([keyId, label]);
+    },
+    getKeyLabel: async (_device, keyId) => {
+      if (!loggedIn) throw new Error("19");
+      return calls.setKeyLabel.findLast(([id]) => id === keyId)?.[1] ?? "";
+    },
+    setCertLabel: async (_device, certId, label) => {
+      if (!loggedIn) throw new Error("19");
+      calls.setCertLabel.push([certId, label]);
     },
     getKeyByCertificate: async () => "ke:y1",
     // Two keys: the certificate's (2012-256, signature and exchange, no usage period) and one without a certificate

@@ -56,7 +56,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `src/extension/` — the extension's own side, with Chrome types (`src/extension/tsconfig.json`): `sites.ts` (the
   enabled-site list in `chrome.storage.local`, optional host permissions, registering page.js; Chrome's permission
   prompt can close the popup, so `finishPendingSite` in the service worker finishes an interrupted enabling), `background.ts`
-  (service worker keeping the registration in sync and running `install.ts` and `timestamps.ts`), `popup.*` (the button's window), `options.*` (site list, the extended validity and root offer switches, certificate stores), `roots.ts` (the two certificate stores in
+  (service worker keeping the registration in sync and running `install.ts` and `timestamps.ts`), `popup.*` (the button's window), `options.*` (site list, the extended validity and root offer switches, the confirmed timestamp services, certificate stores), `roots.ts` (the two certificate stores in
   `chrome.storage.local`: the built-in roots, and the roots of other CAs and intermediates added from files, a
   self-signed one counting as a root) + `roots-view.ts` (their tabs and cards on the options page) + `roots-bridge.ts`
   (isolated-world content script registered beside page.js, handing it the enabled roots, intermediates and the
@@ -70,7 +70,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
-  case-insensitively by ProgID; `objects/cades-tools.ts` the demo pages' Android check; `objects/hashed-data.ts` hashes in the page; `objects/signed-xml.ts`
+  case-insensitively by ProgID; `objects/cades-tools.ts` the demo pages' Android check; `objects/hashed-data.ts` hashes and HMACs in the page; `objects/signed-xml.ts`
   makes XMLDSig with xmldsigjs' canonicalizer and `rawSign`, and verifies it, `objects/xades.ts` adds XAdES-BES's
   qualifying properties and XAdES-T's timestamp to it; `objects/signers.ts` the signers a
   verification found; `objects/enveloped-data.ts` CMS encryption on the plugin's `cmsEncrypt`/`cmsDecrypt`;
@@ -79,7 +79,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `objects/csp-information.ts` the connected tokens as readers, `tokeninserted` by polling; `objects/containers.ts` their keys as CryptoPro's containers, read after each token's PIN once per page), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing, and `asn1.ts` writes DER too; `dn.ts` holds the CryptoPro name format
-  sites match with regexes, and the RFC 4514 names of XAdES), `gost.ts` (hashes, GOST R 34.10 signature checks and VKO, on `@li0ard/gost`) +
+  sites match with regexes, and the RFC 4514 names of XAdES), `gost.ts` (hashes, HMAC, GOST R 34.10 signature checks and VKO, on `@li0ard/gost`) +
   `gost28147.ts` (GOST 28147-89 CBC and the key transport of XML encryption) + `cms.ts` (SignedData parsing and signer
   checks, BER included; the recipients of an EnvelopedData) + `chain.ts` (chains to the root store; `validationChain` for `IsValid()` in the extended mode) — verification never touches the plugin,
   `signing.ts` (the plugin's `sign`, data or a hash; CAdES-T through its `tspOptions`) + `token-login.ts` (PIN window, login, logout, the single connected token) +

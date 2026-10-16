@@ -4,6 +4,7 @@
 // little-endian; a signature is s||r, big-endian.
 import { gost256A, gost256B, gost256C, gost256D, gost512A, gost512B, gost512C } from "@li0ard/gost/gost3410.js";
 import { gost341194 } from "@li0ard/gost/gost341194.js";
+import { gost341194hmac, streebog256hmac, streebog512hmac } from "@li0ard/gost/hmac.js";
 import { streebog256, streebog512 } from "@li0ard/gost/streebog.js";
 import { md5, sha1 } from "@noble/hashes/legacy.js";
 import { sha256, sha384, sha512 } from "@noble/hashes/sha2.js";
@@ -25,6 +26,20 @@ const digests: Record<DigestName, (data: Uint8Array) => Uint8Array> = {
 
 export function digest(name: DigestName, data: Uint8Array): Uint8Array {
   return digests[name](data);
+}
+
+export type HmacName = "gost94" | "streebog256" | "streebog512";
+
+// HMAC of RFC 2104 over these hashes: RFC 7836, 4.1, for Streebog; the blocks are 32 bytes for GOST R 34.11-94 and
+// 64 for Streebog, and a longer key is hashed first, as OpenSSL's GOST engine does (docs/JOURNAL.md, 2026-10-16).
+const hmacs: Record<HmacName, (key: Uint8Array, data: Uint8Array) => Uint8Array> = {
+  gost94: gost341194hmac,
+  streebog256: streebog256hmac,
+  streebog512: streebog512hmac,
+};
+
+export function hmac(name: HmacName, key: Uint8Array, data: Uint8Array): Uint8Array {
+  return hmacs[name](key, data);
 }
 
 export const GOST_2001 = "1.2.643.2.2.19";

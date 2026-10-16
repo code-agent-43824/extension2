@@ -24,7 +24,7 @@ function setup(answers: (string | null)[] = [userPin], overrides: Partial<Rutoke
 
 // The calls certrqma.asp makes (async_code.js), with its default form: the type-80 provider, key
 // usage "both", client-auth + e-mail EKUs, the first hash in the list.
-async function requestLikeTestgost(session: Session, providerIndex = 0, keySpec = 1): Promise<string> {
+async function requestLikeTestgost(session: Session, providerIndex = 0, keySpec = 1, friendlyName = ""): Promise<string> {
   const csps = create("X509Enrollment.CCspInformations", session);
   await csps.AddAvailableCsps();
   const csp = (await csps.ItemByIndex(providerIndex)) as Obj;
@@ -68,13 +68,16 @@ async function requestLikeTestgost(session: Session, providerIndex = 0, keySpec 
   await request.propset_HashAlgorithm(hash);
   const enroll = create("X509Enrollment.CX509Enrollment", session);
   await enroll.InitializeFromRequest(request);
+  // XE_Enroll_addFriendlyNameToRequest, when the form's «Понятное имя» is filled in.
+  if (friendlyName) await enroll.propset_CertificateFriendlyName(friendlyName);
   return (await enroll.CreateRequest(3)) as string;
 }
 
 // certfnsh.asp's Install(): a fresh CX509Enrollment, Initialize(ContextUser), InstallResponse.
-async function installLikeTestgost(session: Session, text = response): Promise<void> {
+async function installLikeTestgost(session: Session, text = response, friendlyName = ""): Promise<void> {
   const enroll = create("X509Enrollment.CX509Enrollment", session);
   await enroll.Initialize(1);
+  if (friendlyName) await enroll.propset_CertificateFriendlyName(friendlyName);
   await enroll.InstallResponse(4, text, 7, "");
 }
 
@@ -210,6 +213,32 @@ describe("certificate install (certfnsh.asp)", () => {
     });
     await installLikeTestgost(session);
     expect(plugin.calls.logout).toBe(1);
+  });
+
+  it("names the certificate on the token as the request's friendly name, kept as its key's label, or its own", async () => {
+    const { plugin, session } = setup([userPin, userPin, userPin]);
+    await requestLikeTestgost(session, 0, 1, "Подпись для ФНС");
+    expect(plugin.calls.setKeyLabel).toEqual([["ke:y1", "Подпись для ФНС"]]);
+    await installLikeTestgost(session);
+    expect(plugin.calls.setCertLabel).toEqual([["ne:w1", "Подпись для ФНС"]]);
+    await installLikeTestgost(session, response, "Другое имя");
+    expect(plugin.calls.setCertLabel.at(-1)).toEqual(["ne:w1", "Другое имя"]);
+
+    const unnamed = setup([userPin, userPin]);
+    await requestLikeTestgost(unnamed.session);
+    await installLikeTestgost(unnamed.session);
+    expect([unnamed.plugin.calls.setKeyLabel, unnamed.plugin.calls.setCertLabel]).toEqual([[], []]);
+  });
+
+  it("installs the certificate even when the token takes no label", async () => {
+    const { plugin, session } = setup([userPin], {
+      setCertLabel: async () => {
+        throw new Error("5");
+      },
+    });
+    await installLikeTestgost(session, response, "Имя");
+    expect(plugin.calls.importCertificate).toHaveLength(1);
+    expect(plugin.calls.deleteCertificate).toEqual([]);
   });
 
   it("accepts a single certificate in PEM", async () => {

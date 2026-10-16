@@ -422,6 +422,15 @@ export function offeredRoot(certificate: X509, response: readonly X509[], roots:
   return { root, intermediates: missing };
 }
 
+// A label is a nicety: the key or the certificate it would name stays whether or not the token takes it.
+async function bestEffort<T>(work: () => PromiseLike<T>): Promise<T | undefined> {
+  try {
+    return await work();
+  } catch {
+    return undefined;
+  }
+}
+
 // X509Enrollment.CX509Enrollment.
 export class Enrollment {
   readonly #session: Session;
@@ -447,7 +456,10 @@ export class Enrollment {
     return Promise.resolve(this.#request);
   }
 
-  // Kept for the page to read back; the Rutoken Plugin gives certificates no friendly name.
+  // Windows keeps the name with the pending request and gives it to the certificate InstallResponse installs, which
+  // a CA page does in another CX509Enrollment, often on another page (certrqma.asp, then certfnsh.asp). Here the
+  // name is the label of the key CreateRequest makes, and InstallResponse labels the certificate with its own name
+  // or, without one, the key's label (the Rutoken Plugin's own label for an imported certificate is «Rutoken Plugin»).
   get CertificateFriendlyName(): Promise<string> {
     return Promise.resolve(this.#friendlyName);
   }
@@ -477,6 +489,7 @@ export class Enrollment {
         signatureSize: job.provider.signatureSize,
         keySpec: await algorithmOf(plugin, job.signOnly ? "KEY_SPEC_SIGN" : "KEY_SPEC_SIGN_AND_EXCHANGE"),
       });
+      if (this.#friendlyName) await bestEffort(() => plugin.setKeyLabel(deviceId, keyId, this.#friendlyName));
       try {
         const extensions = {
           ...(job.keyUsage.length ? { keyUsage: job.keyUsage } : {}),
@@ -543,6 +556,8 @@ export class Enrollment {
         await plugin.deleteCertificate(deviceId, certId);
         throw new CadesError(`На Рутокене нет ключа для сертификата «${commonName(certificate.subject)}»`, CRYPT_E_NOT_FOUND);
       }
+      const name = this.#friendlyName || (await bestEffort(() => plugin.getKeyLabel(deviceId, keyId)));
+      if (name) await bestEffort(() => plugin.setCertLabel(deviceId, certId, name));
     });
     forgetContainers(this.#session);
     await this.#offerRoot(certificate, certificates);

@@ -180,6 +180,16 @@ test("signs XAdES-T with a timestamp from the stand's service, which the indepen
   const before = windows();
   expect((await signXades(page, "<doc>Ещё</doc>", { type: "ENVELOPED", xades: "T", tsaAddress: tsa.url }, details)).error).toBeUndefined();
   expect(windows()).toBe(before);
+  // The options page lists it; «Забыть» makes the next XAdES-T ask again.
+  const options = await context.newPage();
+  await options.goto(`${origin}/options.html`);
+  const service = options.locator("#tsa-services li", { hasText: new URL(tsa.url).origin });
+  await expect(service).toHaveCount(1);
+  await service.locator("button", { hasText: "Забыть" }).click();
+  await expect(service).toHaveCount(0);
+  expect((await signXades(page, "<doc>Снова</doc>", { type: "ENVELOPED", xades: "T", tsaAddress: tsa.url }, details, true)).error).toBeUndefined();
+  await expect(service).toHaveCount(1);
+  await options.close();
 });
 
 // Over the internet: the service's certificate is not the stand CA's, so the check stops at the timestamp's own

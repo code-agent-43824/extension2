@@ -3,7 +3,7 @@
 // services the user let the extension reach (timestamps.ts).
 import { ADD_MESSAGE, CONFIRM_ANSWER, CONFIRM_DETAILS, CONFIRM_PING, Installer, type AddMessage } from "./install.ts";
 import { finishPendingSite, pruneSites, STORAGE_KEY, syncContentScript } from "./sites.ts";
-import { TSA_ACCESS_MESSAGE, TSA_ANSWER, TSA_DETAILS, TSA_FETCH_MESSAGE, Timestamps, type TsaAccessMessage, type TsaFetchMessage, type TsaResult } from "./timestamps.ts";
+import { pruneTsaServices, TSA_ACCESS_MESSAGE, TSA_ANSWER, TSA_DETAILS, TSA_FETCH_MESSAGE, Timestamps, type TsaAccessMessage, type TsaFetchMessage, type TsaResult } from "./timestamps.ts";
 
 // One sync at a time: two overlapping syncs would register the same script id twice.
 let queue: Promise<unknown> = Promise.resolve();
@@ -21,6 +21,7 @@ chrome.permissions.onAdded.addListener(() => {
 });
 chrome.permissions.onRemoved.addListener(() => {
   schedule(() => pruneSites());
+  schedule(() => pruneTsaServices());
   sync();
 });
 chrome.storage.onChanged.addListener((changes, area) => {

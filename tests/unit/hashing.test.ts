@@ -125,6 +125,69 @@ describe("CAdESCOM.HashedData", () => {
   });
 });
 
+// HMAC on GOST hashes: RFC 7836's examples (appendix B), and for GOST R 34.11-94 what OpenSSL's GOST engine 3.0.2
+// answers (`openssl dgst -engine gost -md_gost94 -mac hmac -macopt hexkey:…`; docs/JOURNAL.md, 2026-10-16).
+describe("CAdESCOM.HashedData with HMAC", () => {
+  const key32 = Array.from({ length: 32 }, (_, i) => i.toString(16).padStart(2, "0")).join("");
+  const key64 = Array.from({ length: 64 }, (_, i) => i.toString(16).padStart(2, "0")).join("");
+  const message = btoa(String.fromCharCode(...[0x01, 0x26, 0xbd, 0xb8, 0x78, 0x00, 0xaf, 0x21, 0x43, 0x41, 0x45, 0x65, 0x63, 0x78, 0x01, 0x00]));
+  const vectors: [number, string, string][] = [
+    [constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256_HMAC, key32, "A1AA5F7DE402D7B3D323F2991C8D4534013137010A83754FD0AF6D7CD4922ED9"],
+    [
+      constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512_HMAC,
+      key32,
+      "A59BAB22ECAE19C65FBDE6E5F4E9F5D8549D31F037F9DF9B905500E171923A773D5F1530F2ED7E964CB2EEDC29E9AD2F3AFE93B2814F79F5000FFC0366C251E6",
+    ],
+    [constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_HMAC, key32, "BAD70B61C41095BC47E1141CFAED42726A5CEEBD62CE75DBBB9AD76CDA9F72F7"],
+    // Longer than GOST R 34.11-94's 32-byte block: the key is hashed first.
+    [constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_HMAC, key64, "64CFF770386B1A0B35008299390368D3B3984EF3575B616E686F544480CB006F"],
+    [constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256_HMAC, key64, "4D362E942F50F37AA24696BB2CB79D53122FDD6F73FA93EF5EC2EDFAC58BECA8"],
+  ];
+
+  async function hmacOf(session: Session, algorithm: number, key?: string): Promise<HashedData> {
+    const hash = hashed(session);
+    await hash.propset_Algorithm(algorithm);
+    await hash.propset_DataEncoding(constants.CADESCOM_BASE64_TO_BINARY);
+    if (key !== undefined) await hash.propset_Key(key);
+    await hash.Hash(message);
+    return hash;
+  }
+
+  it("computes the HMAC with the key set in Key", async () => {
+    const { session } = setup();
+    for (const [algorithm, key, value] of vectors) {
+      const hash = await hmacOf(session, algorithm, key);
+      expect(await hash.Value).toBe(value);
+      expect(await hash.Key).toBe(key.toUpperCase());
+    }
+  });
+
+  it("makes a random 64-byte key when none is set, and gives it in Key", async () => {
+    const { session } = setup();
+    const algorithm = constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256_HMAC;
+    const hash = await hmacOf(session, algorithm);
+    const key = await hash.Key;
+    expect(key).toMatch(/^[0-9A-F]{128}$/);
+    expect(await hash.Value).toBe(await (await hmacOf(session, algorithm, key)).Value);
+    expect(await (await hmacOf(session, algorithm)).Key).not.toBe(key);
+  });
+
+  it("refuses a key for a plain hash, a short or spaced one, and one set while data waits to be hashed", async () => {
+    const { session } = setup();
+    const plain = hashed(session);
+    await expect(plain.propset_Key(key32)).rejects.toMatchObject({ number: E_INVALIDARG });
+    const hash = hashed(session);
+    await hash.propset_Algorithm(constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512_HMAC);
+    await expect(hash.propset_Key(key32.slice(2))).rejects.toMatchObject({ number: E_INVALIDARG });
+    await expect(hash.propset_Key(`${key32.slice(0, 32)} ${key32.slice(32)}`)).rejects.toMatchObject({ number: E_INVALIDARG });
+    await hash.Hash("a");
+    await expect(hash.propset_Key(key64)).rejects.toMatchObject({ number: 0x8000ffff });
+    await hash.Value;
+    await hash.propset_Key(key64);
+    expect(await hash.Key).toBe(key64.toUpperCase());
+  });
+});
+
 describe("CadesSignedData.SignHash", () => {
   it("signs the hash detached with CAdES-BES attributes, for the PKCS#7 type too", async () => {
     const { plugin, dialog, session } = setup([userPin, userPin]);
@@ -177,6 +240,10 @@ describe("CadesSignedData.SignHash", () => {
     const unhashed = hashed(session);
     await unhashed.propset_Algorithm(GOST_256);
     await expect(data.SignHash(unhashed, sign, constants.CADESCOM_CADES_BES)).rejects.toMatchObject({ number: E_INVALIDARG });
+    const mac = hashed(session);
+    await mac.propset_Algorithm(constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256_HMAC);
+    await mac.Hash("a");
+    await expect(data.SignHash(mac, sign, constants.CADESCOM_CADES_BES)).rejects.toMatchObject({ number: E_INVALIDARG });
     expect(plugin.calls.sign).toHaveLength(0);
     expect(dialog.requests).toHaveLength(0);
   });

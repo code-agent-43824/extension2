@@ -48,6 +48,11 @@ export interface RutokenPlugin {
   createPkcs10(deviceId: number, keyId: string, subject: SubjectAttribute[], extensions: RequestExtensions, options: RequestOptions): PromiseLike<string>;
   // Takes PEM; returns the new certificate id.
   importCertificate(deviceId: number, certificate: string, category: number): PromiseLike<string>;
+  // Labels need a login; an imported certificate's is «Rutoken Plugin», a new key's empty (checked on the stand,
+  // docs/JOURNAL.md 2026-10-16).
+  setCertLabel(deviceId: number, certId: string, label: string): PromiseLike<void>;
+  getKeyLabel(deviceId: number, keyId: string): PromiseLike<string>;
+  setKeyLabel(deviceId: number, keyId: string, label: string): PromiseLike<void>;
   // Needs a login; returns the key id.
   getKeyByCertificate(deviceId: number, certId: string): PromiseLike<string>;
   // The ids of the token's private keys (their CKA_ID as colon-separated hex), "" for all of them. Needs a login.

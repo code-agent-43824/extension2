@@ -72,6 +72,26 @@ export async function tsaServices(api: Api = chrome): Promise<string[]> {
   return Array.isArray(stored) ? stored.filter((origin): origin is string => typeof origin === "string") : [];
 }
 
+// The options page's «Забыть»: the next XAdES-T with the service asks again. Chrome's access to it goes too, unless
+// it is an enabled site's: taking that away would turn the site off.
+export async function forgetTsaService(origin: string, api: Api = chrome): Promise<void> {
+  await api.storage.local.set({ [TSA_KEY]: (await tsaServices(api)).filter((service) => service !== origin) });
+  if ((await enabledSites(api)).includes(origin)) return;
+  try {
+    await api.permissions.remove({ origins: [matchPattern(origin)] });
+  } catch {
+    // A permission the manifest requires cannot be removed; the service is forgotten anyway, being unlisted.
+  }
+}
+
+// Drops the services whose access the user took back in Chrome's own settings, as pruneSites does for sites.
+export async function pruneTsaServices(api: Api = chrome): Promise<void> {
+  const services = await tsaServices(api);
+  const kept: string[] = [];
+  for (const origin of services) if (await api.permissions.contains({ origins: [matchPattern(origin)] })) kept.push(origin);
+  if (kept.length !== services.length) await api.storage.local.set({ [TSA_KEY]: kept });
+}
+
 function toBase64(bytes: Uint8Array): string {
   let binary = "";
   for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
