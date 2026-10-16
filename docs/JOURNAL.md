@@ -2,6 +2,38 @@
 
 Новые записи сверху.
 
+## 2026-10-16 — Firefox: осуществимость
+
+**Гипотеза.** Расширение заработает в Firefox почти без изменений кода: у Рутокена есть адаптер для Firefox, а
+Firefox поддерживает Manifest V3 и мир `MAIN` в `scripting.registerContentScripts`.
+
+**Что сделали.** Firefox 158.0 (архив ftp.mozilla.org, SHA-256 сверен с `SHA256SUMS`), headless, HOME — копия HOME
+стенда с манифестом native host в `~/.mozilla/native-messaging-hosts` (из `ru.rutoken.firewyrmhost.firefox.json`
+пакета плагина, `allowed_extensions: rutokenplugin@rutoken.ru`). «Адаптер Рутокен Плагин» с AMO
+(`rutokenplugin@rutoken.ru`, 1.0.5.0, Manifest V2, `adapter_rutoken_plugin-1.0.5.0.xpi`, SHA-256
+`00d7e996…0df4` — как в ответе API AMO). Браузер вели по WebDriver BiDi (`--remote-debugging-port`, клиент на
+`WebSocket` Node); расширения ставили `webExtension.install` (временная установка). Наша сборка — копия
+`dist/extension` с манифестом под Firefox (`background.scripts`, `browser_specific_settings.gecko`).
+
+**Что показала проверка.**
+
+- Адаптер отдаёт странице тот же объект `C3B7563B-…`; Рутокен Плагин 4.12.3.0 видит fake Рутокен (`stand`) и его
+  сертификат; `initialize` — 50 мс, `loadPlugin` — 80 мс.
+- `chrome.*` в Firefox 158 возвращает обещания; `scripting.registerContentScripts` с `world: "MAIN"` работает.
+- Шаблон с портом (`http://127.0.0.1:PORT/*`) Firefox принимает и для разрешения, и для скрипта, но скрипт по нему не
+  подставляется ни при каком разрешении; без порта (`http://127.0.0.1/*`) — подставляется, если есть разрешение
+  без порта. Разрешение с портом Firefox хранит с портом (`contains` без порта — `false`).
+- `permissions.request` из настроек без окна Firefox — с настройкой `extensions.webextOptionalPermissionPrompts`
+  = `false`; щелчок — `input.performActions` BiDi (настоящее действие пользователя).
+- Страницы `moz-extension://` BiDi открывает и выполняет в них код только с ключом `-remote-allow-system-access`.
+- Пока в BiDi-сеансе открыта любая вкладка нашего расширения (даже `ui.css`), каждый вызов адаптера идёт секунды:
+  загрузка плагина — 19 с вместо 70 мс; вкладка закрыта — снова мс. Без BiDi не проверяли.
+- С шаблоном без порта демо-страница `cades_bes_sample.html` пишет «Расширение загружено», «Плагин загружен»,
+  «Криптопровайдер загружен»; `Store.Open` даёт сертификат стенда.
+
+**Вывод.** Firefox — та же кодовая база с другим манифестом и шаблонами доступа без порта; тесты — обычный Firefox
+по BiDi, вкладки расширения закрывать до работы со страницей.
+
 ## 2026-10-16 — мелочи 1.9.0: HMAC, метки на токене, две вкладки
 
 **Гипотезы.** (1) HMAC `HashedData` — обычный RFC 2104 поверх хешей ГОСТ, как в HMAC библиотеки `@li0ard/gost`.
