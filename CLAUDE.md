@@ -97,6 +97,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `tools/dump-fields.js` — pasted by hand into the DevTools console on a cadesplugin page: dumps the plug-in and
   certificate fields as JSON; `scripts/compare-fields.ts` diffs a real-CryptoPro dump against ours
   (`docs/MANUAL-CHECK.md`, the manual install and checklist).
+- `docs/AGENT-CHECK.md` — instructions for an agent with a desktop (Claude Cowork): the release set of
+  `MANUAL-CHECK.md` in a Chromium window started by hand on the stand's fake Rutoken, with a testgost2012
+  certificate, and the report it writes. English, being executed by a model.
 - `tests/unit/` — Vitest unit tests (`vitest.config.ts` limits Vitest to this directory); `fakes.ts` holds the
   fake plugin and PIN window; `tests/fixtures/` holds copies of a stand certificate and its CA so they run without
   the stand, and `verify.json` signatures made by CryptoPro's plug-in and crafted ones (how: `docs/JOURNAL.md`,

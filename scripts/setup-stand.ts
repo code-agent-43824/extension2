@@ -86,7 +86,8 @@ function setupNativeHost(): void {
   const manifest = JSON.parse(readFileSync(join(stand.pluginDir, `${nativeHostName}.chrome.json`), "utf8"));
   manifest.path = join(stand.pluginDir, "FireWyrmNativeMessageHost");
   const text = JSON.stringify(manifest, null, 2);
-  // Chromium looks in <user-data-dir>/NativeMessagingHosts and in ~/.config/chromium/NativeMessagingHosts.
+  // Chromium finds a user's native host in <user-data-dir>/NativeMessagingHosts, so a profile other than stand.profile
+  // needs a copy of its own (docs/AGENT-CHECK.md); ~/.config/chromium is the default profile's directory.
   for (const dir of [join(stand.profile, "NativeMessagingHosts"), join(stand.home, ".config", "chromium", "NativeMessagingHosts")]) {
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, `${nativeHostName}.json`), text);
