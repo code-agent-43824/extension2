@@ -1,12 +1,12 @@
-// Packs the built extension for installing by hand: dist/<name>-<version>.zip for Chrome (unzip, then
-// chrome://extensions → developer mode → "Load unpacked" on the folder inside) and dist/<name>-<version>-firefox.xpi
-// for Firefox (the manifest at the archive's root, as an add-on file must have it). A plain ZIP writer (deflate, no
-// extras): the format needs nothing more, and it saves a dependency.
+// Packs both builds into one archive for installing by hand, dist/<name>-<version>.zip, holding one folder
+// <name>-<version>/ with chrome/ (the unpacked extension Chrome loads), firefox/<name>-<version>.xpi (an add-on file,
+// its manifest at its root) and README.txt, how to install in each browser (src/release-readme.txt with the versions
+// filled in). A plain ZIP writer (deflate, no extras): the format needs nothing more, and it saves a dependency.
 import { crc32, deflateRawSync } from "node:zlib";
 import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, relative, sep } from "node:path";
 import { fileURLToPath } from "node:url";
-import { buildExtension, extensionDir, firefoxDir, packageVersion } from "./build.ts";
+import { buildExtension, extensionDir, FIREFOX_MIN_VERSION, firefoxDir, packageVersion } from "./build.ts";
 import { repoRoot } from "./fetch-vendor.ts";
 
 export const packageName = "cryptopro-via-rutoken";
@@ -15,11 +15,7 @@ export function packagePath(version = packageVersion()): string {
   return join(repoRoot, "dist", `${packageName}-${version}.zip`);
 }
 
-export function firefoxPackagePath(version = packageVersion()): string {
-  return join(repoRoot, "dist", `${packageName}-${version}-firefox.xpi`);
-}
-
-interface Entry {
+export interface Entry {
   name: string;
   data: Buffer;
 }
@@ -84,16 +80,33 @@ export function directoryEntries(dir: string, folder = ""): Entry[] {
     .map((path) => ({ name: `${prefix}${relative(dir, path).split(sep).join("/")}`, data: readFileSync(path) }));
 }
 
-export async function packageExtension(): Promise<string[]> {
+// The archive's README.txt: the template's {{version}}, {{chrome}} and {{firefox}} filled in, with a byte order mark,
+// so that Notepad of any Windows reads it as UTF-8.
+export function releaseReadme(version: string, chrome: string, firefox: string): Buffer {
+  const template = readFileSync(join(repoRoot, "src", "release-readme.txt"), "utf8");
+  const text = template.replaceAll("{{version}}", version).replaceAll("{{chrome}}", chrome).replaceAll("{{firefox}}", firefox);
+  return Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(text, "utf8")]);
+}
+
+// The archive's entries: the folder of both builds and the instructions.
+export function releaseEntries(version: string, chromeDir: string, firefoxBuildDir: string): Entry[] {
+  const folder = `${packageName}-${version}`;
+  const chrome = JSON.parse(readFileSync(join(chromeDir, "manifest.json"), "utf8")).minimum_chrome_version as string;
+  return [
+    { name: `${folder}/README.txt`, data: releaseReadme(version, chrome, parseInt(FIREFOX_MIN_VERSION).toString()) },
+    ...directoryEntries(chromeDir, `${folder}/chrome`),
+    { name: `${folder}/firefox/${packageName}-${version}.xpi`, data: zip(directoryEntries(firefoxBuildDir)) },
+  ];
+}
+
+export async function packageExtension(): Promise<string> {
   await buildExtension();
   const version = packageVersion();
-  const chrome = packagePath(version);
-  writeFileSync(chrome, zip(directoryEntries(extensionDir, `${packageName}-${version}`)));
-  const firefox = firefoxPackagePath(version);
-  writeFileSync(firefox, zip(directoryEntries(firefoxDir)));
-  return [chrome, firefox];
+  const target = packagePath(version);
+  writeFileSync(target, zip(releaseEntries(version, extensionDir, firefoxDir)));
+  return target;
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
-  for (const target of await packageExtension()) console.log(`packed ${target}`);
+  console.log(`packed ${await packageExtension()}`);
 }

@@ -23,10 +23,11 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   Python venv) and provision the token with a key and a test-CA certificate. Needs network (vendor files, PyPI).
 - `npm run build` — build the extension into `dist/extension/` for Chrome (load it unpacked) and `dist/firefox/` for
   Firefox, from the same code.
-- `npm run package` — build, then pack them into `dist/cryptopro-via-rutoken-<version>.zip` (Chrome, a folder inside)
-  and `dist/cryptopro-via-rutoken-<version>-firefox.xpi` (Firefox, the manifest at the root) for installing by hand;
-  CI uploads both as the `cryptopro-via-rutoken` artifact, and its `release` job publishes a version that has no
-  GitHub release yet as a pre-release with them.
+- `npm run package` — build, then pack both into one archive for installing by hand,
+  `dist/cryptopro-via-rutoken-<version>.zip`: a folder with `chrome/` (the unpacked build), `firefox/*.xpi` and
+  `README.txt` (installing in each browser, from `src/release-readme.txt`); CI uploads it as the
+  `cryptopro-via-rutoken` artifact, and its `release` job publishes a version that has no GitHub release yet as a
+  pre-release with it.
 - `node scripts/gen-constants.ts` — regenerate `src/page/constants.ts` after pinning a new `cadesplugin_api.js`.
 - `npm run check` — typecheck (Node code, then `src/page/` with DOM types, then `src/extension/` with Chrome types)
   and unit tests; must pass before every commit.

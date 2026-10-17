@@ -18,30 +18,14 @@
 
 ## Установка
 
-1. Драйверы Рутокен (для Windows — <https://www.rutoken.ru/support/download/windows/>).
-2. Рутокен Плагин — <https://www.rutoken.ru/support/download/rutoken-plugin/>.
-3. Расширение «Адаптер Рутокен Плагин» из Chrome Web Store —
-   <https://chromewebstore.google.com/detail/ohedcglhbbfdgaogjhcclacoccbagkjg>.
-4. Наше расширение: распаковать архив `cryptopro-via-rutoken-<версия>.zip` (выпуск на странице Releases
-   репозитория, артефакт `cryptopro-via-rutoken` прогона CI или `npm run package`), открыть `chrome://extensions`, включить «Режим разработчика», нажать
-   «Загрузить распакованное расширение» и выбрать папку `cryptopro-via-rutoken-<версия>` из архива.
+Архив выпуска `cryptopro-via-rutoken-<версия>.zip` (страница Releases репозитория, артефакт `cryptopro-via-rutoken`
+прогона CI или `npm run package`) распаковать: в папке внутри — `chrome`, `firefox` и `README.txt`, по которому и
+ставить, в Chrome или в Firefox (его текст — `src/release-readme.txt`). До 1.10.1 выпуск был другим: в архиве
+только сборка для Chrome, сборка для Firefox — отдельным файлом `.xpi`.
 
-### В Firefox
-
-Firefox не ниже `FIREFOX_MIN_VERSION` в `scripts/build.ts`. Пункты 1–2 — те же: установщик Рутокен Плагина
-регистрирует его и для Firefox.
-
-3. «Адаптер Рутокен Плагин» для Firefox — <https://addons.mozilla.org/firefox/addon/adapter-rutoken-plugin/>.
-4. Наше расширение — файл `cryptopro-via-rutoken-<версия>-firefox.xpi` выпуска. Mozilla его не подписывала, поэтому:
-   - обычный Firefox ставит его только до перезапуска: `about:debugging` → «Этот Firefox» → «Загрузить временное
-     дополнение…» → выбрать `.xpi`;
-   - Firefox ESR, Developer Edition и Nightly ставят насовсем, если в `about:config` выключить
-     `xpinstall.signatures.required`: `about:addons` → шестерёнка → «Установить дополнение из файла…».
-5. Сайт включается так же, кнопкой расширения или в его настройках, только вопрос о доступе к сайту задаёт Firefox.
-   Сайт с нестандартным портом (`https://example.ru:8443`) включается для всех портов этого узла: по адресу с
-   портом Firefox скрипты расширения не подставляет.
-
-Дальше — тот же чек-лист. Расширение КриптоПро для Firefox рядом с нашим не проверялось.
+В Firefox: вопрос о доступе к сайту задаёт сам Firefox; сайт с нестандартным портом (`https://example.ru:8443`)
+включается для всех портов этого узла — по адресу с портом Firefox скрипты расширения не подставляет. Дальше — тот же
+чек-лист. Расширение КриптоПро для Firefox рядом с нашим не проверялось.
 
 ## Ключ и сертификат на токене
 

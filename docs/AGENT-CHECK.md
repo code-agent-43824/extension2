@@ -73,10 +73,11 @@ The release archive, not a build: `cryptopro-via-rutoken-$VERSION.zip` from the 
 ```sh
 cd ~/rutoken-check
 curl -LO "https://github.com/code-agent-43824/extension2/releases/download/v$VERSION/cryptopro-via-rutoken-$VERSION.zip"
-unzip -q "cryptopro-via-rutoken-$VERSION.zip" -d ext   # gives ext/cryptopro-via-rutoken-$VERSION
+unzip -q "cryptopro-via-rutoken-$VERSION.zip" -d ext   # gives ext/cryptopro-via-rutoken-$VERSION/chrome
 ```
 
-If the download needs access you do not have, `gh release download "v$VERSION" -R code-agent-43824/extension2` does
+Releases before 1.10.1 have the Chrome build at the archive's top folder: drop `/chrome` from the paths below. If the
+download needs access you do not have, `gh release download "v$VERSION" -R code-agent-43824/extension2` does
 the same; failing that, `npm run package` in the checkout of step 2 builds the archive into `dist/`.
 
 ## 4. Chromium on the fake token
@@ -86,7 +87,7 @@ cd ~/rutoken-check/extension2
 PROFILE="$HOME/rutoken-check/profile"
 mkdir -p "$PROFILE" && cp -r stand/profile/NativeMessagingHosts "$PROFILE/"
 CHROME=$(node -e 'import("playwright").then((p) => console.log(p.chromium.executablePath()))')
-EXT="$PWD/stand/adapter,$HOME/rutoken-check/ext/cryptopro-via-rutoken-$VERSION"
+EXT="$PWD/stand/adapter,$HOME/rutoken-check/ext/cryptopro-via-rutoken-$VERSION/chrome"
 HOME="$PWD/stand/home" "$CHROME" --user-data-dir="$PROFILE" --no-first-run \
   --disable-extensions-except="$EXT" --load-extension="$EXT"
 ```
