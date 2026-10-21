@@ -46,7 +46,7 @@ export function standEnv(): NodeJS.ProcessEnv {
 function setupPlugin(): void {
   run("dpkg-deb", ["-x", vendorPath("rutoken-plugin"), join(standDir, "plugin")]);
   run("unzip", ["-oq", vendorPath("softhsm-portable"), "-d", stand.softhsm]);
-  // The v2.7.0-portable.42 archive stores its tools without the exec bit.
+  // Archives up to v2.7.0-portable.42 store the tools without the exec bit; later ones have it.
   for (const tool of ["softhsm2-util", "softhsm2-export"]) chmodSync(join(stand.softhsm, tool), 0o755);
   // The native host finds NPAPI plugins in /usr/lib/mozilla/plugins, /usr/lib64/mozilla/plugins and
   // ~/.mozilla/plugins; the plugin then loads librtpkcs11ecp.so from the directory it was loaded from

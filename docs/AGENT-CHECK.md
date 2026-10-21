@@ -54,11 +54,12 @@ npx playwright test tests/stand/smoke.spec.ts
 
 The smoke test must pass; if it does not, stop and report its output.
 
-**Fork version.** The pinned release, `v2.7.0-portable.42`, answers the plugin's `derive` with error 147, so GOST
-28147-89 decryption (W7) and XML decryption (W8) fail on it: report them as KNOWN. If
-<https://github.com/code-agent-43824/SoftHSMv2/releases> has a newer portable release whose notes mention `derive`
-or `CKM_GOSTR3410_12_DERIVE`, after the whole run unpack its `softhsm-portable-linux-x64.zip` into
-`~/rutoken-check/softhsm-new`, point the library at it and repeat W7 and W8 only:
+**Fork version.** `scripts/vendor-lock.json` of the checked-out release pins the fork. From `v2.7.0-portable.75` on it
+answers the plugin's VKO `derive`, so GOST 28147-89 decryption (W7) and XML decryption (W8) must pass. An older pin
+(`v2.7.0-portable.42`, in releases up to 1.10.1) answers error 147 there: report W7 and W8 as KNOWN, then, after the
+whole run, unpack `softhsm-portable-linux-x64.zip` of `v2.7.0-portable.88` from
+<https://github.com/code-agent-43824/SoftHSMv2/releases> into `~/rutoken-check/softhsm-new`, point the library at
+it and repeat W7 and W8 only:
 
 ```sh
 ln -sf ~/rutoken-check/softhsm-new/libsofthsm2.so stand/home/.mozilla/plugins/librtpkcs11ecp.so
@@ -139,7 +140,7 @@ certificate is missing from the second tab: add it and verify again; that counts
 - Environment: OS, Chromium version, Rutoken Plugin version and extension version (webtools.html, «Общее»), fork
   release, date.
 - A table: item (checklist number or W number) | PASS / FAIL / KNOWN / N/A / BLOCKED | for anything but PASS, the
-  exact text on the screen | screenshot file. KNOWN is error 147 in W7 and W8 with the pinned fork; BLOCKED is a
+  exact text on the screen | screenshot file. KNOWN is error 147 in W7 and W8 with a fork older than `.75`; BLOCKED is a
   site or the network failing (try once more later), not the extension.
 - The files W4–W8 ask to save, in `~/rutoken-check/files/`.
 - The last line: «Обязательный набор пройден» or «Обязательный набор не пройден: <items>».

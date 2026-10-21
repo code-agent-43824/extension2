@@ -87,8 +87,6 @@ for (const [algorithm, name] of ciphers) {
     expect(decrypted.toString()).toBe(text);
   });
 
-  // The fake token answers cmsDecrypt of GOST 28147-89 with error 147 (docs/JOURNAL.md, 2026-10-08).
-  if (name === "gost89") continue;
   test(`the extension decrypts what OpenSSL encrypts with ${name}`, async () => {
     const message = openssl(["-encrypt", "-binary", `-${name}`, "-outform", "DER", join(standDir, "user.pem")], Buffer.from(text));
     const decrypted = await withPin(() =>

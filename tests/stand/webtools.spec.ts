@@ -276,8 +276,10 @@ async function decrypt(message: string): Promise<string> {
   return withPin("#btnDecrypt", "#textarea_decrypted_msg");
 }
 
-// The page's options, and the content encryption each one gives in the CMS (GOST R 34.12-2015 in CTR-ACPKM mode).
+// The page's options, and the content encryption each one gives in the CMS: GOST 28147-89, the page's default, and GOST
+// R 34.12-2015 in CTR-ACPKM mode. GOST 28147-89's decryption is the token's VKO derive (docs/JOURNAL.md, 2026-10-20).
 const ciphers = [
+  ["enc-1", "GOST 28147-89", "1.2.643.2.2.21"],
   ["enc-2", "MAGMA", "1.2.643.7.1.1.5.1.1"],
   ["enc-3", "MAGMA_OMAC", "1.2.643.7.1.1.5.1.2"],
   ["enc-4", "KUZNYECHIK", "1.2.643.7.1.1.5.2.1"],
@@ -296,18 +298,9 @@ for (const [option, name, oid] of ciphers) {
   });
 }
 
-// The fake token answers the Rutoken Plugin's cmsDecrypt of GOST 28147-89 with error 147 (docs/JOURNAL.md,
-// 2026-10-08): only the message itself is checked here.
-test("encrypts with GOST 28147-89, the page's default, for the token's certificate", async () => {
-  const info = envelopedInfo(await encrypt("enc-1", "Сообщение для шифрования (28147-89)"));
-  expect(info.content_encryption).toBe("1.2.643.2.2.21");
-  expect(info.recipients).toEqual([expect.objectContaining({ kind: "ktri", serial: tokenCertificateSerial })]);
-});
-
 // XML encryption (docs/PLAN.md, action 25): done in the page, so no PIN window; decrypting needs the token's VKO key,
-// which the fake token cannot make (error 147, docs/JOURNAL.md 2026-10-08) — the whole round trip runs in
-// tests/stand/enveloped-xml.spec.ts. The settings go back to CMS afterwards.
-test("encrypts XML for the token's certificate without the PIN; decrypting reaches the token's key", async () => {
+// after the PIN (docs/JOURNAL.md, 2026-10-20). The settings go back to CMS afterwards.
+test("encrypts XML for the token's certificate without the PIN, and decrypts it back with the token's key", async () => {
   await page.locator("#navbtnencrypt").click();
   await expect(page.locator("#SelectEncryptCert option")).toHaveCount(1, { timeout: 30_000 });
   await unfold("collapse-main-encrypt");
@@ -330,7 +323,7 @@ test("encrypts XML for the token's certificate without the PIN; decrypting reach
     await page.locator("#btnDecrypt").click();
     await expect(pinDialog(page)).toContainText("Зашифрованный XML-документ", { timeout: 30_000 });
     await enterPin(page);
-    await expect(page.locator("#textarea_decrypted_msg")).toHaveValue(/Попытка расшифровать XML: Рутокен Плагин не расшифровал сообщение: ошибка 147 \(0x80090005\)/, { timeout: 30_000 });
+    await expect(page.locator("#textarea_decrypted_msg")).toHaveValue('<?xml version="1.0" encoding="UTF-8"?>\n<Документ><Текст>Секрет</Текст></Документ>\n', { timeout: 30_000 });
     expect(await errors()).toEqual([]);
   } finally {
     await page.locator("#navbtnencrypt").click();

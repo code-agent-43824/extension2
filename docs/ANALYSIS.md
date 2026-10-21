@@ -21,7 +21,7 @@
 | Модуль-обёртка `rutoken` | 1.0.8 | npm |
 | Документация API Рутокен Плагина | 4.12.3.0 | plugin.api.rutoken.ru |
 | Рутокен Плагин для Linux (deb) | 4.12.3 | download.rutoken.ru |
-| Fake Рутокен (SoftHSMv2, профиль `FAKE_RUTOKEN_ECP`) | v2.7.0-portable.42 | github.com/code-agent-43824/SoftHSMv2 |
+| Fake Рутокен (SoftHSMv2, профиль `FAKE_RUTOKEN_ECP`) | закреплён в `scripts/vendor-lock.json` | github.com/code-agent-43824/SoftHSMv2 |
 | Демо-страница `cades_bes_sample.html` и её скрипты | `?v=319244` | cryptopro.ru |
 
 ## 3. Как устроен КриптоПро в браузере

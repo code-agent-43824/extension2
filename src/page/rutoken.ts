@@ -75,7 +75,7 @@ export interface RutokenPlugin {
   cmsDecrypt(deviceId: number, keyId: string, cmsData: string, options: { base64: boolean }): PromiseLike<string>;
   // VKO on the token: the key agreed between the key `keyId` and `publicKey` (x||y as in a certificate), for `ukm`;
   // both are colon-separated hex (plain hex is error 2), and so is the answer. Needs a login (docs/JOURNAL.md,
-  // 2026-10-08; the fake token answers 147).
+  // 2026-10-08; the fake token answers it since the SoftHSM fork's v2.7.0-portable.75, docs/JOURNAL.md 2026-10-20).
   derive(deviceId: number, keyId: string, publicKey: string, options: { ukm: string }): PromiseLike<string>;
 }
 
