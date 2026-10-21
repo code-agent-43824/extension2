@@ -185,19 +185,34 @@ export function fakePlugin(certs = [pem], overrides: Partial<RutokenPlugin> = {}
   };
 }
 
-// Answers ask() with the next scripted PIN (null = cancel) and records what it was shown.
+// Answers ask() with the next scripted PIN (null = cancel) and confirm() with the next of `confirms` (yes when they
+// run out), and records what it was shown. `tick` sets the "remember" box as the user would; unset, it stays as the
+// window opened it.
 export class FakePinDialog implements PinDialog {
   requests: PinRequest[] = [];
   errors: (string | undefined)[] = [];
+  notes: string[] = [];
+  // The box's first state, each time the window opened.
+  ticked: boolean[] = [];
+  confirms: boolean[] = [];
+  tick: boolean | undefined;
   closed = 0;
   private readonly answers: (string | null)[];
   constructor(answers: (string | null)[]) {
     this.answers = answers;
   }
-  open = (request: PinRequest): PinDialog => {
+  open = (request: PinRequest, remember = false): PinDialog => {
     this.requests.push(request);
+    this.ticked.push(remember);
     return this;
   };
+  get remember() {
+    return this.tick ?? this.ticked.at(-1) ?? false;
+  }
+  async confirm(note: string) {
+    this.notes.push(note);
+    return this.confirms.shift() ?? true;
+  }
   async ask(error?: string) {
     this.errors.push(error);
     return this.answers.shift() ?? null;

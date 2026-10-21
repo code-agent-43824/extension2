@@ -90,8 +90,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   sites match with regexes, and the RFC 4514 names of XAdES), `gost.ts` (hashes, HMAC, GOST R 34.10 signature checks and VKO, on `@li0ard/gost`) +
   `gost28147.ts` (GOST 28147-89 CBC and the key transport of XML encryption) + `cms.ts` (SignedData parsing and signer
   checks, BER included; the recipients of an EnvelopedData) + `chain.ts` (chains to the root store; `validationChain` for `IsValid()` in the extended mode) — verification never touches the plugin,
-  `signing.ts` (the plugin's `sign`, data or a hash; CAdES-T through its `tspOptions`) + `token-login.ts` (PIN window, login, logout, the single connected token) +
-  `pin-dialog.ts` (the PIN window, in a shadow root), `roots.ts` (asks the bridge for the "Root" and "CA" stores and adds to them), `timestamps.ts` (asks it for access to a
+  `signing.ts` (the plugin's `sign`, data or a hash; CAdES-T through its `tspOptions`) + `token-login.ts` (PIN window, login, logout, the single connected token; the PINs a page knows: the
+  site's KeyPin and the one remembered until the page closes) + `pin-dialog.ts` (the PIN window, in a shadow root, or
+  only its confirming button), `roots.ts` (asks the bridge for the "Root" and "CA" stores and adds to them), `timestamps.ts` (asks it for access to a
   timestamp service and for the service's answer) + `tsp.ts` (the RFC 3161 request and the checks of the answer), `root-links.ts` (after
   InstallResponse's CERT_E_UNTRUSTEDROOT, a click on the CA page's link to its certificate adds the root through
   Store.Add), `objects/enrollment.ts` (X509Enrollment for CA pages:
@@ -123,7 +124,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   the stand's Firefox over WebDriver BiDi (its own small client) with the Rutoken adapter for Firefox and our
   `dist/firefox`, and `firefox.spec.ts` runs the plug-in, site enabling, the demo page, XAdES-T and webtools.html in
   it; `with-cryptopro.spec.ts`
-  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `xades.spec.ts` XAdES-BES and XAdES-T, with the stand's timestamp service and the window asking for access to another;
+  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `pin.spec.ts` the remembered PIN and the site's KeyPin; `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `xades.spec.ts` XAdES-BES and XAdES-T, with the stand's timestamp service and the window asking for access to another;
   `verification.spec.ts` verifies ours and CryptoPro's signatures in the page; `roots.spec.ts` drives the root store
   on the options page; `validity.spec.ts` the extended validity check and the demo page adding its root; `enrollment.spec.ts` the
   certsrv calls offline on a copy of the token, with the question about the root; `with-cryptopro-csp.spec.ts` (opt-in)

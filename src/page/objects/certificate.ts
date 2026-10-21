@@ -7,6 +7,7 @@ import { validationChain } from "../chain.ts";
 import { algorithmName, derToBase64, parseCertificate, pemToDer, type X509 } from "../x509.ts";
 import type { TokenCertificate } from "../token.ts";
 import type { Session } from "./session.ts";
+import { cachePinOf, setCachePin, setKeyPin } from "../token-login.ts";
 
 const E_INVALIDARG = 0x80070057;
 const ERROR_INTERNAL_ERROR = 0x8007054f;
@@ -97,16 +98,26 @@ class PrivateKey {
     return this.UniqueContainerName;
   }
 
-  // CryptoPro keeps an entered PIN for the key when this is on. We ask for the PIN on every signature and log
-  // out after it, so the value is only remembered (markirovka.crpt.ru turns it off before signing).
-  #cachePin = false;
-
+  // CryptoPro keeps an entered PIN for the key when this is on: here it ticks "remember the PIN until the page closes"
+  // in the PIN window for the token (src/page/token-login.ts); markirovka.crpt.ru turns it off before signing.
   get CachePin(): Promise<boolean> {
-    return Promise.resolve(this.#cachePin);
+    return Promise.resolve(cachePinOf(this.#session, this.#token.serial));
   }
 
   propset_CachePin(value: unknown): Promise<void> {
-    this.#cachePin = Boolean(value);
+    setCachePin(this.#session, this.#token.serial, Boolean(value));
+    return Promise.resolve();
+  }
+
+  // ICPPrivateKey4: CryptoPro's sample caches the key with true and says the PIN is asked again after false.
+  CacheKey(value: unknown): Promise<void> {
+    setCachePin(this.#session, this.#token.serial, Boolean(value), true);
+    return Promise.resolve();
+  }
+
+  // The PIN for the token's operations, given by the site; write-only, as in CryptoPro's ICPPrivateKey.
+  propset_KeyPin(pin: unknown): Promise<void> {
+    setKeyPin(this.#session, this.#token.serial, pin === undefined || pin === null ? "" : String(pin));
     return Promise.resolve();
   }
 }

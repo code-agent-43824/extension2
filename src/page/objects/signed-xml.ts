@@ -446,7 +446,7 @@ export class SignedXML {
     if (refused) throw new CadesError(`Подпись ${refused} не поддерживается расширением: доступны XAdES-BES и XAdES-T`, E_NOTIMPL);
     // The real plug-in answers an unknown type with an empty string rather than an error.
     if (!typeNames.has(xmlType) || (xades !== 0 && !xadesNames.has(xades))) return "";
-    const { token, tsaAddress } = signerCertificate(signer);
+    const { token, tsaAddress, keyPin } = signerCertificate(signer);
     const keyAlgorithm = token.x509.publicKeyAlgorithm;
     const defaults = defaultMethods.get(keyAlgorithm);
     if (!defaults) throw new CadesError("XML-подпись делается только ключами ГОСТ", NTE_BAD_ALGID);
@@ -521,7 +521,7 @@ export class SignedXML {
         value.textContent = wrap(hexToBase64(raw));
         fillKeyInfo(item.signature, derToBase64(token.x509.der));
       }
-    });
+    }, keyPin);
     if (tsa) {
       for (const [i, item] of pending.entries()) await this.#timestamp(tsa, item, `SignatureTimeStamp${i + 1}-${id}`);
     }

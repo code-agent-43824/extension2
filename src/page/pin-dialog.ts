@@ -1,5 +1,6 @@
 // The window shown before every operation that needs the token's PIN (a signature, a new key, writing a
-// certificate): which site asks, what it asks for, and the PIN field. It lives in the page, in the shadow DOM of our own element: the PIN reaches the
+// certificate): which site asks, what it asks for, and the PIN field, or only the confirming button when the page has
+// the PIN already (the site's KeyPin, or one the user had remembered: src/page/token-login.ts). It lives in the page, in the shadow DOM of our own element: the PIN reaches the
 // Rutoken Plugin through the adapter's postMessage in the page world anyway, so a window isolated
 // from the page would not hide it (docs/PLAN.md of stage 4).
 
@@ -16,6 +17,11 @@ export interface PinRequest {
 export interface PinDialog {
   // Resolves with the PIN, or null when the user cancels. `error` is shown above the field.
   ask(error?: string): Promise<string | null>;
+  // The window without the PIN field: resolves true when the user confirms, false when they cancel. `note` says where
+  // the PIN comes from; `rememberable` keeps the "remember" box, for a PIN the user remembered.
+  confirm(note: string, rememberable: boolean): Promise<boolean>;
+  // Whether "remember the PIN until the page closes" is ticked.
+  readonly remember: boolean;
   close(): void;
 }
 
@@ -31,6 +37,10 @@ const style = `
   p { margin: 0 0 8px; }
   .origin { font-weight: 600; word-break: break-all; }
   label { display: block; margin: 12px 0 4px; }
+  .remember { display: flex; align-items: center; gap: 6px; margin: 8px 0 0; }
+  .remember input { width: auto; margin: 0; }
+  .note { margin: 12px 0 0; font-style: italic; }
+  [hidden] { display: none !important; }
   input { box-sizing: border-box; width: 100%; font: inherit; padding: 6px 8px; border: 1px solid #888; border-radius: 4px; }
   .error { color: #b00020; min-height: 1.4em; margin: 6px 0 0; }
   .buttons { display: flex; justify-content: flex-end; gap: 8px; margin-top: 16px; }
@@ -49,7 +59,8 @@ function element<K extends keyof HTMLElementTagNameMap>(
   return node;
 }
 
-export function openPinDialog(doc: Document, request: PinRequest): PinDialog {
+// `remember` is the box's first state: ticked when the site asked for it (PrivateKey.CachePin) or the user did before.
+export function openPinDialog(doc: Document, request: PinRequest, remember = false): PinDialog {
   const host = element(doc, "div", { id: HOST_ID });
   const root = host.attachShadow({ mode: "open" });
   // Browsers ignore "off" on a password field and offer saved passwords; "one-time-code" they leave alone, and
@@ -57,6 +68,10 @@ export function openPinDialog(doc: Document, request: PinRequest): PinDialog {
   const pin = element(doc, "input", { type: "password", name: "pin", autocomplete: "one-time-code" });
   for (const attribute of ["data-lpignore", "data-1p-ignore", "data-bwignore"]) pin.setAttribute(attribute, "true");
   pin.setAttribute("data-form-type", "other");
+  const field = element(doc, "label", {}, "PIN-код Рутокена", pin);
+  const box = element(doc, "input", { type: "checkbox", name: "remember", checked: remember });
+  const rememberRow = element(doc, "label", { className: "remember" }, box, "Запомнить PIN-код до закрытия страницы");
+  const note = element(doc, "p", { className: "note", hidden: true });
   const error = element(doc, "p", { className: "error" });
   error.setAttribute("role", "alert");
   const confirm = element(doc, "button", { type: "submit", name: "confirm" }, request.confirm);
@@ -68,7 +83,9 @@ export function openPinDialog(doc: Document, request: PinRequest): PinDialog {
     element(doc, "h2", {}, "Рутокен вместо КриптоПро"),
     element(doc, "p", {}, "Сайт ", element(doc, "span", { className: "origin" }, request.origin), ` ${request.action}`),
     ...request.details.map((line) => element(doc, "p", {}, line)),
-    element(doc, "label", {}, "PIN-код Рутокена", pin),
+    field,
+    note,
+    rememberRow,
     error,
     element(doc, "div", { className: "buttons" }, cancel, confirm),
   );
@@ -77,6 +94,7 @@ export function openPinDialog(doc: Document, request: PinRequest): PinDialog {
   root.append(element(doc, "style", {}, style), element(doc, "div", { className: "backdrop" }, form));
   (doc.body ?? doc.documentElement).append(host);
 
+  // In the confirming mode the field is hidden and the answer is "" for yes.
   let answer: ((pin: string | null) => void) | undefined;
   const respond = (value: string | null) => {
     const resolve = answer;
@@ -85,25 +103,45 @@ export function openPinDialog(doc: Document, request: PinRequest): PinDialog {
   };
   form.addEventListener("submit", (event) => {
     event.preventDefault();
-    if (pin.value) respond(pin.value);
+    if (field.hidden) respond("");
+    else if (pin.value) respond(pin.value);
   });
   cancel.addEventListener("click", () => respond(null));
   form.addEventListener("keydown", (event) => {
     if (event.key === "Escape") respond(null);
   });
 
+  const wait = () =>
+    new Promise<string | null>((resolve) => {
+      answer = (value) => {
+        confirm.disabled = true;
+        resolve(value);
+      };
+    });
+
   return {
     ask(message = "") {
+      field.hidden = false;
+      note.hidden = true;
+      rememberRow.hidden = false;
       error.textContent = message;
       pin.value = "";
       confirm.disabled = false;
       pin.focus();
-      return new Promise((resolve) => {
-        answer = (value) => {
-          confirm.disabled = true;
-          resolve(value);
-        };
-      });
+      return wait();
+    },
+    confirm(text, rememberable) {
+      field.hidden = true;
+      note.hidden = false;
+      note.textContent = text;
+      rememberRow.hidden = !rememberable;
+      error.textContent = "";
+      confirm.disabled = false;
+      confirm.focus();
+      return wait().then((value) => value !== null);
+    },
+    get remember() {
+      return box.checked;
     },
     close() {
       respond(null);

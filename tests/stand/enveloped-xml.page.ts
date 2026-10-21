@@ -42,7 +42,7 @@ function session(token: FakeToken): Session {
       return window.standDerive(publicKey, options.ukm);
     },
   } as unknown as RutokenPlugin;
-  const dialog: PinDialog = { ask: async () => "12345678", close: () => undefined };
+  const dialog: PinDialog = { ask: async () => "12345678", confirm: async () => true, remember: false, close: () => undefined };
   return {
     plugin,
     origin: "https://site.example",

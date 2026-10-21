@@ -16,6 +16,8 @@ export interface SignJob {
   content: string;
   hash: boolean;
   options: SignOptions;
+  // The signer's KeyPin.
+  keyPin?: string;
 }
 
 export function commonName(name: TokenCertificate["x509"]["subject"]): string {
@@ -61,5 +63,5 @@ export async function signWithToken(session: Session, job: SignJob): Promise<str
       }
       throw error;
     }
-  });
+  }, job.keyPin);
 }

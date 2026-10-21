@@ -163,7 +163,7 @@ export class CadesSignedData {
 
   async SignCades(signer: unknown, type: number = constants.CADESCOM_CADES_DEFAULT, detached: unknown = false): Promise<string> {
     const kind = signatureKind(type);
-    const { token, options, tsaAddress } = signerCertificate(signer);
+    const { token, options, tsaAddress, keyPin } = signerCertificate(signer);
     const cades = kind !== constants.CADESCOM_PKCS7_TYPE;
     const content = this.#encoding === constants.CADESCOM_BASE64_TO_BINARY ? this.#content.replace(/\s+/g, "") : ucs2leBase64(this.#content);
     if (!content) throw new CadesError("Нет данных для подписи", E_INVALIDARG);
@@ -175,7 +175,7 @@ export class CadesSignedData {
       addSignTime: cades,
     };
     if (kind === constants.CADESCOM_CADES_T) signOptions.tspOptions = await timestampOptions(this.#session.plugin, token, tsaAddress);
-    return signWithToken(this.#session, { token, content, hash: false, options: signOptions });
+    return signWithToken(this.#session, { token, content, hash: false, options: signOptions, keyPin });
   }
 
   // A detached signature of a hash computed by CAdESCOM.HashedData. CryptoPro's plug-in 2.0.15700 puts the
@@ -185,7 +185,7 @@ export class CadesSignedData {
     if (!(hashed instanceof HashedData)) throw new CadesError("Ожидается объект CAdESCOM.HashedData", E_INVALIDARG);
     const kind = signatureKind(type);
     if (Number(encoding) !== constants.CADESCOM_ENCODE_BASE64) throw new CadesError("Подпись хеша выдаётся только в Base64", E_INVALIDARG);
-    const { token, options, tsaAddress } = signerCertificate(signer);
+    const { token, options, tsaAddress, keyPin } = signerCertificate(signer);
     const { algorithm, value } = await hashed.hash();
     checkHashForKey(algorithm, token);
     const signOptions: SignOptions = {
@@ -195,7 +195,7 @@ export class CadesSignedData {
       addSignTime: true,
     };
     if (kind === constants.CADESCOM_CADES_T) signOptions.tspOptions = await timestampOptions(this.#session.plugin, token, tsaAddress);
-    return signWithToken(this.#session, { token, content: value, hash: true, options: signOptions });
+    return signWithToken(this.#session, { token, content: value, hash: true, options: signOptions, keyPin });
   }
 
   // Signers and Certificates exist once a verification has checked the signature itself; before, or after

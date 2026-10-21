@@ -70,6 +70,7 @@ export class CPSigner {
   #checkCertificate = false;
   #options: number = constants.CAPICOM_CERTIFICATE_INCLUDE_CHAIN_EXCEPT_ROOT;
   #tsaAddress = "";
+  #keyPin = "";
   readonly #attributes = new CPAttributes();
 
   get Certificate(): Promise<object | undefined> {
@@ -114,17 +115,24 @@ export class CPSigner {
     return Promise.resolve();
   }
 
+  // The token's PIN, given by the site: the PIN window then only asks the user to confirm (src/page/token-login.ts).
+  // Write-only, as in CryptoPro's ICPSigner4.
+  propset_KeyPin(pin: unknown): Promise<void> {
+    this.#keyPin = pin === undefined || pin === null ? "" : String(pin);
+    return Promise.resolve();
+  }
+
   // For CadesSignedData: what the site configured, without going through the async surface.
-  settings(): { token: TokenCertificate | undefined; checkCertificate: boolean; options: number; tsaAddress: string } {
-    return { token: tokenOf(this.#certificate), checkCertificate: this.#checkCertificate, options: this.#options, tsaAddress: this.#tsaAddress };
+  settings(): { token: TokenCertificate | undefined; checkCertificate: boolean; options: number; tsaAddress: string; keyPin: string } {
+    return { token: tokenOf(this.#certificate), checkCertificate: this.#checkCertificate, options: this.#options, tsaAddress: this.#tsaAddress, keyPin: this.#keyPin };
   }
 }
 
 // The signer's certificate for signing, with CheckCertificate applied: what SignCades, SignHash and
 // SignedXML.Sign all need first.
-export function signerCertificate(signer: unknown): { token: TokenCertificate; options: number; tsaAddress: string } {
+export function signerCertificate(signer: unknown): { token: TokenCertificate; options: number; tsaAddress: string; keyPin: string } {
   if (!(signer instanceof CPSigner)) throw new CadesError("Ожидается объект CAdESCOM.CPSigner", E_INVALIDARG);
-  const { token, checkCertificate, options, tsaAddress } = signer.settings();
+  const { token, checkCertificate, options, tsaAddress, keyPin } = signer.settings();
   if (!token) throw new CadesError("Не задан сертификат подписанта", E_INVALIDARG);
   if (checkCertificate) {
     const now = Date.now();
@@ -132,7 +140,7 @@ export function signerCertificate(signer: unknown): { token: TokenCertificate; o
       throw new CadesError("Срок действия сертификата истёк или ещё не начался", CERT_E_EXPIRED);
     }
   }
-  return { token, options, tsaAddress };
+  return { token, options, tsaAddress, keyPin };
 }
 
 // The signer's TSAAddress for a signature that needs a timestamp (CAdES-T, XAdES-T).

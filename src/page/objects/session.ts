@@ -9,7 +9,8 @@ export interface Session {
   plugin: RutokenPlugin;
   // The page's origin, shown in the PIN window.
   origin: string;
-  pinDialog(request: PinRequest): PinDialog;
+  // `remember`: the "remember the PIN" box's first state.
+  pinDialog(request: PinRequest, remember: boolean): PinDialog;
   // The certificates of the "Root" and "CA" stores (src/page/roots.ts).
   storeCertificates(): Promise<StoreCertificates>;
   // Store.Add into them, through the extension (src/page/roots.ts).

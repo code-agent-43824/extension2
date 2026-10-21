@@ -119,7 +119,7 @@ one unless a step says otherwise. Wherever a step needs the issuer's certificate
 
 Mandatory, in this order:
 
-1. Checklist items 1–7 (demo page `cades_bes_sample.html`).
+1. Checklist items 1–7 and 7а (demo page `cades_bes_sample.html`; 7а — the remembered PIN — from release 1.12.0 on).
 2. Checklist items 11–13 (issuer's certificate on the second tab, `verify.html`).
 3. webtools.html: W1, W2, W4, W6, W7, W8. In W6, XAdES-T with `http://testca2012.cryptopro.ru/tsp/tsp.srf`: the
    extension's window «Доступ к службе штампов времени» — «Разрешить», then Chrome's own question — allow.

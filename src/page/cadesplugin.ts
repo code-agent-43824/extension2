@@ -82,7 +82,7 @@ export function createCadesplugin(win: PageWindow, clock: Clock): Cadesplugin {
         resolveSession({
           plugin,
           origin: win.location?.origin ?? "",
-          pinDialog: (request) => openPinDialog(win.document, request),
+          pinDialog: (request, remember) => openPinDialog(win.document, request, remember),
           storeCertificates: () => storeCertificates(win, clock),
           addCertificate: (store, certificate) => addCertificate(win, clock, store, certificate),
           offerRootByLink(offer) {
