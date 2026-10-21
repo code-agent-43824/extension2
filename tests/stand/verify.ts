@@ -1,5 +1,5 @@
 // Runs the independent Python tools on what the extension made: the verifiers (tests/tools/verify_cms.py,
-// verify_xmldsig.py) on signatures, enveloped_info.py on encrypted messages; and the stand's timestamp service
+// verify_xmldsig.py, verify_raw.py) on signatures, enveloped_info.py on encrypted messages; and the stand's timestamp service
 // (tsa.py) for CAdES-T.
 import { spawn, spawnSync } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -34,6 +34,20 @@ export function verifyCms(cmsBase64: string, content?: Uint8Array, caPem = join(
     const run = spawnSync(venvPython, args, { encoding: "utf8" });
     if (!run.stdout.trim()) throw new Error(`verify_cms.py failed: ${run.stderr}`);
     return JSON.parse(run.stdout) as VerifyReport;
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+// Runs tests/tools/verify_raw.py: a RawSignature (CryptoPro's byte order, hex) of `content`'s Streebog hash.
+export function verifyRaw(certificatePem: string, content: Uint8Array, signatureHex: string): { valid: boolean; length: number } {
+  const dir = mkdtempSync(join(tmpdir(), "verify-raw-"));
+  try {
+    writeFileSync(join(dir, "cert.pem"), certificatePem);
+    writeFileSync(join(dir, "content"), content);
+    const run = spawnSync(venvPython, [join(repoRoot, "tests", "tools", "verify_raw.py"), join(dir, "cert.pem"), join(dir, "content"), signatureHex], { encoding: "utf8" });
+    if (!run.stdout.trim()) throw new Error(`verify_raw.py failed: ${run.stderr}`);
+    return JSON.parse(run.stdout) as { valid: boolean; length: number };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

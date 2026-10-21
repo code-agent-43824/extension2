@@ -65,6 +65,11 @@ const hashForKey = new Map<string, number>([
   ["1.2.643.7.1.1.1.2", constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_512],
 ]);
 
+export function checkHashForKey(algorithm: number, token: TokenCertificate): void {
+  const required = hashForKey.get(token.x509.publicKeyAlgorithm);
+  if (required !== undefined && required !== algorithm) throw new CadesError("Алгоритм хеша не подходит к ключу сертификата", E_INVALIDARG);
+}
+
 // What the Rutoken Plugin's sign() makes: CAdES-BES, PKCS#7 and, with a timestamp service, CAdES-T. X Long and A
 // need revocation data as well; the owner left them out (docs/PLAN.md, action 25).
 const signedKinds = new Set<number>([constants.CADESCOM_CADES_BES, constants.CADESCOM_CADES_T, constants.CADESCOM_PKCS7_TYPE]);
@@ -182,10 +187,7 @@ export class CadesSignedData {
     if (Number(encoding) !== constants.CADESCOM_ENCODE_BASE64) throw new CadesError("Подпись хеша выдаётся только в Base64", E_INVALIDARG);
     const { token, options, tsaAddress } = signerCertificate(signer);
     const { algorithm, value } = await hashed.hash();
-    const required = hashForKey.get(token.x509.publicKeyAlgorithm);
-    if (required !== undefined && required !== algorithm) {
-      throw new CadesError("Алгоритм хеша не подходит к ключу сертификата", E_INVALIDARG);
-    }
+    checkHashForKey(algorithm, token);
     const signOptions: SignOptions = {
       detached: true,
       addUserCertificate: options !== constants.CAPICOM_CERTIFICATE_INCLUDE_NONE,

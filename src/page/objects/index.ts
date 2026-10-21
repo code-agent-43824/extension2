@@ -17,6 +17,7 @@ import {
   PrivateKey,
 } from "./enrollment.ts";
 import { HashedData } from "./hashed-data.ts";
+import { RawSignature } from "./raw-signature.ts";
 import { CadesSignedData } from "./signed-data.ts";
 import { SignedXML } from "./signed-xml.ts";
 import { CPAttribute, CPSigner } from "./signer.ts";
@@ -37,6 +38,7 @@ const factories = new Map<string, Factory>([
   ["cadescom.cpsigner", () => new CPSigner()],
   ["cadescom.envelopedxml", (session) => new EnvelopedXML(session)],
   ["cadescom.hasheddata", () => new HashedData()],
+  ["cadescom.rawsignature", (session) => new RawSignature(session)],
   ["cadescom.signedxml", (session) => new SignedXML(session)],
   ["cadescom.store", (session) => new Store(session)],
   // The real plug-in also answers to CAPICOM's name for it (checked with 2.0.15700); lkfl2.nalog.ru uses it.

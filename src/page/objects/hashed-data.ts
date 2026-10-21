@@ -125,12 +125,14 @@ export class HashedData {
     this.#data = (this.#data ?? "") + binary;
   }
 
+  // Hex digits, with spaces between the bytes or without (CryptoPro's RawSignature sample).
   async SetHashValue(value: unknown): Promise<void> {
     const { size } = this.#known();
-    if (typeof value !== "string" || !new RegExp(`^[0-9a-fA-F]{${size * 2}}$`).test(value)) {
+    const digits = typeof value === "string" ? value.replace(/\s+/g, "") : "";
+    if (!new RegExp(`^[0-9a-fA-F]{${size * 2}}$`).test(digits)) {
       throw new CadesError("Значение хеша не подходит к алгоритму.", E_INVALIDARG);
     }
-    this.#value = value.toUpperCase();
+    this.#value = digits.toUpperCase();
     this.#data = null;
   }
 

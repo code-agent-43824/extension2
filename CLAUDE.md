@@ -77,7 +77,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
-  case-insensitively by ProgID; `objects/cades-tools.ts` the demo pages' Android check; `objects/hashed-data.ts` hashes and HMACs in the page; `objects/signed-xml.ts`
+  case-insensitively by ProgID; `objects/cades-tools.ts` the demo pages' Android check; `objects/hashed-data.ts` hashes and HMACs in the page; `objects/raw-signature.ts` RawSignature, a bare signature of a hash
+  (`rawSign`) and its check; `objects/signed-xml.ts`
   makes XMLDSig with xmldsigjs' canonicalizer and `rawSign`, and verifies it, `objects/xades.ts` adds XAdES-BES's
   qualifying properties and XAdES-T's timestamp to it; `objects/signers.ts` the signers a
   verification found; `objects/enveloped-data.ts` CMS encryption on the plugin's `cmsEncrypt`/`cmsDecrypt`;
@@ -134,7 +135,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   message, and starts `tsa.py`.
 - `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier with CAdES-T
   timestamps, `tsa.py` RFC 3161 timestamp service with a certificate from the test CA, `verify_xmldsig.py` XMLDSig and XAdES
-  verifier on lxml, `enveloped_info.py` what an EnvelopedData is encrypted with and for), hash-pinned in
+  verifier on lxml, `verify_raw.py` RawSignature's bare signatures, `enveloped_info.py` what an EnvelopedData is encrypted with and for), hash-pinned in
   `requirements.txt`.
 
 Stand pitfalls (details in `docs/JOURNAL.md`): the native host finds the plugin only via `$HOME/.mozilla/plugins`,

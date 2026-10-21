@@ -1,11 +1,12 @@
 // Signing a hash through our extension on the stand: CAdESCOM.HashedData hashed in the page,
-// CadesSignedData.SignHash signed by the Rutoken Plugin, in the three ways sites call them (docs/JOURNAL.md, 2026-09-24).
-// Every signature must pass the independent verifier against the data that was hashed.
+// CadesSignedData.SignHash signed by the Rutoken Plugin, in the three ways sites call them (docs/JOURNAL.md, 2026-09-24),
+// and RawSignature as CryptoPro's sample calls it. Every signature must pass the independent verifier against the data
+// that was hashed.
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { stand } from "../../scripts/setup-stand.ts";
 import { blankPage, clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
-import { startTsa, verifyCms } from "./verify.ts";
+import { startTsa, verifyCms, verifyRaw } from "./verify.ts";
 
 let server: PageServer;
 let context: BrowserContext;
@@ -23,7 +24,7 @@ test.afterAll(async () => {
 });
 
 // Starts `flow` in the page with the token certificate as `certificate`, enters the PIN, returns what it returned.
-async function run(page: Page, flow: string): Promise<{ signature: string; hash?: string }> {
+async function run(page: Page, flow: string): Promise<{ signature: string; hash?: string; certificate?: string }> {
   await page.evaluate(`void (async () => {
     try {
       await cadesplugin;
@@ -38,7 +39,7 @@ async function run(page: Page, flow: string): Promise<{ signature: string; hash?
   await expect(pinDialog(page)).toContainText("просит подписать хеш данных.", { timeout: 30_000 });
   await enterPin(page);
   await page.waitForFunction(() => "flowResult" in window, undefined, { timeout: 30_000 });
-  const result = await page.evaluate(() => (window as unknown as { flowResult: { signature: string; hash?: string; error?: string } }).flowResult);
+  const result = await page.evaluate(() => (window as unknown as { flowResult: { signature: string; hash?: string; certificate?: string; error?: string } }).flowResult);
   expect(result.error).toBeUndefined();
   return result;
 }
@@ -149,4 +150,33 @@ test("signs a hash as CAdES-T with the timestamp service in TSAAddress", async (
   } finally {
     tsa.close();
   }
+});
+
+// CryptoPro's sample "Вычисление подписи по хэш-значению" (plugin-samples-raw-signature): the hash's value into a new
+// HashedData, RawSignature.SignHash on the token, VerifyHash in the page (docs/PLAN.md, action 35).
+test("signs a hash with RawSignature and verifies it in the page; the independent check accepts it", async () => {
+  const page = await openStandPage(context, `${server.url}/`);
+  const content = Buffer.from("Данные для подписи без CMS");
+  const { signature, certificate } = await run(
+    page,
+    `async (certificate) => {
+      const hashing = await cadesplugin.CreateObjectAsync("CAdESCOM.HashedData");
+      await hashing.propset_Algorithm(cadesplugin.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256);
+      await hashing.propset_DataEncoding(cadesplugin.CADESCOM_BASE64_TO_BINARY);
+      await hashing.Hash(${JSON.stringify(content.toString("base64"))});
+      const value = await hashing.Value;
+      const hash = await cadesplugin.CreateObjectAsync("CAdESCOM.HashedData");
+      await hash.propset_Algorithm(cadesplugin.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256);
+      await hash.SetHashValue(value);
+      const raw = await cadesplugin.CreateObjectAsync("CAdESCOM.RawSignature");
+      const signature = await raw.SignHash(hash, certificate);
+      await (await cadesplugin.CreateObjectAsync("CAdESCOM.RawSignature")).VerifyHash(hash, certificate, signature);
+      return { signature, certificate: await certificate.Export(cadesplugin.CADESCOM_ENCODE_BASE64) };
+    }`,
+  );
+  expect(signature).toMatch(/^[0-9A-F]{2}( [0-9A-F]{2}){63}$/);
+  const certificatePem = `-----BEGIN CERTIFICATE-----\n${certificate}-----END CERTIFICATE-----\n`;
+  expect(verifyRaw(certificatePem, content, signature)).toEqual({ valid: true, length: 64 });
+  // CMS's byte order is not CryptoPro's: the same bytes the other way round must not pass.
+  expect(verifyRaw(certificatePem, content, signature.split(" ").reverse().join(" ")).valid).toBe(false);
 });

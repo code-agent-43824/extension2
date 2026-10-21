@@ -10,6 +10,11 @@
 `plugin-samples-*`), Microsoft (`Certificates.Find`), исходники .NET (`Pkcs9DocumentName`). Каждая часть — своя
 версия, свой коммит.
 
+**Сделано (а), 1.11.0.** `CAdESCOM.RawSignature`: `SignHash` через `rawSign` с PIN-окном, `VerifyHash` в странице;
+независимая проверка `tests/tools/verify_raw.py`. Модульные тесты — 206; стенд — `hash-signing.spec.ts` 5 из 5.
+
+**Дальше.** (б) `KeyPin` и запоминание PIN.
+
 ## 2026-10-21 — Форк `.88` на стенде
 
 **План.** Действие 34 `PLAN.md`. Опыт 20.10 (`JOURNAL.md`): с `.88` W7 и W8 на стенде проходят, на `.42` — нет;
