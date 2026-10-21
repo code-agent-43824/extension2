@@ -2,7 +2,8 @@
 // confirming button for the next signatures, a reload forgets the PIN, and the site's CPSigner.KeyPin needs only the
 // user's yes. Every signature must pass the independent verifier.
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { stand, userPin } from "../../scripts/setup-stand.ts";
+import { join } from "node:path";
+import { stand, standDir, userPin } from "../../scripts/setup-stand.ts";
 import { blankPage, clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { pinDialog } from "./testgost-certs.ts";
 import { verifyCms } from "./verify.ts";
@@ -74,6 +75,7 @@ test("a ticked box leaves only the confirming button for the next signature, unt
   await expect(dialog).toContainText("PIN-код запомнен до закрытия страницы.", { timeout: 30_000 });
   await expect(dialog.locator("input[name=pin]")).toBeHidden();
   await expect(dialog.locator("input[name=remember]")).toBeChecked();
+  await page.screenshot({ path: join(standDir, "pin-remembered.png") });
   await dialog.locator("button[name=confirm]").click();
   await signature(page);
 

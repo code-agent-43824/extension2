@@ -32,6 +32,14 @@ export interface X509 {
   publicKey: Uint8Array;
   // The SubjectPublicKeyInfo's AlgorithmIdentifier as encoded: an ephemeral key on the same curve reuses it.
   publicKeyAlgorithmDer: Uint8Array;
+  // Every extension, in the certificate's order; `value` is the OCTET STRING's content.
+  extensions: Extension[];
+}
+
+export interface Extension {
+  oid: string;
+  critical: boolean;
+  value: Uint8Array;
 }
 
 // Friendly names CryptoPro gives the GOST public key algorithms; other algorithms show their OID.
@@ -56,15 +64,22 @@ export function derToBase64(der: Uint8Array): string {
   return btoa(binary);
 }
 
+function parseExtensions(extensions: ReturnType<typeof read> | undefined): Extension[] {
+  if (!extensions) return [];
+  return children(expectTag(children(extensions)[0], 0x30, "Extensions")).map((extension) => {
+    const parts = children(extension);
+    return {
+      oid: decodeOid(expectTag(parts[0], 0x06, "extension id").value),
+      // critical BOOLEAN DEFAULT FALSE sits between the id and the value when present.
+      critical: parts.length === 3 && parts[1]!.tag === 0x01 && parts[1]!.value[0] !== 0,
+      value: expectTag(parts[parts.length - 1], 0x04, "extension value").value,
+    };
+  });
+}
+
 // The value (the OCTET STRING's content) of the extension with this OID, if the certificate has it.
 function extensionValue(extensions: ReturnType<typeof read> | undefined, oid: string): Uint8Array | undefined {
-  if (!extensions) return undefined;
-  for (const extension of children(expectTag(children(extensions)[0], 0x30, "Extensions"))) {
-    const parts = children(extension);
-    if (decodeOid(expectTag(parts[0], 0x06, "extension id").value) !== oid) continue;
-    return expectTag(parts[parts.length - 1], 0x04, "extension value").value;
-  }
-  return undefined;
+  return parseExtensions(extensions).find((extension) => extension.oid === oid)?.value;
 }
 
 function privateKeyUsagePeriod(extensions: ReturnType<typeof read> | undefined): [Date | null, Date | null] {
@@ -122,5 +137,6 @@ export function parseCertificate(der: Uint8Array): X509 {
     publicKeyParameters: parameterSet?.tag === 0x06 ? decodeOid(parameterSet.value) : null,
     publicKey: expectTag(keyBits, 0x03, "subjectPublicKey").value.subarray(1),
     publicKeyAlgorithmDer: keyAlgorithm!.der,
+    extensions: parseExtensions(extensions),
   };
 }

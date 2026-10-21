@@ -292,7 +292,7 @@
   полный круг; из документов — ошибку 147 fake Рутокена как известную. Код расширения не меняется, версия тоже.
   Сделано: `.88` (и его test kit) в `vendor-lock.json`; ГОСТ 28147-89 — в общем цикле шифрования webtools.html,
   XML — шифрование и расшифрование; опыт с OpenSSL расшифровывает расширением и ГОСТ 28147-89.
-- [~] **35. Недостающее из API КриптоПро.** Владелец, 2026-10-21, по списку непокрытого: `RawSignature` — «делай»,
+- [x] **35. Недостающее из API КриптоПро.** Владелец, 2026-10-21, по списку непокрытого: `RawSignature` — «делай»,
   `CPSigner.KeyPin` — «делай», атрибуты сайта и цепочка в подписи — «делай», методы `Certificate` и `PublicKey` —
   «делай», `Certificates.Find` по корню, шаблону, расширению и политикам — «если сделать не сложно — сделай»,
   запоминание PIN (`CachePin`) — «надо сделать». Удаление из хранилища, импорт PFX, другие хранилища — не нужно.
@@ -330,13 +330,16 @@
     `signing.ts`, `CPAttribute` с `OID` и `ValueEncoding`, цепочка в `signed-data.ts`; запрос штампа для CAdES-T и
     XAdES-T — общий `requestTimestamp`. Тесты — `cms-sign.test.ts`, `signing.test.ts`, `tests/stand/attributes.spec.ts`,
     имя документа в подписи демо-страницы (`demo-page.spec.ts`).
-  - [ ] (г) **`Certificate` и `PublicKey`; `Certificates.Find`** (1.14.0). `GetInfo` (простое имя, почта, UPN, DNS —
+  - [x] (г) **`Certificate` и `PublicKey`; `Certificates.Find`** (1.14.0). `GetInfo` (простое имя, почта, UPN, DNS —
     субъекта и издателя), `KeyUsage()`, `ExtendedKeyUsage()` с коллекцией `EKUs`, `BasicConstraints()`, `Extensions()`
     (`OID`, `IsCritical`, `EncodedData.Value`), `Display()` — своё окно с полями сертификата на странице;
     `PublicKey().EncodedKey` и `EncodedParameters`. `Find`: `ROOT_NAME` (имя корневого цепочки из хранилищ),
     `TEMPLATE_NAME` (расширения шаблона Microsoft: имя или OID), `EXTENSION` (OID или `CAPICOM_OID_KEY_USAGE_EXTENSION`),
     `APPLICATION_POLICY` (OID назначения в EKU), `CERTIFICATE_POLICY` (OID политики). Понятные имена OID — не
     сверены с КриптоПро, только OID. Тесты — модульные; стенд — webtools.html или своя страница.
+    Сделано: `src/page/certificate-info.ts` (имена, EKU, ограничения, политики, шаблон), `objects/certificate-extensions.ts`
+    (объекты CAPICOM), `certificate-dialog.ts` (окно `Display()`), все расширения в `x509.ts`. Тесты —
+    `certificate-info.test.ts` (сертификат со всеми расширениями собирается в тесте), `tests/stand/certificate.spec.ts`.
 
 ## Значения по умолчанию, выбранные агентом
 

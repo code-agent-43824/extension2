@@ -6,6 +6,7 @@ import { constants } from "./constants.ts";
 import { getLastError } from "./errors.ts";
 import { createObject } from "./objects/index.ts";
 import type { Session } from "./objects/session.ts";
+import { showCertificateDialog } from "./certificate-dialog.ts";
 import { openPinDialog } from "./pin-dialog.ts";
 import { offerRootByLink } from "./root-links.ts";
 import { addCertificate, storeCertificates } from "./roots.ts";
@@ -83,6 +84,7 @@ export function createCadesplugin(win: PageWindow, clock: Clock): Cadesplugin {
           plugin,
           origin: win.location?.origin ?? "",
           pinDialog: (request, remember) => openPinDialog(win.document, request, remember),
+          showCertificate: (fields) => showCertificateDialog(win.document, fields),
           storeCertificates: () => storeCertificates(win, clock),
           addCertificate: (store, certificate) => addCertificate(win, clock, store, certificate),
           offerRootByLink(offer) {

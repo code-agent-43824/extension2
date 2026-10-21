@@ -2,6 +2,43 @@
 
 Новые записи сверху.
 
+## 2026-10-21 — откуда взяты форматы действия 35
+
+**Гипотеза.** Недостающие объекты и методы КриптоПро (`RawSignature`, атрибуты подписи, `GetInfo` и прочие методы
+`Certificate`, критерии `Find`) можно сделать по опубликованным документам, без плагина КриптоПро на стенде.
+
+**Что сделали.** Прочитали документацию КриптоПро (docs.cryptopro.ru: `IRawSignature::SignHash`/`VerifyHash`,
+`ICPAttribute`/`ICPAttribute2`, `ICPSigner4::KeyPin`, `ICPPrivateKey::CachePin`/`KeyPin`, `ICPPrivateKey4::CacheKey`,
+примеры `plugin-samples-raw-signature`, `-attrs`, `-private-key-cachepin`, `-cachekey`), Microsoft (`Certificates.Find`,
+`Certificate.GetInfo`, перечисления `CAPICOM_CERT_INFO_TYPE`, `CAPICOM_EKU`, `CAPICOM_OID`, функция
+`CertGetNameString`), исходники .NET (`dotnet/runtime`: `Pkcs9DocumentName.cs`, `Helpers.UnicodeToOctetString`) и
+КриптоПро .NET (`CryptoPro/corefx`, `master`: `GostConstants.cs`). На стенде сняли ответ `sign` Рутокен Плагина.
+
+**Что показала проверка.**
+
+- `RawSignature.SignHash` по документации: подпись RFC 4491 2.2.2 (s‖r, big-endian, как в CMS) в обратном порядке
+  байт, hex-пары через пробел; хеш в `SetHashValue` — «с пробелами или без». На стенде `rawSign` токена,
+  развёрнутый так, принимает и наша проверка, и независимая (`verify_raw.py`), а в порядке CMS — нет.
+- «Имя документа» и «описание документа» КриптоПро называет `CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_NAME` и
+  `…_DESCRIPTION` (1 и 2), OID — CAPICOM: `1.3.6.1.4.1.311.88.2.1` (его же видели в подписи плагина КриптоПро,
+  запись 2026-09-23) и `.2.2`. Кодирования КриптоПро не публикует; .NET (`Pkcs9DocumentName`, наследник CAPICOM)
+  пишет OCTET STRING с текстом UTF-16LE и нулевым символом в конце — так и делаем. `ValueEncoding`: в браузерном
+  плагине нет `CAPICOM_ENCODE_BINARY`; с `CAPICOM_ENCODE_BASE64` значение — DER атрибута в Base64.
+- `CachePin` — «пароль будет запомнен на время жизни объекта PrivateKey», `CacheKey(false)` — «после этого вызова пин
+  будет запрошен повторно». Честный знак ставит `CachePin(false)` перед каждой подписью (запись 2026-09-24).
+- `sign` Рутокен Плагина отвечает DER (определённые длины) и Base64 одной строкой, без переносов; дайджест в
+  `SignerInfo` — с параметром NULL, у КриптоПро — без. Своя сборка повторяет КриптоПро.
+- `GetInfo` в CAPICOM — это `CertGetNameString`: простое имя — CN, OU, O, e-mail из имени, затем rfc822Name
+  альтернативного имени, затем первый атрибут; почта — rfc822Name, затем e-mail из имени; UPN — otherName
+  `1.3.6.1.4.1.311.20.2.3`; DNS — dNSName, затем CN; для издателя — его имя и Issuer Alternative Name; ничего — пустая
+  строка.
+- XML-шифрование «Кузнечиком» и «Магмой»: в `GostConstants.cs` КриптоПро .NET (свежий `master`) адресов для них нет —
+  только ГОСТ 28147-89 (`…:gost28147`) и экспорт ключа к нему.
+
+**Вывод.** Всё действие 35 сделано по документам; не сверены с плагином КриптоПро формат `RawSignature`,
+кодирование атрибутов документа, `GetInfo` и прочие методы `Certificate`, критерии `Find`. XML «Кузнечиком» и
+«Магмой» не делаем: формата КриптоПро нет, свой никто, кроме нас, не прочтёт.
+
 ## 2026-10-20 — форк SoftHSMv2 `.88`: `derive` для ГОСТ 28147-89 есть
 
 **Гипотеза.** В форке появился `CKM_GOSTR3410_12_DERIVE` (VKO 2012 без KDF, ключ `CKK_GOST28147` с читаемым

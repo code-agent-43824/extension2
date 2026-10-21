@@ -4,7 +4,9 @@ import { About } from "./about.ts";
 import { constants } from "../constants.ts";
 import { formatName } from "../dn.ts";
 import { validationChain } from "../chain.ts";
-import { algorithmName, derToBase64, parseCertificate, pemToDer, type X509 } from "../x509.ts";
+import { algorithmName, parseCertificate, pemToDer, type X509 } from "../x509.ts";
+import { applicationPolicies, certificatePolicies, extendedKeyUsages, nameInfo, templateNames } from "../certificate-info.ts";
+import { base64Lines, BasicConstraints, EncodedData, ExtendedKeyUsage, Extensions, extensionOids, KeyUsage } from "./certificate-extensions.ts";
 import type { TokenCertificate } from "../token.ts";
 import type { Session } from "./session.ts";
 import { cachePinOf, setCachePin, setKeyPin } from "../token-login.ts";
@@ -44,23 +46,43 @@ class Oid {
 }
 
 // CAdESCOM.PublicKey. Length is the public key's own size in bits, as CryptoPro counts it: 512 for a 256-bit
-// GOST R 34.10-2012 key (the ALG_ID table of CryptoPro's demo pages, Code.js).
-export class PublicKey {
-  readonly #algorithm: string;
-  readonly #length: number;
+// GOST R 34.10-2012 key (the ALG_ID table of CryptoPro's demo pages, Code.js). EncodedKey is the subjectPublicKey's
+// bits (for GOST the OCTET STRING of x||y), EncodedParameters the algorithm's parameters as encoded, as CAPICOM's.
+export interface PublicKeyParts {
+  algorithm: string;
+  length: number;
+  key: Uint8Array;
+  // Empty when not known (a container's key without a certificate).
+  parameters: Uint8Array;
+}
 
-  constructor(algorithm: string, length: number) {
-    this.#algorithm = algorithm;
-    this.#length = length;
+export class PublicKey {
+  readonly #parts: PublicKeyParts;
+
+  constructor(parts: PublicKeyParts) {
+    this.#parts = parts;
   }
 
   get Algorithm(): Promise<Oid> {
-    return Promise.resolve(new Oid(this.#algorithm));
+    return Promise.resolve(new Oid(this.#parts.algorithm));
   }
 
   get Length(): Promise<number> {
-    return Promise.resolve(this.#length);
+    return Promise.resolve(this.#parts.length);
   }
+
+  get EncodedKey(): Promise<EncodedData> {
+    return Promise.resolve(new EncodedData(this.#parts.key));
+  }
+
+  get EncodedParameters(): Promise<EncodedData> {
+    return Promise.resolve(new EncodedData(this.#parts.parameters));
+  }
+}
+
+function certificateKey(x509: X509): PublicKeyParts {
+  const parameters = children(read(x509.publicKeyAlgorithmDer))[1];
+  return { algorithm: x509.publicKeyAlgorithm, length: publicKeyBits(x509), key: x509.publicKey, parameters: parameters ? parameters.der : new Uint8Array() };
 }
 
 // The key's size in bits: a GOST key's point, an RSA key's modulus; 0 for anything else.
@@ -282,15 +304,68 @@ export class Certificate {
   }
 
   PublicKey(): Promise<PublicKey> {
-    return Promise.resolve(new PublicKey(this.#x509.publicKeyAlgorithm, publicKeyBits(this.#x509)));
+    return Promise.resolve(new PublicKey(certificateKey(this.#x509)));
   }
 
   // Only base64, as the real plug-in: 64-column lines, each ending in LF (2.0.15700 on the stand, docs/JOURNAL.md);
   // it refuses binary with E_INVALIDARG. lkfl2.nalog.ru reads it for every certificate it lists.
   Export(encoding: number): Promise<string> {
     if (encoding !== constants.CADESCOM_ENCODE_BASE64) throw new CadesError(`Неподдерживаемая кодировка: ${encoding}`, E_INVALIDARG);
-    const text = derToBase64(this.#x509.der);
-    return Promise.resolve((text.match(/.{1,64}/g) ?? []).map((line) => `${line}\n`).join(""));
+    return Promise.resolve(base64Lines(this.#x509.der));
+  }
+
+  // CAPICOM_CERT_INFO_TYPE 0–7: the simple name, e-mail, UPN or DNS name of the subject or the issuer
+  // (src/page/certificate-info.ts).
+  async GetInfo(type: unknown): Promise<string> {
+    const value = Number(type);
+    if (!Number.isInteger(value) || value < 0 || value > 7) throw new CadesError("The parameter is incorrect.", E_INVALIDARG);
+    return nameInfo(this.#x509, value);
+  }
+
+  KeyUsage(): Promise<KeyUsage> {
+    return Promise.resolve(new KeyUsage(this.#x509));
+  }
+
+  ExtendedKeyUsage(): Promise<ExtendedKeyUsage> {
+    return Promise.resolve(new ExtendedKeyUsage(this.#x509));
+  }
+
+  BasicConstraints(): Promise<BasicConstraints> {
+    return Promise.resolve(new BasicConstraints(this.#x509));
+  }
+
+  Extensions(): Promise<Extensions> {
+    return Promise.resolve(new Extensions(this.#x509.extensions));
+  }
+
+  // The certificate's fields in the extension's window on the page, where CryptoPro opens the system's.
+  async Display(): Promise<void> {
+    const x509 = this.#x509;
+    const usages = keyUsageNames.filter(([flag]) => ((x509.keyUsage ?? 0) & flag) !== 0).map(([, name]) => name);
+    const fields: [string, string][] = [
+      ["Кому выдан", nameInfo(x509, constants.CAPICOM_CERT_INFO_SUBJECT_SIMPLE_NAME)],
+      ["Кем выдан", nameInfo(x509, constants.CAPICOM_CERT_INFO_ISSUER_SIMPLE_NAME)],
+      ["Действителен с", x509.notBefore.toLocaleString("ru-RU")],
+      ["Действителен по", x509.notAfter.toLocaleString("ru-RU")],
+      ["Субъект", formatName(x509.subject)],
+      ["Издатель", formatName(x509.issuer)],
+      ["Серийный номер", x509.serialNumber],
+      ["Отпечаток", x509.thumbprint],
+      ["Открытый ключ", algorithmName(x509.publicKeyAlgorithm)],
+      ...(usages.length ? [["Использование ключа", usages.join(", ")] as [string, string]] : []),
+      ...((extendedKeyUsages(x509) ?? []).length ? [["Улучшенный ключ", extendedKeyUsages(x509)!.join(", ")] as [string, string]] : []),
+      ["Закрытый ключ", this.#token ? "на Рутокене" : "нет"],
+    ];
+    await this.#session.showCertificate(fields);
+  }
+
+  // The subject of the root its chain to the extension's stores ends in; undefined when the chain ends below a root.
+  async rootName(): Promise<string | undefined> {
+    const { roots, intermediates } = await this.#session.storeCertificates();
+    const chain = validationChain(this.#x509, intermediates, roots).certificates;
+    const top = chain[chain.length - 1]!;
+    const selfSigned = top.subjectDer.length === top.issuerDer.length && top.subjectDer.every((byte, i) => byte === top.issuerDer[i]);
+    return selfSigned || roots.some((root) => root.thumbprint === top.thumbprint) ? formatName(top.subject) : undefined;
   }
 
   // Only the validity period, unless the options page turns on the extended check: then the chain to the
@@ -307,6 +382,19 @@ export class Certificate {
     return new CertificateStatus(chain.valid, new Certificates(certificates), new Statuses(chain.statuses));
   }
 }
+
+// The key usages as Windows' certificate window names them, for Display().
+const keyUsageNames: [number, string][] = [
+  [0x80, "Цифровая подпись"],
+  [0x40, "Неотрекаемость"],
+  [0x20, "Шифрование ключей"],
+  [0x10, "Шифрование данных"],
+  [0x08, "Согласование ключей"],
+  [0x04, "Подписывание сертификатов"],
+  [0x02, "Подписывание списка отзыва (CRL)"],
+  [0x01, "Только шифрование"],
+  [0x8000, "Только расшифрование"],
+];
 
 // CAdESCOM.Certificates: a fixed snapshot, indexed from 1 like every CAPICOM collection.
 export class Certificates {
@@ -329,7 +417,10 @@ export class Certificates {
   // CAPICOM's search, for the kinds sites use (lkfl2.nalog.ru looks up the certificate to sign with by its
   // SHA-1): by thumbprint, or by a piece of the subject or issuer name, ignoring case; by key usage and validity
   // time, and by extended property as CryptoPro 2.0.15700 answers (docs/JOURNAL.md): a key usage is one flag, a number (anything else is
-  // 0x80070057), and a certificate without the extension has none; the time is the criterion, now if none.
+  // 0x80070057), and a certificate without the extension has none; the time is the criterion, now if none. By
+  // Microsoft's documentation of Find, not compared with CryptoPro: a piece of the chain's root subject; the template's
+  // name (ignoring case) or OID; an extension's OID or its CAPICOM_OID; an application policy (an extended key usage or
+  // Microsoft's application policy) and a certificate policy, each by OID.
   async Find(findType: number, criteria?: unknown, validOnly = false): Promise<Certificates> {
     const wanted = String(criteria ?? "");
     const type = Number(findType);
@@ -347,7 +438,19 @@ export class Certificates {
     ) {
       throw new CadesError("The parameter is incorrect.", E_INVALIDARG);
     }
+    const extensionOid = type === constants.CAPICOM_CERTIFICATE_FIND_EXTENSION ? (typeof criteria === "number" ? extensionOids.get(criteria) : wanted) : undefined;
+    if (type === constants.CAPICOM_CERTIFICATE_FIND_EXTENSION && !/^[0-2](\.\d+)+$/.test(extensionOid ?? "")) {
+      throw new CadesError("The parameter is incorrect.", E_INVALIDARG);
+    }
     const at = criteria === undefined || criteria === null || criteria === "" ? Date.now() : new Date(criteria as string).getTime();
+    // A certificate whose extension does not parse matches none of them.
+    const parsing = (check: () => boolean) => {
+      try {
+        return check();
+      } catch {
+        return false;
+      }
+    };
     const matches = async (item: Certificate): Promise<boolean> => {
       const x509 = parsed.get(item)!;
       switch (type) {
@@ -368,6 +471,18 @@ export class Certificates {
           return at < x509.notBefore.getTime();
         case constants.CAPICOM_CERTIFICATE_FIND_TIME_EXPIRED:
           return x509.notAfter.getTime() < at;
+        case constants.CAPICOM_CERTIFICATE_FIND_ROOT_NAME: {
+          const root = await item.rootName();
+          return root !== undefined && root.toLowerCase().includes(wanted.toLowerCase());
+        }
+        case constants.CAPICOM_CERTIFICATE_FIND_TEMPLATE_NAME:
+          return parsing(() => templateNames(x509).some((name) => name.toLowerCase() === wanted.toLowerCase()));
+        case constants.CAPICOM_CERTIFICATE_FIND_EXTENSION:
+          return x509.extensions.some((extension) => extension.oid === extensionOid);
+        case constants.CAPICOM_CERTIFICATE_FIND_APPLICATION_POLICY:
+          return parsing(() => [...(extendedKeyUsages(x509) ?? []), ...applicationPolicies(x509)].includes(wanted));
+        case constants.CAPICOM_CERTIFICATE_FIND_CERTIFICATE_POLICY:
+          return parsing(() => certificatePolicies(x509).includes(wanted));
         default:
           throw new CadesError(`Поиск сертификатов вида ${findType} не поддерживается`, E_NOTIMPL);
       }

@@ -231,6 +231,8 @@ export interface FakeStores {
   refuse?: Error;
   // The roots InstallResponse left to the page's link.
   offered?: RootOffer[];
+  // Certificate.Display(): the fields each window showed.
+  shown?: [string, string][][];
   // XAdES-T: the timestamp services asked for access, a refusal, and the service's answers.
   tsaAccess?: string[];
   refuseTsa?: Error;
@@ -242,6 +244,7 @@ export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]
     plugin,
     origin: "https://site.example",
     pinDialog: dialog.open,
+    showCertificate: async (fields) => void stores.shown?.push(fields),
     storeCertificates: async () => ({ roots, intermediates, extendedValidity: stores.extendedValidity === true, offerRoot: stores.offerRoot === true }),
     addCertificate: async (store, certificate) => {
       if (stores.refuse) throw stores.refuse;

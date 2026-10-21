@@ -2,6 +2,7 @@
 // key the Rutoken Plugin sees is the container \\.\<reader>\ID_<CKA_ID>, as CryptoPro names it (the owner's
 // screenshot, 2026-10-08). Key ids come only after a login, so listing asks for each token's PIN (the owner's
 // decision, CLAUDE.md); what one login found is kept for the page until the extension itself changes the token's keys.
+import { encode } from "../asn1.ts";
 import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
 import { certificateLines } from "../signing.ts";
@@ -173,7 +174,8 @@ export class ContainerKey {
 
   get PublicKey(): Promise<PublicKey> {
     const ids = this.#key.kind && algIds[this.#key.kind];
-    return Promise.resolve(new PublicKey(ids ? ids.oid : "", this.#key.publicKey.length * 8));
+    // The key as a certificate carries it: an OCTET STRING of x||y.
+    return Promise.resolve(new PublicKey({ algorithm: ids ? ids.oid : "", length: this.#key.publicKey.length * 8, key: encode(0x04, this.#key.publicKey), parameters: new Uint8Array() }));
   }
 }
 

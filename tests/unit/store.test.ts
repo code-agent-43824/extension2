@@ -134,7 +134,7 @@ describe("CAdESCOM.Certificate", () => {
     expect(await (await byHash.Item(1)).Thumbprint).toBe("CDEA7EAB5BE6B167F22B713BF376E9B28ADB14A3");
     expect(await (await all.Find(constants.CAPICOM_CERTIFICATE_FIND_SUBJECT_NAME, "stand user")).Count).toBe(1);
     expect(await (await all.Find(constants.CAPICOM_CERTIFICATE_FIND_SHA1_HASH, "00")).Count).toBe(0);
-    await expect(all.Find(constants.CAPICOM_CERTIFICATE_FIND_TEMPLATE_NAME, "x")).rejects.toThrow("0x80004001");
+    await expect(all.Find(99, "x")).rejects.toThrow("0x80004001");
   });
 
   it("exports itself as base64 in 64-column LF lines, and refuses binary", async () => {

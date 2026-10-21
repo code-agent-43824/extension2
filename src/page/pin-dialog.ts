@@ -27,7 +27,8 @@ export interface PinDialog {
 
 export const HOST_ID = "rutoken-cades-bridge-pin";
 
-const style = `
+// Shared with the certificate window (src/page/certificate-dialog.ts).
+export const style = `
   :host { all: initial; }
   .backdrop { position: fixed; inset: 0; z-index: 2147483647; background: rgba(0, 0, 0, 0.45);
     display: flex; align-items: center; justify-content: center; font: 14px/1.4 system-ui, sans-serif; }
@@ -48,7 +49,7 @@ const style = `
   button[name="confirm"] { background: #1a5fb4; border-color: #1a5fb4; color: #fff; }
 `;
 
-function element<K extends keyof HTMLElementTagNameMap>(
+export function element<K extends keyof HTMLElementTagNameMap>(
   doc: Document,
   tag: K,
   props: Partial<HTMLElementTagNameMap[K]> = {},

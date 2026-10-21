@@ -84,7 +84,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   verification found; `objects/enveloped-data.ts` CMS encryption on the plugin's `cmsEncrypt`/`cmsDecrypt`;
   `objects/enveloped-xml.ts` XML encryption in CryptoPro's format, encrypted in the page, decrypted with the key the
   plugin's `derive` makes on the token;
-  `objects/csp-information.ts` the connected tokens as readers, `tokeninserted` by polling; `objects/containers.ts` their keys as CryptoPro's containers, read after each token's PIN once per page), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
+  `objects/certificate-extensions.ts` the CAPICOM objects of a certificate's extensions (KeyUsage, ExtendedKeyUsage,
+  BasicConstraints, Extensions, EncodedData) on `certificate-info.ts` (GetInfo's names, EKUs, policies, template),
+  `certificate-dialog.ts` Display()'s window; `objects/csp-information.ts` the connected tokens as readers, `tokeninserted` by polling; `objects/containers.ts` their keys as CryptoPro's containers, read after each token's PIN once per page), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing, and `asn1.ts` writes DER too; `dn.ts` holds the CryptoPro name format
   sites match with regexes, and the RFC 4514 names of XAdES), `gost.ts` (hashes, HMAC, GOST R 34.10 signature checks and VKO, on `@li0ard/gost`) +
@@ -126,7 +128,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `dist/firefox`, and `firefox.spec.ts` runs the plug-in, site enabling, the demo page, XAdES-T and webtools.html in
   it; `with-cryptopro.spec.ts`
   loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `pin.spec.ts` the remembered PIN and the site's KeyPin; `attributes.spec.ts` the site's signed attributes and the
-  chain in CMS; `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `xades.spec.ts` XAdES-BES and XAdES-T, with the stand's timestamp service and the window asking for access to another;
+  chain in CMS; `certificate.spec.ts` the certificate's CAPICOM methods, Find's criteria and Display(); `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `xades.spec.ts` XAdES-BES and XAdES-T, with the stand's timestamp service and the window asking for access to another;
   `verification.spec.ts` verifies ours and CryptoPro's signatures in the page; `roots.spec.ts` drives the root store
   on the options page; `validity.spec.ts` the extended validity check and the demo page adding its root; `enrollment.spec.ts` the
   certsrv calls offline on a copy of the token, with the question about the root; `with-cryptopro-csp.spec.ts` (opt-in)

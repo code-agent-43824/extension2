@@ -11,6 +11,8 @@ export interface Session {
   origin: string;
   // `remember`: the "remember the PIN" box's first state.
   pinDialog(request: PinRequest, remember: boolean): PinDialog;
+  // Certificate.Display(): the fields as label and value, until the user closes the window.
+  showCertificate(fields: [string, string][]): Promise<void>;
   // The certificates of the "Root" and "CA" stores (src/page/roots.ts).
   storeCertificates(): Promise<StoreCertificates>;
   // Store.Add into them, through the extension (src/page/roots.ts).

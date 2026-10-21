@@ -43,7 +43,8 @@ export interface Attribute {
 // One entry per RDN, in DER order; a multi-valued RDN has several attributes.
 export type Name = Attribute[][];
 
-function decodeString(node: Node): string {
+// A directory string's text; any other value as "#" and its DER in hex, as CryptoAPI writes it.
+export function decodeString(node: Node): string {
   switch (node.tag) {
     case 0x0c: // UTF8String
       return new TextDecoder("utf-8").decode(node.value);
