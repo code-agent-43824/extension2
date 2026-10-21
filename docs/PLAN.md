@@ -316,7 +316,7 @@
     `pin-dialog.ts`, `KeyPin` у `CPSigner` и `PrivateKey`, `CachePin`/`CacheKey`; `CachePin(false)` только снимает
     галочку, не забывая PIN, который запомнил пользователь: Честный знак ставит его перед каждой подписью.
     Тесты — `pin.test.ts`, `tests/stand/pin.spec.ts`.
-  - [ ] (в) **Атрибуты сайта и цепочка** (1.13.0). Подписанные атрибуты из `AuthenticatedAttributes2`: время подписи
+  - [x] (в) **Атрибуты сайта и цепочка** (1.13.0). Подписанные атрибуты из `AuthenticatedAttributes2`: время подписи
     (`Value` — дата), имя и описание документа (`1.3.6.1.4.1.311.88.2.1` и `.2.2`, OCTET STRING с текстом UTF-16LE
     и нулём в конце — так кодирует `Pkcs9DocumentName` .NET, наследник CAPICOM), прочие — по `OID.Value` и `Value` в
     Base64 (`ValueEncoding`). Есть атрибуты сайта — CMS собираем сами: атрибуты CAdES-BES (contentType, signingTime,
@@ -326,6 +326,10 @@
     хранилищ расширения, в поле `certificates` подписи (оно не подписывается, поэтому годится и для ответа `sign`).
     Решение «`sign`, где его хватает» в `CLAUDE.md` уточнить словами владельца. Тесты: модульные (сборка, атрибуты,
     цепочка), стенд (демо-страница с именем документа — `verify_cms.py`, наша проверка, `SigningTime` подписанта).
+    Сделано: `src/page/cms-sign.ts` (атрибуты, SignedData как у КриптоПро, `withCertificates`), `signAssembled` в
+    `signing.ts`, `CPAttribute` с `OID` и `ValueEncoding`, цепочка в `signed-data.ts`; запрос штампа для CAdES-T и
+    XAdES-T — общий `requestTimestamp`. Тесты — `cms-sign.test.ts`, `signing.test.ts`, `tests/stand/attributes.spec.ts`,
+    имя документа в подписи демо-страницы (`demo-page.spec.ts`).
   - [ ] (г) **`Certificate` и `PublicKey`; `Certificates.Find`** (1.14.0). `GetInfo` (простое имя, почта, UPN, DNS —
     субъекта и издателя), `KeyUsage()`, `ExtendedKeyUsage()` с коллекцией `EKUs`, `BasicConstraints()`, `Extensions()`
     (`OID`, `IsCritical`, `EncodedData.Value`), `Display()` — своё окно с полями сертификата на странице;

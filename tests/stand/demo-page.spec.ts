@@ -145,6 +145,8 @@ test.describe("with the Rutoken adapter", () => {
     expect(report.checks).toEqual({ message_digest: true, signature: true, certificate_by_ca: true, cades_bes_attributes: true });
     expect(report.detached).toBe(false);
     expect(report.signing_time).toBeTruthy();
+    // The page's own attributes are in the signature (docs/PLAN.md, action 35c): its signing time and the document name.
+    expect(report.attributes).toContain("1.3.6.1.4.1.311.88.2.1");
   });
 
   test("signs detached, checking the certificate, and the signature verifies against Hello World", async () => {

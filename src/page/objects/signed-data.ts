@@ -1,4 +1,5 @@
-import { chainError } from "../chain.ts";
+import { chainError, validationChain } from "../chain.ts";
+import { withCertificates } from "../cms-sign.ts";
 import {
   ATTRIBUTE_CERTIFICATE_REFS,
   ATTRIBUTE_REVOCATION_REFS,
@@ -18,7 +19,7 @@ import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
 import { digest, isGostKey, type DigestName } from "../gost.ts";
 import type { RutokenPlugin, SignOptions, TspOptions } from "../rutoken.ts";
-import { signWithToken } from "../signing.ts";
+import { signAssembled, signWithToken } from "../signing.ts";
 import type { TokenCertificate } from "../token.ts";
 import type { X509 } from "../x509.ts";
 import { Certificate, Certificates, x509Of } from "./certificate.ts";
@@ -110,6 +111,11 @@ function decodeMessage(message: unknown): SignedData {
   }
 }
 
+function isSelfSigned(certificate: X509): boolean {
+  const { subjectDer: subject, issuerDer: issuer } = certificate;
+  return subject.length === issuer.length && subject.every((byte, i) => byte === issuer[i]);
+}
+
 function fromHex(hex: string): Uint8Array {
   return Uint8Array.from(hex.match(/../g) ?? [], (byte) => parseInt(byte, 16));
 }
@@ -161,12 +167,42 @@ export class CadesSignedData {
     return Promise.resolve();
   }
 
+  // The certificates CPSigner.Options asks for: none, the signer's, or its chain to the extension's stores, the root
+  // left out unless the whole chain is asked for (CryptoPro's default is the chain without the root). A chain that
+  // reaches no root goes in as far as it is found.
+  async #certificates(token: TokenCertificate, options: number): Promise<X509[]> {
+    if (options === constants.CAPICOM_CERTIFICATE_INCLUDE_NONE) return [];
+    if (options === constants.CAPICOM_CERTIFICATE_INCLUDE_END_ENTITY_ONLY) return [token.x509];
+    const { roots, intermediates } = await this.#session.storeCertificates();
+    const chain = validationChain(token.x509, intermediates, roots).certificates;
+    const top = chain[chain.length - 1]!;
+    const root = chain.length > 1 && (roots.some((certificate) => certificate.thumbprint === top.thumbprint) || isSelfSigned(top));
+    return options === constants.CAPICOM_CERTIFICATE_INCLUDE_WHOLE_CHAIN || !root ? chain : chain.slice(0, -1);
+  }
+
+  // The signature sign() made, with the rest of the chain it does not add.
+  async #withChain(signature: string, certificates: X509[]): Promise<string> {
+    if (certificates.length < 2) return signature;
+    return btoa(bytesBinary(withCertificates(binaryBytes(atob(signature.replace(/\s+/g, ""))), certificates)));
+  }
+
   async SignCades(signer: unknown, type: number = constants.CADESCOM_CADES_DEFAULT, detached: unknown = false): Promise<string> {
     const kind = signatureKind(type);
-    const { token, options, tsaAddress, keyPin } = signerCertificate(signer);
+    const { token, options, tsaAddress, keyPin, attributes } = signerCertificate(signer);
     const cades = kind !== constants.CADESCOM_PKCS7_TYPE;
     const content = this.#encoding === constants.CADESCOM_BASE64_TO_BINARY ? this.#content.replace(/\s+/g, "") : ucs2leBase64(this.#content);
     if (!content) throw new CadesError("Нет данных для подписи", E_INVALIDARG);
+    const certificates = await this.#certificates(token, options);
+    if (attributes.length) {
+      let bytes: Uint8Array;
+      try {
+        bytes = binaryBytes(atob(content));
+      } catch {
+        throw new CadesError("Содержимое не в Base64", E_INVALIDARG);
+      }
+      const tsa = kind === constants.CADESCOM_CADES_T ? tsaUrl(tsaAddress) : undefined;
+      return signAssembled(this.#session, { token, content: bytes, detached: Boolean(detached), attributes, certificates, tsa, keyPin });
+    }
     const signOptions: SignOptions = {
       detached: Boolean(detached),
       addUserCertificate: options !== constants.CAPICOM_CERTIFICATE_INCLUDE_NONE,
@@ -175,7 +211,7 @@ export class CadesSignedData {
       addSignTime: cades,
     };
     if (kind === constants.CADESCOM_CADES_T) signOptions.tspOptions = await timestampOptions(this.#session.plugin, token, tsaAddress);
-    return signWithToken(this.#session, { token, content, hash: false, options: signOptions, keyPin });
+    return this.#withChain(await signWithToken(this.#session, { token, content, hash: false, options: signOptions, keyPin }), certificates);
   }
 
   // A detached signature of a hash computed by CAdESCOM.HashedData. CryptoPro's plug-in 2.0.15700 puts the
@@ -185,9 +221,14 @@ export class CadesSignedData {
     if (!(hashed instanceof HashedData)) throw new CadesError("Ожидается объект CAdESCOM.HashedData", E_INVALIDARG);
     const kind = signatureKind(type);
     if (Number(encoding) !== constants.CADESCOM_ENCODE_BASE64) throw new CadesError("Подпись хеша выдаётся только в Base64", E_INVALIDARG);
-    const { token, options, tsaAddress, keyPin } = signerCertificate(signer);
+    const { token, options, tsaAddress, keyPin, attributes } = signerCertificate(signer);
     const { algorithm, value } = await hashed.hash();
     checkHashForKey(algorithm, token);
+    const certificates = await this.#certificates(token, options);
+    if (attributes.length) {
+      const tsa = kind === constants.CADESCOM_CADES_T ? tsaUrl(tsaAddress) : undefined;
+      return signAssembled(this.#session, { token, hash: fromHex(value), detached: true, attributes, certificates, tsa, keyPin });
+    }
     const signOptions: SignOptions = {
       detached: true,
       addUserCertificate: options !== constants.CAPICOM_CERTIFICATE_INCLUDE_NONE,
@@ -195,7 +236,7 @@ export class CadesSignedData {
       addSignTime: true,
     };
     if (kind === constants.CADESCOM_CADES_T) signOptions.tspOptions = await timestampOptions(this.#session.plugin, token, tsaAddress);
-    return signWithToken(this.#session, { token, content: value, hash: true, options: signOptions, keyPin });
+    return this.#withChain(await signWithToken(this.#session, { token, content: value, hash: true, options: signOptions, keyPin }), certificates);
   }
 
   // Signers and Certificates exist once a verification has checked the signature itself; before, or after

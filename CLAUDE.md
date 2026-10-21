@@ -90,7 +90,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   sites match with regexes, and the RFC 4514 names of XAdES), `gost.ts` (hashes, HMAC, GOST R 34.10 signature checks and VKO, on `@li0ard/gost`) +
   `gost28147.ts` (GOST 28147-89 CBC and the key transport of XML encryption) + `cms.ts` (SignedData parsing and signer
   checks, BER included; the recipients of an EnvelopedData) + `chain.ts` (chains to the root store; `validationChain` for `IsValid()` in the extended mode) — verification never touches the plugin,
-  `signing.ts` (the plugin's `sign`, data or a hash; CAdES-T through its `tspOptions`) + `token-login.ts` (PIN window, login, logout, the single connected token; the PINs a page knows: the
+  `signing.ts` (the plugin's `sign`, data or a hash; CAdES-T through its `tspOptions`; with the site's signed
+  attributes the CMS of `cms-sign.ts` around `rawSign`, its CAdES-T timestamp through the extension, as XAdES-T's) + `token-login.ts` (PIN window, login, logout, the single connected token; the PINs a page knows: the
   site's KeyPin and the one remembered until the page closes) + `pin-dialog.ts` (the PIN window, in a shadow root, or
   only its confirming button), `roots.ts` (asks the bridge for the "Root" and "CA" stores and adds to them), `timestamps.ts` (asks it for access to a
   timestamp service and for the service's answer) + `tsp.ts` (the RFC 3161 request and the checks of the answer), `root-links.ts` (after
@@ -124,7 +125,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   the stand's Firefox over WebDriver BiDi (its own small client) with the Rutoken adapter for Firefox and our
   `dist/firefox`, and `firefox.spec.ts` runs the plug-in, site enabling, the demo page, XAdES-T and webtools.html in
   it; `with-cryptopro.spec.ts`
-  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `pin.spec.ts` the remembered PIN and the site's KeyPin; `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `xades.spec.ts` XAdES-BES and XAdES-T, with the stand's timestamp service and the window asking for access to another;
+  loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `pin.spec.ts` the remembered PIN and the site's KeyPin; `attributes.spec.ts` the site's signed attributes and the
+  chain in CMS; `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `xades.spec.ts` XAdES-BES and XAdES-T, with the stand's timestamp service and the window asking for access to another;
   `verification.spec.ts` verifies ours and CryptoPro's signatures in the page; `roots.spec.ts` drives the root store
   on the options page; `validity.spec.ts` the extended validity check and the demo page adding its root; `enrollment.spec.ts` the
   certsrv calls offline on a copy of the token, with the question about the root; `with-cryptopro-csp.spec.ts` (opt-in)
@@ -174,9 +176,12 @@ site page.
 - **Interception: define `window.cadesplugin` from a MAIN-world content script at `document_start`.** The site's
   `cadesplugin_api.js` returns early when the object exists. Evidence in `docs/JOURNAL.md`.
 - **Signatures are judged by one criterion: they verify.** Owner, 2026-09-23. Reproducing CryptoPro's signed
-  object byte for byte is not a goal; a missing field or attribute (e.g. the demo page's document-name attribute)
-  is acceptable as long as an independent verifier accepts the signature. So use the Rutoken `sign` method where
-  it covers the request, and write our own CMS code only where `sign` cannot produce a verifiable result.
+  object byte for byte is not a goal; a missing field is acceptable as long as an independent verifier accepts the
+  signature. So use the Rutoken `sign` method where it covers the request, and write our own CMS code only where
+  `sign` cannot produce what is asked. The site's own signed attributes and the certificate chain are asked for:
+  owner, 2026-10-21, «делай» on «в подпись не попадают атрибуты от сайта (время подписи, имя документа) и цепочка
+  сертификатов». So a signature with the site's attributes is our CMS around the token's `rawSign`
+  (`src/page/cms-sign.ts`), one without them is still `sign`'s, and the chain goes into either.
 
 - **The extension is off by default and enabled per site.** Owner, 2026-09-23. Reason: otherwise any site can
   trigger a signature and a real CryptoPro install is intercepted everywhere (risks 7 and 9 in `docs/ANALYSIS.md`).

@@ -6,10 +6,9 @@ import { XmlCanonicalizer } from "xmldsigjs-canonicalizer";
 import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
 import { digest, GOST_2001, GOST_2012_256, GOST_2012_512, verifyHash, type DigestName } from "../gost.ts";
-import { certificateLines } from "../signing.ts";
+import { certificateLines, requestTimestamp } from "../signing.ts";
 import { findDevice } from "../token.ts";
 import { SCARD_E_NO_SMARTCARD, withLogin } from "../token-login.ts";
-import { timestampRequest, timestampToken } from "../tsp.ts";
 import { derToBase64, parseCertificate, type X509 } from "../x509.ts";
 import { binaryBytes, bytesBinary } from "./hashed-data.ts";
 import type { Session } from "./session.ts";
@@ -533,15 +532,7 @@ export class SignedXML {
   // the signature's own hash.
   async #timestamp(tsa: URL, item: Pending, id: string): Promise<void> {
     const hashed = utf8Digest(item.hash, canonicalize(child(item.signature, "SignatureValue")!, EXC_C14N, null));
-    const request = timestampRequest(item.hash, hashed, crypto.getRandomValues(new Uint8Array(8)));
-    let token: Uint8Array;
-    try {
-      token = timestampToken(await this.#session.timestamp(tsa.href, request.der), request);
-    } catch (error) {
-      // A CadesError of the extension carries its code at the end of the message already.
-      const reason = (error instanceof Error ? error.message : String(error)).replace(/ \(0x[0-9A-F]{1,8}\)$/, "");
-      throw new CadesError(`Не удалось получить штамп времени от ${tsa.href}: ${reason}`, error instanceof CadesError ? error.number : E_FAIL);
-    }
+    const token = await requestTimestamp(this.#session, tsa, item.hash, hashed);
     addSignatureTimeStamp(item.signature, wrap(btoa(bytesBinary(token))), id);
   }
 

@@ -9,7 +9,16 @@ import { ucs2leBase64 } from "../../src/page/objects/signed-data.ts";
 import type { CPAttribute, CPAttributes, CPSigner } from "../../src/page/objects/signer.ts";
 import type { Store } from "../../src/page/objects/store.ts";
 import { SCARD_W_CANCELLED_BY_USER, SCARD_W_CHV_BLOCKED } from "../../src/page/signing.ts";
-import { certId, fakePlugin, FakePinDialog, fakeSession, userPin, type FakePlugin } from "./fakes.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "../../scripts/fetch-vendor.ts";
+import { children, read } from "../../src/page/asn1.ts";
+import { signedAttributes, signedData } from "../../src/page/cms-sign.ts";
+import { parseSignedData, signingTime } from "../../src/page/cms.ts";
+import { digest } from "../../src/page/gost.ts";
+import type { HashedData } from "../../src/page/objects/hashed-data.ts";
+import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
+import { certId, fakePlugin, FakePinDialog, fakeSession, pem, userPin, type FakePlugin } from "./fakes.ts";
 
 const BES = constants.CADESCOM_CADES_BES | constants.CADES_USE_OCSP_AUTHORIZED_POLICY;
 
@@ -19,16 +28,23 @@ async function tokenCertificate(session: Session): Promise<Certificate> {
   return (await (store.Certificates as Promise<Certificates>)).Item(1);
 }
 
-// What the demo page does in SignCadesBES_Async.
-async function signLikeDemoPage(session: Session, content: string, detached = false, type = BES) {
+// What the demo page does in SignCadesBES_Async; its signing time and document name only `withAttributes`, since they
+// take the signature off sign() to the CMS made in the page (tested below).
+async function signLikeDemoPage(session: Session, content: string, detached = false, type = BES, withAttributes = false) {
   const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;
   await signer.propset_Certificate(await tokenCertificate(session));
   await signer.propset_CheckCertificate(true);
-  const attributes = await signer.AuthenticatedAttributes2;
-  const time = createObject("CADESCOM.CPAttribute", session) as CPAttribute;
-  await time.propset_Name(constants.CAPICOM_AUTHENTICATED_ATTRIBUTE_SIGNING_TIME);
-  await time.propset_Value(new Date());
-  await attributes.Add(time);
+  if (withAttributes) {
+    const attributes = await signer.AuthenticatedAttributes2;
+    const time = createObject("CADESCOM.CPAttribute", session) as CPAttribute;
+    await time.propset_Name(constants.CAPICOM_AUTHENTICATED_ATTRIBUTE_SIGNING_TIME);
+    await time.propset_Value(new Date(Date.UTC(2026, 9, 21, 9, 30, 0)));
+    await attributes.Add(time);
+    const name = createObject("CADESCOM.CPAttribute", session) as CPAttribute;
+    await name.propset_Name(constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_NAME);
+    await name.propset_Value("Document Name");
+    await attributes.Add(name);
+  }
   const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
   await data.propset_ContentEncoding(constants.CADESCOM_BASE64_TO_BINARY);
   await data.propset_Content(content);
@@ -225,5 +241,148 @@ describe("signing through the Rutoken Plugin", () => {
     await expect(attributes.Item(2)).rejects.toBeInstanceOf(CadesError);
     await attributes.Clear();
     expect(await attributes.Count).toBe(0);
+  });
+});
+
+const DOCUMENT_NAME = "1.3.6.1.4.1.311.88.2.1";
+const standCa = parseCertificate(pemToDer(readFileSync(join(repoRoot, "tests", "fixtures", "stand-ca.pem"), "utf8")));
+const standUser = parseCertificate(pemToDer(pem));
+
+function decoded(signature: string) {
+  return parseSignedData(Uint8Array.from(Buffer.from(signature, "base64")));
+}
+
+async function signerWith(session: Session, ...attributes: CPAttribute[]): Promise<CPSigner> {
+  const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;
+  await signer.propset_Certificate(await tokenCertificate(session));
+  for (const attribute of attributes) await (await signer.AuthenticatedAttributes2).Add(attribute);
+  return signer;
+}
+
+async function attributeOf(session: Session, name: number, value: unknown, encoding?: number, oid?: string): Promise<CPAttribute> {
+  const attribute = createObject("CADESCOM.CPAttribute", session) as CPAttribute;
+  await attribute.propset_Name(name);
+  if (oid) await (await attribute.OID).propset_Value(oid);
+  if (encoding !== undefined) await attribute.propset_ValueEncoding(encoding);
+  await attribute.propset_Value(value);
+  return attribute;
+}
+
+describe("signing with the site's attributes (the CMS made in the page)", () => {
+  it("signs the attributes' hash with rawSign: the demo page's signing time and document name are in the signature", async () => {
+    const plugin = fakePlugin();
+    const signed: string[] = [];
+    const rawSign = plugin.rawSign;
+    plugin.rawSign = async (device, key, data, options) => {
+      signed.push(data);
+      return rawSign(device, key, data, options);
+    };
+    const { dialog, session } = setup([userPin], plugin);
+    const signature = await signLikeDemoPage(session, "SGVsbG8gV29ybGQ=", false, BES, true);
+    expect(plugin.calls.sign).toEqual([]);
+    expect(plugin.calls.logout).toBe(1);
+    expect(signature).toMatch(/^[A-Za-z0-9+/]+=*$/);
+    const cms = decoded(signature);
+    expect(Buffer.from(cms.content!).toString()).toBe("Hello World");
+    expect(cms.certificates.map((certificate) => certificate.thumbprint)).toEqual([standUser.thumbprint]);
+    const info = cms.signers[0]!;
+    expect(signingTime(info)).toEqual(new Date(Date.UTC(2026, 9, 21, 9, 30, 0)));
+    const name = info.signedAttributes.get(DOCUMENT_NAME)![0]!;
+    expect([name.tag, Buffer.from(name.value).toString("utf16le")]).toEqual([0x04, "Document Name\0"]);
+    expect(Buffer.from(info.signedAttributes.get("1.2.840.113549.1.9.4")![0]!.value)).toEqual(Buffer.from(digest("streebog256", Buffer.from("Hello World"))));
+    // The token signed the hash of exactly these attributes; the fake answers it twice over.
+    const hash = Buffer.from(digest("streebog256", info.signedAttributesDer!)).toString("hex");
+    expect(signed).toEqual([hash.replace(/(..)(?!$)/g, "$1:")]);
+    expect(Buffer.from(info.signature).toString("hex")).toBe(hash + hash);
+    expect(dialog.requests[0]!.details[0]).toBe("11 байт, присоединённая подпись.");
+  });
+
+  it("takes other attributes by OID with their DER value in Base64, and refuses them as text", async () => {
+    const { session } = setup([userPin, userPin]);
+    const other = await attributeOf(session, constants.CADESCOM_ATTRIBUTE_OTHER, "DAVIZWxsbw==", constants.CADESCOM_ENCODE_BASE64, "1.2.643.100.113.1");
+    expect(await other.Name).toBe(constants.CADESCOM_ATTRIBUTE_OTHER);
+    expect(await (await other.OID).Value).toBe("1.2.643.100.113.1");
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    await data.propset_Content("x");
+    const cms = decoded(await data.SignCades(await signerWith(session, other), constants.CADESCOM_CADES_BES, true));
+    const value = cms.signers[0]!.signedAttributes.get("1.2.643.100.113.1")![0]!;
+    expect([value.tag, Buffer.from(value.value).toString()]).toEqual([0x0c, "Hello"]);
+    expect(cms.content).toBeUndefined();
+    const text = await attributeOf(session, constants.CADESCOM_ATTRIBUTE_OTHER, "Hello", undefined, "1.2.643.100.113.1");
+    await expect(data.SignCades(await signerWith(session, text), constants.CADESCOM_CADES_BES)).rejects.toMatchObject({ number: 0x80070057 });
+    const notDer = await attributeOf(session, constants.CADESCOM_ATTRIBUTE_OTHER, "SGVsbG8=", constants.CADESCOM_ENCODE_BASE64, "1.2.643.100.113.1");
+    await expect(data.SignCades(await signerWith(session, notDer), constants.CADESCOM_CADES_BES)).rejects.toMatchObject({ number: 0x80070057 });
+    // Naming a known OID names the attribute.
+    await (await other.OID).propset_Value(DOCUMENT_NAME);
+    expect(await other.Name).toBe(constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_NAME);
+    await expect(attributeOf(session, 256, "")).rejects.toMatchObject({ number: 0x80004001 });
+  });
+
+  it("signs a hash: the message digest is the site's hash, the signature detached", async () => {
+    const { plugin, session } = setup([userPin]);
+    const hashed = createObject("CAdESCOM.HashedData", session) as HashedData;
+    await hashed.propset_Algorithm(constants.CADESCOM_HASH_ALGORITHM_CP_GOST_3411_2012_256);
+    await hashed.Hash("данные");
+    const description = await attributeOf(session, constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_DESCRIPTION, "Описание");
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    const cms = decoded(await data.SignHash(hashed, await signerWith(session, description), constants.CADESCOM_CADES_BES));
+    expect(plugin.calls.sign).toEqual([]);
+    expect(cms.content).toBeUndefined();
+    const info = cms.signers[0]!;
+    expect(Buffer.from(info.signedAttributes.get("1.2.840.113549.1.9.4")![0]!.value).toString("hex").toUpperCase()).toBe(await hashed.Value);
+    expect(Buffer.from(info.signedAttributes.get("1.3.6.1.4.1.311.88.2.2")![0]!.value).toString("utf16le")).toBe("Описание\0");
+  });
+
+  it("asks for access to the timestamp service before the PIN for CAdES-T, and says when the service fails", async () => {
+    const plugin = fakePlugin();
+    const dialog = new FakePinDialog([userPin]);
+    const tsaAccess: string[] = [];
+    const session = fakeSession(plugin, dialog, [], [], { tsaAccess, tsa: async () => Promise.reject(new Error("нет связи")) });
+    const signer = await signerWith(session, await attributeOf(session, constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_NAME, "Документ"));
+    await signer.propset_TSAAddress("https://tsa.example/tsp");
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    await data.propset_Content("x");
+    const error = await data.SignCades(signer, constants.CADESCOM_CADES_T).catch((e: unknown) => e);
+    expect(getLastError(error)).toBe("Не удалось получить штамп времени от https://tsa.example/tsp: нет связи (0x80004005)");
+    expect(tsaAccess).toEqual(["https://tsa.example/tsp"]);
+    expect(dialog.requests[0]!.details).toContain("Служба штампов времени: tsa.example");
+  });
+});
+
+describe("the certificate chain in a signature", () => {
+  // sign() of the fake makes real CMS here, so that the chain has somewhere to go.
+  function chainSetup(roots = [standCa]) {
+    const plugin = fakePlugin(undefined, {
+      sign: async () => {
+        const attributes = signedAttributes({ signer: standUser, messageDigest: new Uint8Array(32), signingTime: new Date(), extra: [] });
+        return Buffer.from(signedData({ signer: standUser, signedAttributes: attributes, signature: new Uint8Array(64), certificates: [standUser] })).toString("base64");
+      },
+    });
+    const dialog = new FakePinDialog([userPin, userPin]);
+    return { plugin, session: fakeSession(plugin, dialog, roots) };
+  }
+
+  async function sign(session: Session, options?: number, attributes: CPAttribute[] = []) {
+    const signer = await signerWith(session, ...attributes);
+    if (options !== undefined) await signer.propset_Options(options);
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    await data.propset_Content("x");
+    return decoded(await data.SignCades(signer, constants.CADESCOM_CADES_BES)).certificates.map((certificate) => certificate.thumbprint);
+  }
+
+  it("goes to the root of the extension's stores with WHOLE_CHAIN, and stops below it by default, as CryptoPro", async () => {
+    const { session } = chainSetup();
+    expect(await sign(session, constants.CAPICOM_CERTIFICATE_INCLUDE_WHOLE_CHAIN)).toEqual([standUser.thumbprint, standCa.thumbprint]);
+    expect(await sign(session)).toEqual([standUser.thumbprint]);
+  });
+
+  it("goes in the CMS made in the page too, and as far as it is found when it reaches no root", async () => {
+    const { session } = chainSetup([]);
+    const name = await attributeOf(session, constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_NAME, "Документ");
+    expect(await sign(session, constants.CAPICOM_CERTIFICATE_INCLUDE_WHOLE_CHAIN, [name])).toEqual([standUser.thumbprint]);
+    const withRoot = chainSetup();
+    const again = await attributeOf(withRoot.session, constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_NAME, "Документ");
+    expect(await sign(withRoot.session, constants.CAPICOM_CERTIFICATE_INCLUDE_WHOLE_CHAIN, [again])).toEqual([standUser.thumbprint, standCa.thumbprint]);
+    expect(await sign(withRoot.session, constants.CAPICOM_CERTIFICATE_INCLUDE_NONE, [again])).toEqual([]);
   });
 });
