@@ -66,7 +66,8 @@ async function tryLogin(session: Session, deviceId: number, pin: string): Promis
 // The window stays open until login succeeds, the user cancels or the PIN is locked. A PIN the page has (`keyPin` of
 // the signer, the key's KeyPin, a remembered one) only needs the user's yes; a wrong one is forgotten, and the field
 // comes back.
-async function login(session: Session, deviceId: number, request: PinRequest, keyPin: string | undefined): Promise<void> {
+// Returns the token's serial number.
+async function login(session: Session, deviceId: number, request: PinRequest, keyPin: string | undefined): Promise<string> {
   const state = pinState(session);
   const serial = String(await session.plugin.getDeviceInfo(deviceId, await session.plugin.TOKEN_INFO_SERIAL));
   const remembered = state.remembered.get(serial);
@@ -79,7 +80,7 @@ async function login(session: Session, deviceId: number, request: PinRequest, ke
       if (!(await dialog.confirm(given ? "PIN-код Рутокена передал сайт." : "PIN-код запомнен до закрытия страницы.", !given))) throw cancelled();
       if (await tryLogin(session, deviceId, known)) {
         if (!given && !dialog.remember) state.remembered.delete(serial);
-        return;
+        return serial;
       }
       if (given) state.given.delete(serial);
       else state.remembered.delete(serial);
@@ -91,13 +92,40 @@ async function login(session: Session, deviceId: number, request: PinRequest, ke
       if (await tryLogin(session, deviceId, pin)) {
         if (dialog.remember) state.remembered.set(serial, pin);
         else state.remembered.delete(serial);
-        return;
+        return serial;
       }
       message = "Неверный PIN-код. Попробуйте ещё раз.";
     }
   } finally {
     dialog.close();
   }
+}
+
+// Which of a token's user certificates have their key, per serial number: the Rutoken Plugin says it only after a
+// login, and writes no certificate without its key into that category (docs/JOURNAL.md, 2026-10-23), so this is learnt
+// once, at the page's first login to the token, for Certificate.HasPrivateKey().
+const keyChecks = new WeakMap<Session, Map<string, Map<string, boolean>>>();
+
+export function knownKey(session: Session, serial: string, certId: string): boolean | undefined {
+  return keyChecks.get(session)?.get(serial)?.get(certId);
+}
+
+async function checkKeys(session: Session, deviceId: number, serial: string): Promise<void> {
+  const tokens = keyChecks.get(session) ?? new Map<string, Map<string, boolean>>();
+  keyChecks.set(session, tokens);
+  if (tokens.has(serial)) return;
+  const plugin = session.plugin;
+  const keys = new Map<string, boolean>();
+  for (const certId of await plugin.enumerateCertificates(deviceId, await plugin.CERT_CATEGORY_USER)) {
+    try {
+      await plugin.getKeyByCertificate(deviceId, certId);
+      keys.set(certId, true);
+    } catch (error) {
+      // Only "no key has been found" says so; anything else leaves it unknown.
+      if (rutokenErrorCode(error) === RutokenError.KEY_NOT_FOUND) keys.set(certId, false);
+    }
+  }
+  tokens.set(serial, keys);
 }
 
 // The operations of a page that log in, chained: each starts once the one before it has logged out.
@@ -110,10 +138,15 @@ const queues = new WeakMap<Session, Promise<unknown>>();
 // `keyPin` is the signer's KeyPin, if the site set one.
 export function withLogin<T>(session: Session, deviceId: number, request: PinRequest, work: () => Promise<T>, keyPin?: string): Promise<T> {
   const run = async () => {
-    await login(session, deviceId, request, keyPin);
+    const serial = await login(session, deviceId, request, keyPin);
     try {
       return await work();
     } finally {
+      try {
+        await checkKeys(session, deviceId, serial);
+      } catch {
+        // Not knowing keeps HasPrivateKey() as it was.
+      }
       // Leave no login behind for the page to reuse.
       try {
         await session.plugin.logout(deviceId);

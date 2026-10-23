@@ -72,13 +72,20 @@ async function startSigning(page: Page, flow: Flow): Promise<void> {
           const signature = await data.SignCades(signer, cadesplugin[`CADESCOM_CADES_${flow.type}`]);
           const check = await cadesplugin.CreateObjectAsync("CAdESCOM.CadesSignedData");
           let verified: string | number;
+          const read: Record<string, unknown> = {};
           try {
             await check.VerifyCades(signature, cadesplugin.CADESCOM_CADES_BES);
             verified = await (await check.Certificates).Count;
+            // The signer's attributes, read back by OID.
+            const attributes = await (await (await check.Signers).Item(1)).AuthenticatedAttributes2;
+            for (let i = 1; i <= (await attributes.Count); i++) {
+              const attribute = await attributes.Item(i);
+              read[await (await attribute.OID).Value] = await attribute.Value;
+            }
           } catch (e) {
             verified = cadesplugin.getLastError(e);
           }
-          w.flowResult = { signature, verified };
+          w.flowResult = { signature, verified, read };
         } catch (e) {
           w.flowResult = { error: cadesplugin.getLastError(e) };
         }
@@ -88,9 +95,16 @@ async function startSigning(page: Page, flow: Flow): Promise<void> {
   );
 }
 
-async function result(page: Page): Promise<{ signature?: string; verified?: string | number; error?: string }> {
+interface FlowResult {
+  signature?: string;
+  verified?: string | number;
+  read?: Record<string, unknown>;
+  error?: string;
+}
+
+async function result(page: Page): Promise<FlowResult> {
   await page.waitForFunction(() => "flowResult" in window, undefined, { timeout: 30_000 });
-  return page.evaluate(() => (window as unknown as { flowResult: { signature?: string; verified?: string | number; error?: string } }).flowResult);
+  return page.evaluate(() => (window as unknown as { flowResult: FlowResult }).flowResult);
 }
 
 test("CAdES-BES with the document's name and description, the chain without the root by default, whole on request", async () => {
@@ -102,12 +116,15 @@ test("CAdES-BES with the document's name and description, the chain without the 
     await startSigning(page, { type: "BES", options });
     await expect(pinDialog(page)).toContainText("просит подписать данные.", { timeout: 30_000 });
     await enterPin(page);
-    const { signature, verified, error } = await result(page);
+    const { signature, verified, read, error } = await result(page);
     expect(error).toBeUndefined();
     const report = verifyCms(signature!);
     expect(report.checks).toEqual({ message_digest: true, signature: true, certificate_by_ca: true, cades_bes_attributes: true });
     expect(report.attributes).toEqual(expect.arrayContaining([DOCUMENT_NAME, DOCUMENT_DESCRIPTION]));
     expect(verified).toBe(count);
+    // The verified signer gives them back (docs/PLAN.md, action 36a).
+    expect(read).toMatchObject({ [DOCUMENT_NAME]: "Договор.pdf", [DOCUMENT_DESCRIPTION]: "Договор поставки" });
+    expect(String(read!["1.2.840.113549.1.9.5"])).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.000Z$/);
   }
 });
 

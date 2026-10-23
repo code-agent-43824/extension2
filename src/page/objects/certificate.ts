@@ -9,7 +9,7 @@ import { applicationPolicies, certificatePolicies, extendedKeyUsages, nameInfo, 
 import { base64Lines, BasicConstraints, EncodedData, ExtendedKeyUsage, Extensions, extensionOids, KeyUsage } from "./certificate-extensions.ts";
 import type { TokenCertificate } from "../token.ts";
 import type { Session } from "./session.ts";
-import { cachePinOf, setCachePin, setKeyPin } from "../token-login.ts";
+import { cachePinOf, knownKey, setCachePin, setKeyPin } from "../token-login.ts";
 
 const E_INVALIDARG = 0x80070057;
 const ERROR_INTERNAL_ERROR = 0x8007054f;
@@ -289,17 +289,22 @@ export class Certificate {
     return Promise.resolve(date && dateString(date));
   }
 
-  // Knowing for sure needs getKeyByCertificate, which needs the PIN; user-category certificates on a
-  // Rutoken come with their key. The real check happens when signing. Chosen in docs/PLAN.md, stage 3.
+  // Knowing for sure needs getKeyByCertificate, which needs the PIN: so true for a token certificate until the page
+  // has logged in to its token, exact after (src/page/token-login.ts, knownKey). The Rutoken Plugin writes no
+  // certificate without its key into the user category, so only one left by other software is false.
   // A root store certificate has no key: false, and PrivateKey fails with CRYPT_E_NOT_FOUND, as CryptoPro
   // 2.0.15700 answers for its Root store (checked on the stand, docs/JOURNAL.md).
   HasPrivateKey(): Promise<boolean> {
     void this.#x509;
-    return Promise.resolve(this.#token !== undefined);
+    return Promise.resolve(this.#hasKey());
+  }
+
+  #hasKey(): boolean {
+    return this.#token !== undefined && (knownKey(this.#session, this.#token.serial, this.#token.certId) ?? true);
   }
 
   get PrivateKey(): Promise<PrivateKey> {
-    if (!this.#token) return Promise.reject(new CadesError("Cannot find object or property.", CRYPT_E_NOT_FOUND));
+    if (!this.#token || !this.#hasKey()) return Promise.reject(new CadesError("Cannot find object or property.", CRYPT_E_NOT_FOUND));
     return Promise.resolve(new PrivateKey(this.#session, this.#token));
   }
 

@@ -1,10 +1,10 @@
-import { encode, read } from "../asn1.ts";
+import { decodeTime, encode, octets, read } from "../asn1.ts";
 import { attribute, encodeTime } from "../cms-sign.ts";
 import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
 import type { TokenCertificate } from "../token.ts";
 import { tokenOf } from "./certificate.ts";
-import { binaryBytes, ucs2leBinary } from "./hashed-data.ts";
+import { binaryBytes, bytesBinary, ucs2leBinary } from "./hashed-data.ts";
 
 const E_INVALIDARG = 0x80070057;
 const CERT_E_EXPIRED = 0x800b0101;
@@ -48,6 +48,26 @@ export class CPAttribute {
   #oid = attributeOids.get(constants.CAPICOM_AUTHENTICATED_ATTRIBUTE_SIGNING_TIME)!;
   #value: unknown;
   #encoding: number = constants.CADESCOM_ENCODE_ANY;
+  // The value as encoded, for an attribute read from a verified signature.
+  #der: Uint8Array | undefined;
+
+  // An attribute of a verified signature: its value as text where Name says what it is (the signing time as
+  // SigningTime gives it, a document's name or description), otherwise Base64 of its DER, as with
+  // CAPICOM_ENCODE_BASE64. Not compared with CryptoPro's plug-in.
+  static fromSignature(oid: string, der: Uint8Array): CPAttribute {
+    const result = new CPAttribute();
+    result.setOid(oid);
+    result.#der = der;
+    try {
+      const node = read(der);
+      if (result.#name === constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_SIGNING_TIME) result.#value = decodeTime(node).toISOString();
+      else if (result.#name !== constants.CADESCOM_ATTRIBUTE_OTHER) result.#value = new TextDecoder("utf-16le").decode(octets(node)).replace(/\0+$/, "");
+      else result.#value = btoa(bytesBinary(der));
+    } catch {
+      result.#value = btoa(bytesBinary(der));
+    }
+    return result;
+  }
 
   get Name(): Promise<number> {
     return Promise.resolve(this.#name);
@@ -66,11 +86,13 @@ export class CPAttribute {
   }
 
   get Value(): Promise<unknown> {
+    if (this.#der && this.#encoding === constants.CADESCOM_ENCODE_BASE64) return Promise.resolve(btoa(bytesBinary(this.#der)));
     return Promise.resolve(this.#value);
   }
 
   propset_Value(value: unknown): Promise<void> {
     this.#value = value;
+    this.#der = undefined;
     return Promise.resolve();
   }
 
@@ -123,7 +145,11 @@ export class CPAttribute {
 
 // CAdESCOM.CPAttributes, the signer's AuthenticatedAttributes2 collection, indexed from 1.
 export class CPAttributes {
-  readonly #items: CPAttribute[] = [];
+  readonly #items: CPAttribute[];
+
+  constructor(items: CPAttribute[] = []) {
+    this.#items = items;
+  }
 
   get Count(): Promise<number> {
     return Promise.resolve(this.#items.length);

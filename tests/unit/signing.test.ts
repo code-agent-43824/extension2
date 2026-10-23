@@ -386,3 +386,16 @@ describe("the certificate chain in a signature", () => {
     expect(await sign(withRoot.session, constants.CAPICOM_CERTIFICATE_INCLUDE_NONE, [again])).toEqual([]);
   });
 });
+
+describe("an attribute read from a signature", () => {
+  it("gives a document's name as text, and its DER in Base64 when asked", async () => {
+    const { CPAttribute } = await import("../../src/page/objects/signer.ts");
+    const value = Uint8Array.from([0x04, 18, ...Buffer.from("Договор\0", "utf16le").subarray(0, 16), 0, 0]);
+    const name = CPAttribute.fromSignature(DOCUMENT_NAME, value);
+    expect([await name.Name, await name.Value]).toEqual([constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_NAME, "Договор"]);
+    await name.propset_ValueEncoding(constants.CADESCOM_ENCODE_BASE64);
+    expect(await name.Value).toBe(Buffer.from(value).toString("base64"));
+    // A value that does not parse as its name says comes as Base64 too.
+    expect(await CPAttribute.fromSignature(DOCUMENT_NAME, Uint8Array.of(0x30, 0x00)).Value).toBe("MAA=");
+  });
+});

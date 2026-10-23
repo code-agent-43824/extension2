@@ -7,7 +7,13 @@ import type { RutokenPlugin } from "../../src/page/rutoken.ts";
 import { base64ToDer } from "../../src/extension/roots.ts";
 import { BUILTIN_ROOTS } from "../../src/extension/builtin-roots.ts";
 import { parseCertificate, type X509 } from "../../src/page/x509.ts";
-import { certId, fakePlugin, FakePinDialog, fakeSession, pem } from "./fakes.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "../../scripts/fetch-vendor.ts";
+import type { Session } from "../../src/page/objects/session.ts";
+import type { CadesSignedData } from "../../src/page/objects/signed-data.ts";
+import type { CPSigner } from "../../src/page/objects/signer.ts";
+import { certId, fakePlugin, FakePinDialog, fakeSession, pem, userPin } from "./fakes.ts";
 
 const roots = BUILTIN_ROOTS.map((der) => parseCertificate(base64ToDer(der)));
 
@@ -172,5 +178,56 @@ describe("CAdESCOM.Certificate", () => {
     expect(await (await cert.IsValid()).Result).toBe(true);
     vi.setSystemTime(new Date("2029-01-01T00:00:00Z"));
     expect(await (await cert.IsValid()).Result).toBe(false);
+  });
+});
+
+// HasPrivateKey() after the page's first login to the token (docs/PLAN.md, action 36b): the Rutoken Plugin tells about
+// keys only then, and answers getKeyByCertificate for a certificate without its key with error 20.
+describe("HasPrivateKey after a login", () => {
+  const caPem = readFileSync(join(repoRoot, "tests", "fixtures", "stand-ca.pem"), "utf8");
+
+  function keyless(otherError = false) {
+    const plugin = fakePlugin([pem, caPem], {
+      getKeyByCertificate: async (_device, id) => {
+        if (id === certId) return "ke:y1";
+        throw new Error(otherError ? "5" : "20");
+      },
+    });
+    return { plugin, session: fakeSession(plugin, new FakePinDialog([userPin, userPin])) };
+  }
+
+  async function certificates(session: Session): Promise<Certificates> {
+    const store = createObject("CAdESCOM.Store", session) as Store;
+    await store.Open();
+    return store.Certificates as Promise<Certificates>;
+  }
+
+  async function signWith(session: Session, certificate: Certificate): Promise<void> {
+    const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;
+    await signer.propset_Certificate(certificate);
+    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
+    await data.propset_Content("x");
+    await data.SignCades(signer, constants.CADESCOM_CADES_BES);
+  }
+
+  it("is true before the PIN, exact after it: a certificate without its key has none, and no PrivateKey", async () => {
+    const { session } = keyless();
+    const all = await certificates(session);
+    const [user, other] = [await all.Item(1), await all.Item(2)];
+    expect([await user.HasPrivateKey(), await other.HasPrivateKey()]).toEqual([true, true]);
+    await signWith(session, user);
+    expect([await user.HasPrivateKey(), await other.HasPrivateKey()]).toEqual([true, false]);
+    await expect(other.PrivateKey).rejects.toMatchObject({ number: 0x80092004 });
+    expect(await (await all.Find(constants.CAPICOM_CERTIFICATE_FIND_EXTENDED_PROPERTY, 2)).Count).toBe(1);
+    // Another page has not logged in yet.
+    const fresh = await certificates(fakeSession(fakePlugin([pem, caPem])));
+    expect(await (await fresh.Item(2)).HasPrivateKey()).toBe(true);
+  });
+
+  it("stays true when the plugin fails for another reason", async () => {
+    const { session } = keyless(true);
+    const all = await certificates(session);
+    await signWith(session, await all.Item(1));
+    expect(await (await all.Item(2)).HasPrivateKey()).toBe(true);
   });
 });

@@ -350,7 +350,8 @@ export class CadesSignedData {
       const usage = certificate.keyUsage;
       const problem = usage !== null && !(usage & SIGNATURE_KEY_USAGE) ? CERT_E_WRONG_USAGE : chainError(certificate, pool, roots);
       error ??= problem;
-      return { certificate, signingTime: signingTime(info), valid: problem === null };
+      const attributes = [...info.signedAttributes].map(([oid, values]) => ({ oid, value: Uint8Array.from(values[0]?.der ?? []) }));
+      return { certificate, signingTime: signingTime(info), valid: problem === null, attributes };
     });
     this.#verified = { signers, certificates: cms.certificates };
     if (error !== null) throw new CadesError(certificateMessages.get(error) ?? "Certificate check failed.", error);

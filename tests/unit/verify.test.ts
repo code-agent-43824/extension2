@@ -175,6 +175,34 @@ describe("CadesSignedData.VerifyCades", () => {
   });
 });
 
+describe("the verified signer's AuthenticatedAttributes2", () => {
+  it("gives CryptoPro's four signed attributes: the signing time as SigningTime has it, the others' DER in Base64", async () => {
+    const data = signedData();
+    await data.VerifyCades(fixtures.cryptopro.bes, BES);
+    const signer = await firstSigner(data);
+    const attributes = await signer.AuthenticatedAttributes2;
+    expect(await attributes.Count).toBe(4);
+    const read = [];
+    for (let i = 1; i <= 4; i++) {
+      const attribute = await attributes.Item(i);
+      read.push([await attribute.Name, await (await attribute.OID).Value, await attribute.Value]);
+    }
+    expect(read.map(([, oid]) => oid)).toEqual(["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.5", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]);
+    expect(read[1]).toEqual([constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_SIGNING_TIME, "1.2.840.113549.1.9.5", await signer.SigningTime]);
+    // contentType: the OID of data, as encoded.
+    expect(read[0]).toEqual([constants.CADESCOM_ATTRIBUTE_OTHER, "1.2.840.113549.1.9.3", "BgkqhkiG9w0BBwE="]);
+    const time = await attributes.Item(2);
+    await time.propset_ValueEncoding(constants.CADESCOM_ENCODE_BASE64);
+    expect(Buffer.from(String(await time.Value), "base64")[0]).toBe(0x17);
+  });
+
+  it("is empty for a signature without signed attributes", async () => {
+    const data = signedData();
+    await data.VerifyCades(fixtures.crafted.no_attributes, PKCS7);
+    expect(await (await (await firstSigner(data)).AuthenticatedAttributes2).Count).toBe(0);
+  });
+});
+
 describe("CadesSignedData.GetMsgType and AdditionalStore, as the demo page verify.html calls them", () => {
   it("names the type by the first signer's attributes, as plug-in 2.0.15700", async () => {
     const data = signedData();
