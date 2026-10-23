@@ -90,12 +90,14 @@ async function listSite(site: string, api: Api): Promise<void> {
 }
 
 // In the service worker, when Chrome grants access: lists the site enableSite was waiting for and reloads its tab,
-// unless enableSite lived to do it itself.
+// unless enableSite lived to do it itself. The registration comes first: a tab reloaded before it would come back
+// without page.js. Runs among the service worker's serialised calls, so it may sync itself.
 export async function finishPendingSite(api: Api = chrome): Promise<void> {
   const pending = (await api.storage.local.get(PENDING_KEY))[PENDING_KEY] as Partial<PendingSite> | undefined;
   if (typeof pending?.site !== "string" || !(await hasAccess(pending.site, api))) return;
   await api.storage.local.remove(PENDING_KEY);
   await listSite(pending.site, api);
+  await syncContentScript(api);
   if (typeof pending.tabId === "number") await api.tabs.reload(pending.tabId).catch(() => {});
 }
 
@@ -113,10 +115,31 @@ export async function pruneSites(api: Api = chrome): Promise<void> {
   if (kept.length !== sites.length) await api.storage.local.set({ [STORAGE_KEY]: kept });
 }
 
-// Makes the registered content script match the enabled, accessible sites. Callers serialise calls.
-export async function syncContentScript(api: Api = chrome): Promise<string[]> {
+// The patterns page.js should be registered for: the enabled sites the extension has access to.
+async function wantedMatches(api: Api): Promise<string[]> {
   const matches: string[] = [];
   for (const site of await enabledSites(api)) if (await hasAccess(site, api)) matches.push(matchPattern(site));
+  return matches;
+}
+
+const patternSet = (matches: readonly string[]) => JSON.stringify([...new Set(matches)].sort());
+
+// Waits, up to `timeoutMs`, until the registered page.js matches the site list: the popup saves the list and the
+// service worker registers page.js on the change, so a tab reloaded at once could come back without it (or, for a site
+// turned off, still with it).
+export async function whenRegistered(api: Api = chrome, timeoutMs = 5000): Promise<void> {
+  const wanted = patternSet(await wantedMatches(api));
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const [script] = await api.scripting.getRegisteredContentScripts({ ids: [SCRIPT_ID] });
+    if (patternSet(script?.matches ?? []) === wanted || Date.now() >= deadline) return;
+    await new Promise((resolve) => setTimeout(resolve, 50));
+  }
+}
+
+// Makes the registered content script match the enabled, accessible sites. Callers serialise calls.
+export async function syncContentScript(api: Api = chrome): Promise<string[]> {
+  const matches = await wantedMatches(api);
   const ids = [SCRIPT_ID, BRIDGE_ID];
   const registered = await api.scripting.getRegisteredContentScripts({ ids });
   if (registered.length) await api.scripting.unregisterContentScripts({ ids: registered.map((script) => script.id) });

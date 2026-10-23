@@ -13,6 +13,7 @@ import {
   siteOf,
   syncContentScript,
   TSA_KEY,
+  whenRegistered,
 } from "../../src/extension/sites.ts";
 
 // The parts of chrome.* the site list uses. `granted` holds host permissions; `grant` decides what
@@ -21,6 +22,8 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
   const store: Record<string, unknown> = {};
   const granted = new Set<string>(required);
   const reloaded: number[] = [];
+  // What page.js was registered for when each tab was reloaded.
+  const matchesAtReload: string[][] = [];
   let scripts: chrome.scripting.RegisteredContentScript[] = [];
   const covers = (origin: string) => granted.has(origin);
   const api = {
@@ -31,7 +34,12 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
         remove: async (key: string) => void delete store[key],
       },
     },
-    tabs: { reload: async (tabId: number) => void reloaded.push(tabId) },
+    tabs: {
+      reload: async (tabId: number) => {
+        reloaded.push(tabId);
+        matchesAtReload.push(scripts.find((script) => script.id === SCRIPT_ID)?.matches ?? []);
+      },
+    },
     permissions: {
       contains: async ({ origins = [] }: chrome.permissions.Permissions) => origins.every(covers),
       request: async ({ origins = [] }: chrome.permissions.Permissions) => {
@@ -61,7 +69,7 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
       },
     },
   };
-  return { api: api as unknown as typeof chrome, store, granted, reloaded, scripts: () => scripts };
+  return { api: api as unknown as typeof chrome, store, granted, reloaded, matchesAtReload, scripts: () => scripts };
 }
 
 describe("site list", () => {
@@ -109,10 +117,31 @@ describe("site list", () => {
     await finishPendingSite(chrome.api);
     expect(await enabledSites(chrome.api)).toEqual(["https://a.example"]);
     expect(chrome.reloaded).toEqual([7]);
+    // page.js was registered for the site before the tab reloaded.
+    expect(chrome.matchesAtReload).toEqual([["https://a.example/*"]]);
     expect(PENDING_KEY in chrome.store).toBe(false);
     // Another access granted later changes nothing.
     await finishPendingSite(chrome.api);
     expect(chrome.reloaded).toEqual([7]);
+  });
+
+  it("lets the popup wait until the service worker has registered page.js for the new list, or gives up", async () => {
+    const chrome = fakeChrome();
+    expect(await enableSite("https://a.example", chrome.api, 7)).toBe(true);
+    // The service worker reacts to the storage change a little later.
+    setTimeout(() => void syncContentScript(chrome.api), 120);
+    const started = Date.now();
+    await whenRegistered(chrome.api);
+    expect(Date.now() - started).toBeGreaterThanOrEqual(100);
+    expect(chrome.scripts().find((script) => script.id === SCRIPT_ID)?.matches).toEqual(["https://a.example/*"]);
+    // Turned off: until the registration is gone; and never more than the time allowed.
+    await disableSite("https://a.example", chrome.api);
+    const waited = Date.now();
+    await whenRegistered(chrome.api, 200);
+    expect(Date.now() - waited).toBeGreaterThanOrEqual(190);
+    await syncContentScript(chrome.api);
+    await whenRegistered(chrome.api, 10_000);
+    expect(chrome.scripts()).toEqual([]);
   });
 
   it("leaves nothing pending when the popup gets the answer itself", async () => {
