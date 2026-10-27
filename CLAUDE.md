@@ -104,7 +104,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 
 - `scripts/` — Node scripts run directly by Node's type stripping (no build step): `fetch-vendor.ts` +
   `vendor-lock.json` (pinned third-party files), `build.ts` (esbuild), `package.ts` (the ZIP), `gen-constants.ts`, `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
-  PINs, paths), `provision-token.ts` (key + certificate on the fake token), `setup-cryptopro-csp.ts` (the real
+  PINs, paths), `provision-token.ts` (key + certificate on the fake token; `provisionKey` for a 512-bit key or a copy of the HOME), `setup-cryptopro-csp.ts` (the real
   CryptoPro CSP + plug-in, a key in a CryptoPro file container, a stand profile copy with CryptoPro's native host).
 - `tools/dump-fields.js` — pasted by hand into the DevTools console on a cadesplugin page: dumps the plug-in and
   certificate fields as JSON; `scripts/compare-fields.ts` diffs a real-CryptoPro dump against ours
@@ -128,7 +128,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `dist/firefox`, and `firefox.spec.ts` runs the plug-in, site enabling, the demo page, XAdES-T and webtools.html in
   it; `with-cryptopro.spec.ts`
   loads CryptoPro's own extension (`stand.cryptoproExtension`) beside ours; `hash-signing.spec.ts` signs hashes the ways sites do; `pin.spec.ts` the remembered PIN and the site's KeyPin; `attributes.spec.ts` the site's signed attributes and the
-  chain in CMS; `certificate.spec.ts` the certificate's CAPICOM methods, Find's criteria and Display(); `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `xades.spec.ts` XAdES-BES and XAdES-T, with the stand's timestamp service and the window asking for access to another;
+  chain in CMS; `certificate.spec.ts` the certificate's CAPICOM methods, Find's criteria and Display(); `gost512.spec.ts` a 512-bit
+  key made on a copy of the token, signed with every way and decrypted on; `xml-signing.spec.ts` makes XMLDSig signatures of the three types; `xades.spec.ts` XAdES-BES and XAdES-T, with the stand's timestamp service and the window asking for access to another;
   `verification.spec.ts` verifies ours and CryptoPro's signatures in the page; `roots.spec.ts` drives the root store
   on the options page; `validity.spec.ts` the extended validity check and the demo page adding its root; `enrollment.spec.ts` the
   certsrv calls offline on a copy of the token, with the question about the root; `with-cryptopro-csp.spec.ts` (opt-in)
