@@ -123,8 +123,13 @@ Mandatory, in this order:
 2. Checklist items 11–13 (issuer's certificate on the second tab, `verify.html`).
 3. webtools.html: W1, W2, W4, W6, W7, W8. In W6, XAdES-T with `http://testca2012.cryptopro.ru/tsp/tsp.srf`: the
    extension's window «Доступ к службе штампов времени» — «Разрешить», then Chrome's own question — allow.
+4. Checklist items 19 and 20 (from release 1.15.2 on): the console scripts from `tools/` of the checkout of step 2.
+   In item 20 write the user PIN into the script and the testgost2012 certificate's thumbprint into `THUMBPRINT`;
+   run it once more with the «Stand User» thumbprint. Save the outputs as `ours.json`, `check-api.json` and
+   `check-api-stand-user.json` in `~/rutoken-check/files/`.
 
-Desirable: W3, W5, W9, W12, W13, checklist items 8–10 and 14, 16–17.
+Desirable: W3, W5, W9, W12, W13, checklist items 8–10, 14, 16–17, 21 and 22 (the 512-bit certificate from
+testgost2012).
 
 Not applicable here — report N/A: W11 (taking the token out), checklist item 15, the comparisons with a CryptoPro
 machine inside W4–W8, and «Сверка полей с КриптоПро»; all need a device or CryptoPro CSP.
@@ -142,5 +147,5 @@ certificate is missing from the second tab: add it and verify again; that counts
 - A table: item (checklist number or W number) | PASS / FAIL / KNOWN / N/A / BLOCKED | for anything but PASS, the
   exact text on the screen | screenshot file. KNOWN is error 147 in W7 and W8 with a fork older than `.75`; BLOCKED is a
   site or the network failing (try once more later), not the extension.
-- The files W4–W8 ask to save, in `~/rutoken-check/files/`.
+- The files W4–W8 and items 19–20 ask to save, in `~/rutoken-check/files/`.
 - The last line: «Обязательный набор пройден» or «Обязательный набор не пройден: <items>».
