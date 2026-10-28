@@ -57,3 +57,4 @@ PIN-код Рутокена расширение спрашивает в сво�
 до закрытия страницы» оставляет для следующих подписей на этой странице только кнопку подтверждения.
 
 Что проверено и что известно о работе: https://github.com/code-agent-43824/extension2/blob/v{{version}}/docs/STATUS.md
+Как проверить эту версию вручную: https://github.com/code-agent-43824/extension2/blob/v{{version}}/docs/MANUAL-CHECK.md

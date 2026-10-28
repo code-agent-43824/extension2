@@ -75,6 +75,7 @@ describe("release archive", () => {
     expect(readme).toContain("Google Chrome (версия 111 или новее)");
     expect(readme).toContain(`Mozilla Firefox (версия ${parseInt(FIREFOX_MIN_VERSION)} или новее)`);
     expect(readme).toContain("/blob/v9.8.7/docs/STATUS.md");
+    expect(readme).toContain("/blob/v9.8.7/docs/MANUAL-CHECK.md");
     expect(readme).not.toContain("{{");
   });
 });
