@@ -7,8 +7,10 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { packageVersion } from "../../scripts/build.ts";
 import { repoRoot, vendorDir } from "../../scripts/fetch-vendor.ts";
+import { caDir } from "../../scripts/provision-token.ts";
 import { stand, standDir, userPin } from "../../scripts/setup-stand.ts";
 import {
+  addRoots,
   clearSites,
   directoryRoutes,
   enableSite,
@@ -67,6 +69,9 @@ test.describe("with the Rutoken adapter", () => {
     context = await launchStand({ extensions: [stand.adapter, standExtension()] });
     await clearSites(context);
     await enableSite(context, server.url);
+    // The stand's CA as a root of the extension's store, as item 11 of docs/MANUAL-CHECK.md has the user add theirs:
+    // tools/check-api.js verifies what it signs.
+    await addRoots(context, [{ name: "stand-ca.pem", buffer: readFileSync(join(caDir, "ca.pem")) }]);
   });
 
   test.afterAll(async () => {
@@ -125,12 +130,83 @@ test.describe("with the Rutoken adapter", () => {
     const dump = JSON.parse(await page.evaluate(readFileSync(join(repoRoot, "tools", "dump-fields.js"), "utf8")));
     expect(dump.about).toMatchObject({ PluginVersion: "2.0.15000", CSPVersion: "5.0.13000", CSPName: "Rutoken Plugin 4.12.3.0" });
     expect(dump.certificates).toHaveLength(1);
+    const thumbprint = x509.fingerprint.replaceAll(":", "");
     expect(dump.certificates[0]).toMatchObject({
-      Thumbprint: x509.fingerprint.replaceAll(":", ""),
+      Thumbprint: thumbprint,
       SubjectName: expect.stringContaining("CN=Stand User"),
       IsValid: true,
-      PublicKey: { Algorithm: "1.2.643.7.1.1.1.1" },
+      GetInfo: { SUBJECT_SIMPLE_NAME: "Stand User", ISSUER_SIMPLE_NAME: "Stand Test CA", SUBJECT_UPN: "" },
+      KeyUsage: { IsPresent: true, IsCritical: true, IsDigitalSignatureEnabled: true, IsKeyCertSignEnabled: false },
+      ExtendedKeyUsage: {
+        IsPresent: true,
+        EKUs: [
+          { Name: 2, OID: "1.3.6.1.5.5.7.3.2" },
+          { Name: 4, OID: "1.3.6.1.5.5.7.3.4" },
+        ],
+      },
+      BasicConstraints: { IsPresent: false },
+      PublicKey: { Algorithm: "1.2.643.7.1.1.1.1", Length: 512, EncodedKey: expect.stringMatching(/^BE/) },
     });
+    // Every value was read: no property of the 1.14.0 objects answered with an error.
+    expect(JSON.stringify(dump.certificates[0].Extensions)).not.toContain('"error"');
+    expect(dump.certificates[0].Extensions.map((e: { OID: string }) => e.OID)).toEqual(["2.5.29.15", "2.5.29.37", "2.5.29.16"]);
+    expect(dump.find).toEqual({
+      "ROOT_NAME Stand Test CA": [thumbprint],
+      "EXTENSION 2.5.29.15": [thumbprint],
+      "EXTENSION CAPICOM_OID_KEY_USAGE_EXTENSION": [thumbprint],
+      "APPLICATION_POLICY 1.3.6.1.5.5.7.3.2": [thumbprint],
+      "APPLICATION_POLICY 1.3.6.1.5.5.7.3.4": [thumbprint],
+      "CERTIFICATE_POLICY 1.2.643.100.113.1": [],
+      "KEY_USAGE CAPICOM_DIGITAL_SIGNATURE_KEY_USAGE": [thumbprint],
+    });
+  });
+
+  test("tools/check-api.js signs with attributes, RawSignature, the site's and the remembered PIN", async () => {
+    const page = await openStandPage(context, server.url + demoPath);
+    const script = readFileSync(join(repoRoot, "tools", "check-api.js"), "utf8").replace('const PIN = "";', `const PIN = ${JSON.stringify(userPin)};`);
+    let done = false;
+    const run = page.evaluate(script).finally(() => (done = true));
+    // What each PIN window said, in order; a window without the field only needs the click.
+    const windows: string[] = [];
+    while (!done) {
+      const dialog = pinDialog(page);
+      if (await dialog.isVisible().catch(() => false)) {
+        windows.push((await dialog.innerText()).replace(/\s+/g, " "));
+        const field = dialog.locator("input[name=pin]");
+        if (await field.isVisible()) await field.fill(userPin);
+        await dialog.locator("button[name=confirm]").click();
+        await dialog.waitFor({ state: "detached" });
+      }
+      await page.waitForTimeout(100);
+    }
+    const result = JSON.parse((await run) as string);
+    const thumbprint = new X509Certificate(readFileSync(join(standDir, "user.pem"))).fingerprint.replaceAll(":", "");
+    expect(result.error).toBeUndefined();
+    expect(result.hasPrivateKeyBefore).toEqual({ [thumbprint]: true });
+    expect(result.hasPrivateKeyAfter).toEqual({ [thumbprint]: true });
+    expect(result.attributes).toMatchObject({
+      verified: true,
+      certificatesInSignature: 1,
+      attributes: expect.arrayContaining([
+        { Name: 1, OID: "1.3.6.1.4.1.311.88.2.1", Value: "Документ.txt" },
+        { Name: 2, OID: "1.3.6.1.4.1.311.88.2.2", Value: "Проверка атрибутов" },
+      ]),
+    });
+    expect(verifyCms(result.attributes.signature).checks).toEqual({
+      message_digest: true,
+      signature: true,
+      certificate_by_ca: true,
+      cades_bes_attributes: true,
+    });
+    expect(result.rawSignature).toMatchObject({ verified: true, tampered: { error: expect.stringContaining("0x80090006") } });
+    expect(result.rawSignature.signature).toMatch(/^[0-9a-f]{2}( [0-9a-f]{2}){63}$/i);
+    expect(result.keyPin).toEqual({ signed: true });
+    expect(result.cachePin).toEqual({ CachePin: true, first: true, second: true, afterCacheKeyFalse: false });
+    // Attributes, RawSignature, KeyPin, then the two CachePin signatures.
+    expect(windows).toHaveLength(5);
+    expect(windows[1]).toContain("просит подписать хеш данных.");
+    expect(windows[2]).toContain("PIN-код Рутокена передал сайт.");
+    expect(windows[4]).toContain("PIN-код запомнен до закрытия страницы.");
   });
 
   test("signs Hello World with an attached CAdES-BES signature that verifies", async () => {

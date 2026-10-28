@@ -1,5 +1,5 @@
 // Compares two dumps from tools/dump-fields.js: one made with the real CryptoPro, one with our
-// extension. Certificates are matched by thumbprint. Prints every value that differs or is missing on
+// extension. Certificates are matched by thumbprint; what Certificates.Find picks, by criterion. Prints every value that differs or is missing on
 // one side; exits 1 when there is any. Usage: node scripts/compare-fields.ts CRYPTOPRO.json OURS.json
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -24,7 +24,7 @@ function walk(path: string, a: Json | undefined, b: Json | undefined, out: Diffe
   if (JSON.stringify(a) !== JSON.stringify(b)) out.push({ path, cryptopro: a, ours: b });
 }
 
-export type Dump = { about?: Json; certificates?: { [key: string]: Json }[] };
+export type Dump = { about?: Json; certificates?: { [key: string]: Json }[]; find?: Json };
 
 export function compareDumps(cryptopro: Dump, ours: Dump): Difference[] {
   const out: Difference[] = [];
@@ -35,6 +35,7 @@ export function compareDumps(cryptopro: Dump, ours: Dump): Difference[] {
   for (const thumbprint of new Set([...a.keys(), ...b.keys()])) {
     walk(`certificate ${thumbprint}`, a.get(thumbprint), b.get(thumbprint), out);
   }
+  walk("find", cryptopro.find, ours.find, out);
   return out;
 }
 

@@ -106,9 +106,11 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `vendor-lock.json` (pinned third-party files), `build.ts` (esbuild), `package.ts` (the ZIP), `gen-constants.ts`, `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
   PINs, paths), `provision-token.ts` (key + certificate on the fake token; `provisionKey` for a 512-bit key or a copy of the HOME), `setup-cryptopro-csp.ts` (the real
   CryptoPro CSP + plug-in, a key in a CryptoPro file container, a stand profile copy with CryptoPro's native host).
-- `tools/dump-fields.js` — pasted by hand into the DevTools console on a cadesplugin page: dumps the plug-in and
-  certificate fields as JSON; `scripts/compare-fields.ts` diffs a real-CryptoPro dump against ours
-  (`docs/MANUAL-CHECK.md`, the manual install and checklist).
+- `tools/` — pasted by hand into the DevTools console on a cadesplugin page, with CryptoPro or with ours
+  (`docs/MANUAL-CHECK.md`, the manual install and checklist): `dump-fields.js` dumps the plug-in and certificate
+  fields and what `Find` picks as JSON, without a PIN, and `scripts/compare-fields.ts` diffs a real-CryptoPro dump
+  against ours; `check-api.js` signs (PIN windows) what the demo pages do not call — site attributes read back,
+  RawSignature, KeyPin, CachePin, HasPrivateKey. `demo-page.spec.ts` runs both on the stand.
 - `docs/AGENT-CHECK.md` — instructions for an agent with a desktop (Claude Cowork): the release set of
   `MANUAL-CHECK.md` in a Chromium window started by hand on the stand's fake Rutoken, with a testgost2012
   certificate, and the report it writes. English, being executed by a model.
@@ -119,7 +121,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
   `smoke.spec.ts` checks the stand itself (plugin, adapter, fake token) without the extension; `sites.spec.ts` the
   per-site enabling from the options page and the popup;
-  `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path; `demo-pages.spec.ts` its
+  `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path, and the `tools/` scripts on it; `demo-pages.spec.ts` its
   file-signing, XMLDSig and verification pages (`cades_bes_file.html`, `cades_xmldsig_sample.html`, `verify.html`); `testgost.spec.ts`
   (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `nalog.spec.ts` (opt-in,
   online) signs in by certificate on the FNS personal accounts up to the server refusing the CA; `crpt.spec.ts`
