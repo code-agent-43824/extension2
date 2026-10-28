@@ -26,13 +26,13 @@
   },
   "softhsm-portable": {
     "file": "softhsm-portable-linux-x64.zip",
-    "url": "https://github.com/code-agent-43824/SoftHSMv2/releases/download/v2.7.0-portable.88/softhsm-portable-linux-x64.zip",
-    "sha256": "a25db649e50f32adccd5c923dec725965bef3d185acc1f59605d8e59b35a40a8"
+    "url": "https://github.com/code-agent-43824/SoftHSMv2/releases/download/v2.7.0-portable.99/softhsm-portable-linux-x64.zip",
+    "sha256": "70a85301dc322a5f675f2165be91dffbda99892aaa75d755627db5fc13daa768"
   },
   "softhsm-testkit": {
     "file": "softhsm-testkit-linux-x64.zip",
-    "url": "https://github.com/code-agent-43824/SoftHSMv2/releases/download/v2.7.0-portable.88/softhsm-testkit-linux-x64.zip",
-    "sha256": "b244fc998024c7983c02740d835bb4628a501c9f16e1c3ee878800d09abbf78f"
+    "url": "https://github.com/code-agent-43824/SoftHSMv2/releases/download/v2.7.0-portable.99/softhsm-testkit-linux-x64.zip",
+    "sha256": "f5696c9e7648fa91f8d31c7f3b1bfafcc674d81df4bde00efe3c39fbc83adb48"
   },
   "cryptopro-cadesplugin_api-js": {
     "file": "cryptopro/products/cades/cadesplugin_api.js",

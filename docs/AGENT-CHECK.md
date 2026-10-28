@@ -57,8 +57,8 @@ The smoke test must pass; if it does not, stop and report its output.
 **Fork version.** `scripts/vendor-lock.json` of the checked-out release pins the fork. From `v2.7.0-portable.75` on it
 answers the plugin's VKO `derive`, so GOST 28147-89 decryption (W7) and XML decryption (W8) must pass. An older pin
 (`v2.7.0-portable.42`, in releases up to 1.10.1) answers error 147 there: report W7 and W8 as KNOWN, then, after the
-whole run, unpack `softhsm-portable-linux-x64.zip` of `v2.7.0-portable.88` from
-<https://github.com/code-agent-43824/SoftHSMv2/releases> into `~/rutoken-check/softhsm-new`, point the library at
+whole run, unpack `softhsm-portable-linux-x64.zip` of the release that `scripts/vendor-lock.json` on `main` pins, from
+<https://github.com/code-agent-43824/SoftHSMv2/releases>, into `~/rutoken-check/softhsm-new`, point the library at
 it and repeat W7 and W8 only:
 
 ```sh

@@ -175,6 +175,12 @@ site page.
 - **Hardware stand-in is the fake Rutoken from `code-agent-43824/SoftHSMv2`** (`FAKE_RUTOKEN_ECP = true`), loaded by
   the real Rutoken Plugin in place of its bundled `librtpkcs11ecp.so`; the test kit also carries OpenSC libraries
   adapted to Rutoken. Owner, 2026-09-23.
+- **The fork is pinned, to its newest release.** Owner, 2026-10-28, «да» on the agent's proposal. Pinned by URL and
+  SHA-256 in `scripts/vendor-lock.json` (AGENTS.md §7) because a fork release must not turn the trunk red without a
+  commit here, the library loaded into the Rutoken Plugin is checked, and each result names the release it came
+  from. Newest, because each release follows the device more closely: at the start of a session compare the pin
+  with `git ls-remote --tags https://github.com/code-agent-43824/SoftHSMv2`; on a newer release read its changes, pin
+  it with its test kit and run the whole stand, and analyse a failure before the pin moves.
 - **Stack: TypeScript + esbuild, tests on Vitest and Playwright.** The owner left the choice to the agent
   (2026-09-23, "any, as long as the extension works"). Reason: the emulated CAdESCOM surface is large and
   stringly-typed, types catch mismatched property names; a MAIN-world content script must ship as one bundled file.
