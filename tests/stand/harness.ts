@@ -3,10 +3,10 @@
 // id, the native host and the fake Rutoken found through the stand HOME.
 import { chromium, expect, type BrowserContext, type Page } from "@playwright/test";
 import { createHash, X509Certificate } from "node:crypto";
-import { cpSync, existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { extname, join, relative } from "node:path";
+import { dirname, extname, join, relative } from "node:path";
 import { extensionDir } from "../../scripts/build.ts";
 import { stand, standDir, standEnv } from "../../scripts/setup-stand.ts";
 
@@ -67,6 +67,9 @@ export interface StandOptions {
   home?: string;
   // Internet hosts the stand may reach (for experiments with real sites); everything else stays offline.
   online?: string[];
+  // Starts as a browser set to continue where it left off: the tabs open when the profile last closed come back as
+  // Chromium starts, with the service worker Chromium cached in the profile (a restart with the same build).
+  restoreSession?: boolean;
 }
 
 // The environment's HTTPS proxy re-signs TLS with its own CA. Chromium is told to trust exactly that CA
@@ -82,17 +85,29 @@ function proxyOptions(): string[] {
   return [`--proxy-server=${server}`, `--ignore-certificate-errors-spki-list=${createHash("sha256").update(spki).digest("base64")}`];
 }
 
-export async function launchStand({ extensions = [stand.adapter], profile = stand.profile, home = stand.home, online = [] }: StandOptions = {}) {
+// Chromium's setting «Продолжить работу с того же места».
+function continueWhereLeftOff(profile: string): void {
+  const file = join(profile, "Default", "Preferences");
+  const preferences = existsSync(file) ? JSON.parse(readFileSync(file, "utf8")) : {};
+  preferences.session = { ...preferences.session, restore_on_startup: 1 };
+  mkdirSync(dirname(file), { recursive: true });
+  writeFileSync(file, JSON.stringify(preferences));
+}
+
+export async function launchStand({ extensions = [stand.adapter], profile = stand.profile, home = stand.home, online = [], restoreSession = false }: StandOptions = {}) {
   const list = extensions.join(",");
   const network = online.length ? proxyOptions() : [];
   // The profile outlives builds, and Chromium keeps running the service worker it cached for an unpacked
   // extension of the same version: a rebuilt background.js would not run (docs/JOURNAL.md).
-  rmSync(join(profile, "Default", "Service Worker"), { recursive: true, force: true });
+  if (restoreSession) continueWhereLeftOff(profile);
+  else rmSync(join(profile, "Default", "Service Worker"), { recursive: true, force: true });
   const context = await chromium.launchPersistentContext(profile, {
     headless: true,
     // The full Chromium build: the headless shell cannot load extensions.
     channel: "chromium",
     args: [`--disable-extensions-except=${list}`, `--load-extension=${list}`, ...network],
+    // Playwright opens about:blank in a persistent context, and a page on the command line overrides the restore.
+    ignoreDefaultArgs: restoreSession ? ["about:blank"] : [],
     env: { ...standEnv(), HOME: home } as Record<string, string>,
   });
   // Stand tests stay offline: pages get only what the local server serves, plus the hosts asked for.

@@ -8,7 +8,9 @@ import {
   matchPattern,
   PENDING_KEY,
   pruneSites,
+  reloadTabsWithoutScript,
   BRIDGE_ID,
+  BRIDGE_MARKER,
   SCRIPT_ID,
   siteOf,
   syncContentScript,
@@ -18,8 +20,11 @@ import {
 
 // The parts of chrome.* the site list uses. `granted` holds host permissions; `grant` decides what
 // the user answers to Chrome's prompt; `required` ones cannot be removed.
-function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = false } = {}) {
+// `tabs` are the open tabs: the address the extension sees (none without access), whether the page has the bridge.
+function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = false, tabs = [] as { id: number; url?: string; bridge?: boolean; discarded?: boolean; gone?: boolean }[] } = {}) {
   const store: Record<string, unknown> = {};
+  // Every moment the registration changed, how many of the two scripts were registered after it.
+  const registeredCounts: number[] = [];
   const granted = new Set<string>(required);
   const reloaded: number[] = [];
   // What page.js was registered for when each tab was reloaded.
@@ -35,6 +40,7 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
       },
     },
     tabs: {
+      query: async () => tabs.map(({ id, url, discarded = false }) => ({ id, url: url && covers(new URL(url).origin + "/*") ? url : undefined, discarded })),
       reload: async (tabId: number) => {
         reloaded.push(tabId);
         matchesAtReload.push(scripts.find((script) => script.id === SCRIPT_ID)?.matches ?? []);
@@ -60,16 +66,39 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
         scripts.filter((script) => ids.includes(script.id)),
       unregisterContentScripts: async ({ ids = [] }: chrome.scripting.ContentScriptFilter = {}) => {
         scripts = scripts.filter((script) => !ids.includes(script.id));
+        registeredCounts.push(scripts.length);
       },
       registerContentScripts: async (list: chrome.scripting.RegisteredContentScript[]) => {
         for (const script of list) {
           if (scripts.some((s) => s.id === script.id)) throw new Error(`Duplicate script ID '${script.id}'`);
           scripts.push(script);
         }
+        registeredCounts.push(scripts.length);
+      },
+      updateContentScripts: async (list: chrome.scripting.RegisteredContentScript[]) => {
+        for (const script of list) {
+          const index = scripts.findIndex((s) => s.id === script.id);
+          if (index < 0) throw new Error(`No script with ID '${script.id}'`);
+          scripts[index] = { ...scripts[index]!, ...script };
+        }
+        registeredCounts.push(scripts.length);
+      },
+      executeScript: async ({ target, func, args = [] }: { target: { tabId: number }; func: (...a: unknown[]) => unknown; args?: unknown[] }) => {
+        const tab = tabs.find((t) => t.id === target.tabId)!;
+        if (tab.gone) throw new Error("No tab with id");
+        // The function runs in the page's isolated world, where the bridge leaves its marker.
+        const world = globalThis as Record<string, unknown>;
+        const marker = String(args[0]);
+        if (tab.bridge) world[marker] = true;
+        try {
+          return [{ result: func(...args) }];
+        } finally {
+          delete world[marker];
+        }
       },
     },
   };
-  return { api: api as unknown as typeof chrome, store, granted, reloaded, matchesAtReload, scripts: () => scripts };
+  return { api: api as unknown as typeof chrome, store, granted, reloaded, matchesAtReload, registeredCounts, scripts: () => scripts };
 }
 
 describe("site list", () => {
@@ -103,9 +132,48 @@ describe("site list", () => {
       { id: SCRIPT_ID, js: ["page.js"], world: "MAIN", ...common },
       { id: BRIDGE_ID, js: ["roots-bridge.js"], world: "ISOLATED", ...common },
     ]);
-    // A second sync replaces the registration instead of failing on the duplicate id.
+    // A second sync leaves the same registration alone.
+    const changes = chrome.registeredCounts.length;
     await syncContentScript(chrome.api);
     expect(chrome.scripts()).toHaveLength(2);
+    expect(chrome.registeredCounts).toHaveLength(changes);
+  });
+
+  it("changes the registration in place, so page.js is never unregistered while sites stay enabled", async () => {
+    const chrome = fakeChrome();
+    await enableSite("https://a.example", chrome.api);
+    await syncContentScript(chrome.api);
+    await enableSite("https://b.example", chrome.api);
+    await syncContentScript(chrome.api);
+    expect(chrome.scripts().map((script) => script.matches)).toEqual([
+      ["https://a.example/*", "https://b.example/*"],
+      ["https://a.example/*", "https://b.example/*"],
+    ]);
+    await disableSite("https://b.example", chrome.api);
+    await syncContentScript(chrome.api);
+    expect(chrome.scripts().map((script) => script.matches)).toEqual([["https://a.example/*"], ["https://a.example/*"]]);
+    // Both scripts were registered at every change.
+    expect(chrome.registeredCounts).toEqual([2, 2, 2]);
+  });
+
+  it("after start-up reloads only the tabs of enabled sites whose page lacks page.js", async () => {
+    const tabs = [
+      { id: 1, url: "https://a.example/x", bridge: false },
+      { id: 2, url: "https://a.example/y", bridge: true },
+      { id: 3, url: "https://other.example/", bridge: false },
+      { id: 4, url: "https://a.example/z", bridge: false, discarded: true },
+      { id: 5, url: "https://a.example/w", bridge: false, gone: true },
+      { id: 6, url: "https://b.example/", bridge: false },
+    ];
+    const chrome = fakeChrome({ tabs });
+    expect(await reloadTabsWithoutScript(chrome.api)).toEqual([]);
+    await enableSite("https://a.example", chrome.api);
+    await enableSite("https://b.example", chrome.api);
+    // Listed but its access revoked: not the extension's to touch.
+    chrome.granted.delete("https://b.example/*");
+    expect(await reloadTabsWithoutScript(chrome.api)).toEqual([1]);
+    expect(chrome.reloaded).toEqual([1]);
+    expect(BRIDGE_MARKER).toBe("rutokenCadesBridge");
   });
 
   it("is finished by the service worker when Chrome's prompt closes the popup", async () => {

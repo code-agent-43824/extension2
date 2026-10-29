@@ -7,8 +7,12 @@ import { TSA_ACCESS_REQUEST, TSA_ACCESS_RESPONSE, TSA_REQUEST, TSA_RESPONSE, typ
 import { ADD_MESSAGE, type AddMessage, type AddResult } from "./install.ts";
 import { enabledCertificates, extendedValidity, offerRoot } from "./roots.ts";
 import { TSA_ACCESS_MESSAGE, TSA_FETCH_MESSAGE, type TsaAccessMessage, type TsaFetchMessage, type TsaResult } from "./timestamps.ts";
+import { BRIDGE_MARKER } from "./sites.ts";
 
 const E_FAIL = 0x80004005;
+
+// For the service worker's check after the browser starts (sites.ts, reloadTabsWithoutScript).
+(globalThis as Record<string, unknown>)[BRIDGE_MARKER] = true;
 
 // The service worker's answer, or the error of reaching it.
 function forward(message: object): Promise<TsaResult> {

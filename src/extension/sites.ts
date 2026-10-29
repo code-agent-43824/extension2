@@ -7,6 +7,8 @@ import { BROWSER, type Browser } from "./browser.ts";
 export const SCRIPT_ID = "cades-shim";
 // The isolated-world script handing page.js the root store (roots-bridge.ts).
 export const BRIDGE_ID = "cades-roots";
+// What roots-bridge.js sets in the extension's isolated world of each page it runs in: a page that has it has page.js.
+export const BRIDGE_MARKER = "rutokenCadesBridge";
 export const STORAGE_KEY = "sites";
 // The origins of the timestamp services the user let the extension reach (timestamps.ts).
 export const TSA_KEY = "tsaServices";
@@ -137,18 +139,56 @@ export async function whenRegistered(api: Api = chrome, timeoutMs = 5000): Promi
   }
 }
 
-// Makes the registered content script match the enabled, accessible sites. Callers serialise calls.
+// What a registration is compared by: a script registered the same way is left alone.
+const shape = (script: chrome.scripting.RegisteredContentScript) =>
+  JSON.stringify([patternSet(script.matches ?? []), script.js, script.world ?? "ISOLATED", script.runAt, script.allFrames ?? false]);
+
+// Makes the registered content script match the enabled, accessible sites. Callers serialise calls. A registration is
+// changed in place, never taken down and put back: a page loading in between would miss page.js (docs/JOURNAL.md,
+// 2026-10-29).
 export async function syncContentScript(api: Api = chrome): Promise<string[]> {
   const matches = await wantedMatches(api);
   const ids = [SCRIPT_ID, BRIDGE_ID];
   const registered = await api.scripting.getRegisteredContentScripts({ ids });
-  if (registered.length) await api.scripting.unregisterContentScripts({ ids: registered.map((script) => script.id) });
-  if (matches.length) {
-    const common = { matches, runAt: "document_start", allFrames: true, persistAcrossSessions: true } as const;
-    await api.scripting.registerContentScripts([
-      { id: SCRIPT_ID, js: ["page.js"], world: "MAIN", ...common },
-      { id: BRIDGE_ID, js: ["roots-bridge.js"], world: "ISOLATED", ...common },
-    ]);
+  if (!matches.length) {
+    if (registered.length) await api.scripting.unregisterContentScripts({ ids: registered.map((script) => script.id) });
+    return matches;
   }
+  const common = { matches, runAt: "document_start", allFrames: true, persistAcrossSessions: true } as const;
+  const wanted: chrome.scripting.RegisteredContentScript[] = [
+    { id: SCRIPT_ID, js: ["page.js"], world: "MAIN", ...common },
+    { id: BRIDGE_ID, js: ["roots-bridge.js"], world: "ISOLATED", ...common },
+  ];
+  const present = new Map(registered.map((script) => [script.id, script]));
+  const changed = wanted.filter((script) => present.has(script.id) && shape(present.get(script.id)!) !== shape(script));
+  const missing = wanted.filter((script) => !present.has(script.id));
+  if (changed.length) await api.scripting.updateContentScripts(changed);
+  if (missing.length) await api.scripting.registerContentScripts(missing);
   return matches;
+}
+
+// A browser restoring its tabs as it starts loads them before it has the extension's registered scripts: the pages of
+// the enabled sites come up without page.js, and only loading again gives it to them (docs/JOURNAL.md, 2026-10-29).
+// Reloads those tabs, and only those: a page with the bridge has page.js too, they are registered together. Returns the
+// tabs reloaded.
+export async function reloadTabsWithoutScript(api: Api = chrome): Promise<number[]> {
+  const sites = new Set<string>();
+  for (const site of await enabledSites(api)) if (await hasAccess(site, api)) sites.add(site);
+  const reloaded: number[] = [];
+  if (!sites.size) return reloaded;
+  // Without the "tabs" permission a tab shows its address only to an extension with access to its site.
+  for (const tab of await api.tabs.query({})) {
+    // A discarded tab loads anew when the user opens it.
+    if (tab.id === undefined || tab.discarded || !sites.has(siteOf(tab.url) ?? "")) continue;
+    try {
+      const [answer] = await api.scripting.executeScript({ target: { tabId: tab.id }, func: (marker: string) => marker in globalThis, args: [BRIDGE_MARKER] });
+      if (answer?.result === true) continue;
+    } catch {
+      // The page went away while asked, or cannot be reached: nothing to repair.
+      continue;
+    }
+    await api.tabs.reload(tab.id).catch(() => {});
+    reloaded.push(tab.id);
+  }
+  return reloaded;
 }

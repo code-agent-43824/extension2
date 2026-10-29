@@ -2,7 +2,7 @@
 // add to the Root and CA stores, asking the user first for a root (install.ts), and gets XAdES-T's timestamps from the
 // services the user let the extension reach (timestamps.ts).
 import { ADD_MESSAGE, CONFIRM_ANSWER, CONFIRM_DETAILS, CONFIRM_PING, Installer, type AddMessage } from "./install.ts";
-import { finishPendingSite, pruneSites, STORAGE_KEY, syncContentScript } from "./sites.ts";
+import { finishPendingSite, pruneSites, reloadTabsWithoutScript, STORAGE_KEY, syncContentScript } from "./sites.ts";
 import { pruneTsaServices, TSA_ACCESS_MESSAGE, TSA_ANSWER, TSA_DETAILS, TSA_FETCH_MESSAGE, Timestamps, type TsaAccessMessage, type TsaFetchMessage, type TsaResult } from "./timestamps.ts";
 
 // One sync at a time: two overlapping syncs would register the same script id twice.
@@ -12,9 +12,14 @@ function schedule(task: () => Promise<unknown>): void {
 }
 
 const sync = () => schedule(() => syncContentScript());
+// After the browser starts or the extension is updated: the open tabs of the enabled sites may lack page.js.
+const repair = () => {
+  sync();
+  schedule(() => reloadTabsWithoutScript());
+};
 
-chrome.runtime.onInstalled.addListener(sync);
-chrome.runtime.onStartup.addListener(sync);
+chrome.runtime.onInstalled.addListener(repair);
+chrome.runtime.onStartup.addListener(repair);
 chrome.permissions.onAdded.addListener(() => {
   schedule(() => finishPendingSite());
   sync();

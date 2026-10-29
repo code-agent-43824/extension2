@@ -413,9 +413,13 @@
     Сделано: `raw-signature.ts`, `CPAttribute.fromSignature`, `flag` и `extensionNames` в `certificate-extensions.ts`,
     `ROOT_NAME` в `certificate.ts`; тесты — модульные и стенда (`hash-signing`, `gost512`, `attributes`, `certificate`,
     `demo-page`). Данные сверки — `JOURNAL.md`, 2026-10-29.
-  - [ ] (б) **Восстановленные вкладки.** При запуске браузера `syncContentScript` снимает регистрацию `page.js` и ставит
+  - [x] (б) **Восстановленные вкладки.** При запуске браузера `syncContentScript` снимает регистрацию `page.js` и ставит
     заново; вкладки, которые браузер восстанавливает в этот промежуток, грузятся без `page.js`. Совпадающую
     регистрацию не трогать, отличающуюся менять на месте (`updateContentScripts`), без промежутка.
+    Сделано: опыт на стенде показал, что одного промежутка мало — браузер загружает восстановленные вкладки раньше, чем
+    подключает скрипты расширения (`JOURNAL.md`, 2026-10-29). `syncContentScript` меняет на месте;
+    `reloadTabsWithoutScript` после запуска и обновления перезагружает вкладки включённых сайтов без моста. Тесты —
+    `sites.test.ts`, `tests/stand/restore.spec.ts` (без перезагрузки падает).
   - [ ] (в) **Стенд и проверочные инструменты.** `verify_xmldsig.py` — XAdES с `SigningCertificateV2`/`IssuerSerialV2`
     (EN 319 132-1), `QualifyingProperties` в пространстве имён по умолчанию, префикс `ds:`. `setup-cryptopro-csp.ts` —
     без вопроса certmgr о корневом (в хранилище компьютера) и с пределом времени вместо зависания; сертификат и в

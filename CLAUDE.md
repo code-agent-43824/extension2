@@ -61,8 +61,10 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   browser the build is for, `__BROWSER__` from `scripts/build.ts`), `sites.ts` (the
   enabled-site list in `chrome.storage.local`, optional host permissions — in Firefox without the port, its
   patterns with one inject nothing —, the confirmed timestamp services' list, taking access back only when nothing
-  listed needs it, registering page.js; Chrome's permission
-  prompt can close the popup, so `finishPendingSite` in the service worker finishes an interrupted enabling), `background.ts`
+  listed needs it, registering page.js, changed in place; Chrome's permission
+  prompt can close the popup, so `finishPendingSite` in the service worker finishes an interrupted enabling; tabs a
+  browser restores at start-up load before page.js is there, so `reloadTabsWithoutScript` reloads those without
+  the bridge's `BRIDGE_MARKER`), `background.ts`
   (service worker keeping the registration in sync and running `install.ts` and `timestamps.ts`), `popup.*` (the button's window), `options.*` (site list, the extended validity and root offer switches, the confirmed timestamp services, certificate stores), `roots.ts` (the two certificate stores in
   `chrome.storage.local`: the built-in roots, and the roots of other CAs and intermediates added from files, a
   self-signed one counting as a root) + `roots-view.ts` (their tabs and cards on the options page) + `roots-bridge.ts`
@@ -120,7 +122,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   2026-09-24) with the CA they chain to.
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
   `smoke.spec.ts` checks the stand itself (plugin, adapter, fake token) without the extension; `sites.spec.ts` the
-  per-site enabling from the options page and the popup;
+  per-site enabling from the options page and the popup; `restore.spec.ts` restarts a profile set to continue where it
+  left off (`launchStand({ restoreSession })`) and expects its restored tabs to get page.js;
   `demo-page.spec.ts` runs CryptoPro's demo page from `vendor/cryptopro/` at its original path, and the `tools/` scripts on it; `demo-pages.spec.ts` its
   file-signing, XMLDSig and verification pages (`cades_bes_file.html`, `cades_xmldsig_sample.html`, `verify.html`); `testgost.spec.ts`
   (opt-in, online) gets certificates from CryptoPro's test CA on a copy of the stand HOME; `nalog.spec.ts` (opt-in,
