@@ -4,7 +4,7 @@
 // HOME, and the Rutoken adapter and CryptoPro's extension unpacked under their store ids. Nothing is
 // installed into the system; everything a browser run needs is under stand/.
 import { execFileSync } from "node:child_process";
-import { chmodSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { developerKey, extensionIdFromKey, parseCrx } from "./crx.ts";
@@ -36,6 +36,25 @@ export const tokenLabel = "stand";
 
 function run(cmd: string, args: string[], env: NodeJS.ProcessEnv = process.env): string {
   return execFileSync(cmd, args, { env, encoding: "utf8" });
+}
+
+// The Chromium the stand runs: Playwright's own build, `expected`, when it is there. An environment where
+// `playwright install` is not run (CLAUDE.md) may carry another, newer build than the pinned Playwright expects; then
+// the one it points at as $PLAYWRIGHT_BROWSERS_PATH/chromium, or the newest chromium-<n> there. Undefined: Playwright's.
+export function chromiumExecutable(expected: string, browsers = process.env.PLAYWRIGHT_BROWSERS_PATH ?? "/opt/pw-browsers"): string | undefined {
+  if (existsSync(expected) || !existsSync(browsers)) return undefined;
+  const link = join(browsers, "chromium");
+  if (existsSync(link) && statSync(link).isFile()) return link;
+  const builds = readdirSync(browsers)
+    .filter((name) => /^chromium-\d+$/.test(name))
+    .sort((a, b) => Number(b.slice("chromium-".length)) - Number(a.slice("chromium-".length)));
+  for (const build of builds) {
+    for (const dir of ["chrome-linux64", "chrome-linux"]) {
+      const path = join(browsers, build, dir, "chrome");
+      if (existsSync(path)) return path;
+    }
+  }
+  return undefined;
 }
 
 export function standEnv(): NodeJS.ProcessEnv {

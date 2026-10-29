@@ -8,7 +8,7 @@ import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { dirname, extname, join, relative } from "node:path";
 import { extensionDir } from "../../scripts/build.ts";
-import { stand, standDir, standEnv } from "../../scripts/setup-stand.ts";
+import { chromiumExecutable, stand, standDir, standEnv } from "../../scripts/setup-stand.ts";
 
 export interface Route {
   type: string;
@@ -105,6 +105,7 @@ export async function launchStand({ extensions = [stand.adapter], profile = stan
     headless: true,
     // The full Chromium build: the headless shell cannot load extensions.
     channel: "chromium",
+    executablePath: chromiumExecutable(chromium.executablePath()),
     args: [`--disable-extensions-except=${list}`, `--load-extension=${list}`, ...network],
     // Playwright opens about:blank in a persistent context, and a page on the command line overrides the restore.
     ignoreDefaultArgs: restoreSession ? ["about:blank"] : [],

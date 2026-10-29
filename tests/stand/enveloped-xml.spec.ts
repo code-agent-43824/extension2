@@ -13,6 +13,7 @@ import { join } from "node:path";
 import { aliases } from "../../scripts/build.ts";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { caDir } from "../../scripts/provision-token.ts";
+import { chromiumExecutable } from "../../scripts/setup-stand.ts";
 import { vko256 } from "../../src/page/gost.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
 import { standCaKeyPem } from "./verify.ts";
@@ -71,7 +72,7 @@ test.beforeAll(async () => {
     alias: aliases,
     logLevel: "warning",
   });
-  browser = await chromium.launch({ channel: "chromium" });
+  browser = await chromium.launch({ channel: "chromium", executablePath: chromiumExecutable(chromium.executablePath()) });
   page = await browser.newPage();
   await page.exposeFunction("standDerive", derive);
   await page.setContent("<!doctype html><title>EnvelopedXML</title>");
