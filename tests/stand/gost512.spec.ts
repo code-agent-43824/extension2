@@ -89,11 +89,12 @@ test("the token lists the 512-bit certificate with its key and algorithm", async
        name: await (await key.Algorithm).FriendlyName,
        length: await key.Length,
        hasKey: await certificate.HasPrivateKey(),
+       providerType: await (await certificate.PrivateKey).ProviderType,
        valid: await (await certificate.IsValid()).Result,
      };`,
   );
   expect(error).toBeUndefined();
-  expect(value).toEqual({ subject: commonName, algorithm: "1.2.643.7.1.1.1.2", name: "ГОСТ Р 34.10-2012 512 бит", length: 1024, hasKey: true, valid: true });
+  expect(value).toEqual({ subject: commonName, algorithm: "1.2.643.7.1.1.1.2", name: "ГОСТ Р 34.10-2012 512 бит", length: 1024, hasKey: true, providerType: 81, valid: true });
 });
 
 test("signs CAdES-BES attached and detached; the signatures verify independently and in the page", async () => {

@@ -166,6 +166,8 @@ describe("CAdESCOM.Certificate", () => {
     expect(await (await (await cert.PublicKey()).Algorithm).FriendlyName).toBe("ГОСТ Р 34.10-2012 256 бит");
     const key = await cert.PrivateKey;
     expect(await key.ProviderName).toBe("Rutoken Plugin 4.12.3.0");
+    // CryptoPro's type for a GOST R 34.10-2012 256-bit key.
+    expect(await key.ProviderType).toBe(80);
     expect(await key.UniqueContainerName).toBe(`\\\\.\\Rutoken 1669552163\\${certId}`);
     await key.propset_CachePin(false);
     expect(await key.CachePin).toBe(false);

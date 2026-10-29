@@ -10,6 +10,7 @@ import { base64Lines, BasicConstraints, EncodedData, ExtendedKeyUsage, Extension
 import type { TokenCertificate } from "../token.ts";
 import type { Session } from "./session.ts";
 import { cachePinOf, knownKey, setCachePin, setKeyPin } from "../token-login.ts";
+import { GOST_2012_512 } from "../gost.ts";
 
 const E_INVALIDARG = 0x80070057;
 const ERROR_INTERNAL_ERROR = 0x8007054f;
@@ -109,6 +110,12 @@ class PrivateKey {
   // The same name CAdESCOM.About.CSPName() reports.
   get ProviderName(): Promise<string> {
     return new About(this.#session).CSPName();
+  }
+
+  // CryptoPro's provider type: 80 for a GOST R 34.10-2012 256-bit key, as plug-in 2.0.15700 answers (the owner's
+  // comparison, docs/JOURNAL.md, 2026-10-29), 81 for a 512-bit one, the types the CA pages see (enrollment.ts).
+  get ProviderType(): Promise<number> {
+    return Promise.resolve(this.#token.x509.publicKeyAlgorithm === GOST_2012_512 ? 81 : 80);
   }
 
   // Names the token and the certificate on it; signing (stage 4) finds the key by it.
