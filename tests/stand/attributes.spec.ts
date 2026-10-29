@@ -124,7 +124,8 @@ test("CAdES-BES with the document's name and description, the chain without the 
     expect(verified).toBe(count);
     // The verified signer gives them back (docs/PLAN.md, action 36a).
     expect(read).toMatchObject({ [DOCUMENT_NAME]: "Договор.pdf", [DOCUMENT_DESCRIPTION]: "Договор поставки" });
-    expect(String(read!["1.2.840.113549.1.9.5"])).toMatch(/^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.000Z$/);
+    // The signing time as CryptoPro gives it: the UTCTime's text.
+    expect(String(read!["1.2.840.113549.1.9.5"])).toMatch(/^\d{12}Z$/);
   }
 });
 

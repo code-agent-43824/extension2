@@ -52,7 +52,7 @@ test("the token certificate's names, usages and extensions, Find by root and ext
   expect(facts).toEqual({
     simple: "Stand User",
     issuer: "Stand Test CA",
-    signature: true,
+    signature: 1,
     ekus: 2,
     clientAuth: 2,
     extensions: 3,

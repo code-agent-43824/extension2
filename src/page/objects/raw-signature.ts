@@ -1,6 +1,7 @@
-// CAdESCOM.RawSignature: a bare GOST R 34.10 signature of a hash, without CMS. CryptoPro's documentation
-// (IRawSignature::SignHash, VerifyHash): the signature of RFC 4491, 2.2.2 (s||r, big-endian, as in CMS) with its bytes
-// in reverse order, as hex digits, two per byte, separated by spaces. Not compared with the real plug-in.
+// CAdESCOM.RawSignature: a bare GOST R 34.10 signature of a hash, without CMS (IRawSignature::SignHash, VerifyHash):
+// the signature of RFC 4491, 2.2.2 (s||r, big-endian, as in CMS) with its bytes in reverse order, as upper-case hex
+// digits without separators, as plug-in 2.0.15700 gives it (the owner's comparison, docs/JOURNAL.md, 2026-10-29;
+// CryptoPro's documentation shows them in pairs separated by spaces). VerifyHash takes either, as the plug-in does.
 import { CadesError } from "../errors.ts";
 import { isGostKey, verifyHash } from "../gost.ts";
 import { certificateLines } from "../signing.ts";
@@ -47,7 +48,7 @@ export class RawSignature {
       const keyId = await plugin.getKeyByCertificate(deviceId, token.certId);
       return plugin.rawSign(deviceId, keyId, value.toLowerCase().replace(/(..)(?!$)/g, "$1:"), {});
     });
-    return Array.from(bytesOf(raw.replace(/:/g, "")).reverse(), (byte) => byte.toString(16).toUpperCase().padStart(2, "0")).join(" ");
+    return Array.from(bytesOf(raw.replace(/:/g, "")).reverse(), (byte) => byte.toString(16).toUpperCase().padStart(2, "0")).join("");
   }
 
   // Checked in the page, as CadesSignedData's verification: no token is involved.

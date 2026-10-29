@@ -59,8 +59,24 @@ export const extensionOids = new Map<number, string>([
   [26, "1.3.6.1.5.5.7.1.1"],
 ]);
 
-// CAPICOM.OID of an extension: Name from CAPICOM_OID (CAPICOM_OID_OTHER for the rest); the friendly names CryptoPro
-// gives are not known here, so FriendlyName is the OID itself.
+// The names plug-in 2.0.15700 gives these extensions under ru_RU.UTF-8 (the owner's comparison, docs/JOURNAL.md,
+// 2026-10-29). Other OIDs and other locales were not seen, so their FriendlyName stays the OID itself.
+const extensionNames = new Map<string, string>([
+  [EXTENSION_KEY_USAGE, "Использование ключа"],
+  [EXTENSION_EXTENDED_KEY_USAGE, "Улучшенный ключ"],
+  ["2.5.29.14", "Идентификатор ключа субъекта"],
+  ["2.5.29.35", "Идентификатор ключа центра сертификатов"],
+  ["2.5.29.31", "Точки распространения списков отзыва"],
+  ["1.3.6.1.5.5.7.1.1", "Доступ к информации о центрах сертификации"],
+  ["2.5.29.16", "Период использования закрытого ключа"],
+]);
+
+// The plug-in answers CAPICOM's Boolean properties of these objects with the numbers 1 and 0 (the same comparison).
+function flag(value: boolean): Promise<number> {
+  return Promise.resolve(value ? 1 : 0);
+}
+
+// CAPICOM.OID of an extension: Name from CAPICOM_OID (CAPICOM_OID_OTHER for the rest).
 class ExtensionOid {
   readonly #value: string;
 
@@ -73,7 +89,7 @@ class ExtensionOid {
   }
 
   get FriendlyName(): Promise<string> {
-    return Promise.resolve(this.#value);
+    return Promise.resolve(extensionNames.get(this.#value) ?? this.#value);
   }
 
   get Value(): Promise<string> {
@@ -92,8 +108,8 @@ class Extension {
     return Promise.resolve(new ExtensionOid(this.#extension.oid));
   }
 
-  get IsCritical(): Promise<boolean> {
-    return Promise.resolve(this.#extension.critical);
+  get IsCritical(): Promise<number> {
+    return flag(this.#extension.critical);
   }
 
   get EncodedData(): Promise<EncodedData> {
@@ -128,51 +144,51 @@ export class KeyUsage {
     this.#x509 = x509;
   }
 
-  #has(flag: number): Promise<boolean> {
-    return Promise.resolve(((this.#x509.keyUsage ?? 0) & flag) !== 0);
+  #has(bit: number): Promise<number> {
+    return flag(((this.#x509.keyUsage ?? 0) & bit) !== 0);
   }
 
-  get IsPresent(): Promise<boolean> {
-    return Promise.resolve(this.#x509.keyUsage !== null);
+  get IsPresent(): Promise<number> {
+    return flag(this.#x509.keyUsage !== null);
   }
 
-  get IsCritical(): Promise<boolean> {
-    return Promise.resolve(extensionOf(this.#x509, EXTENSION_KEY_USAGE)?.critical ?? false);
+  get IsCritical(): Promise<number> {
+    return flag(extensionOf(this.#x509, EXTENSION_KEY_USAGE)?.critical ?? false);
   }
 
-  get IsDigitalSignatureEnabled(): Promise<boolean> {
+  get IsDigitalSignatureEnabled(): Promise<number> {
     return this.#has(0x80);
   }
 
-  get IsNonRepudiationEnabled(): Promise<boolean> {
+  get IsNonRepudiationEnabled(): Promise<number> {
     return this.#has(0x40);
   }
 
-  get IsKeyEnciphermentEnabled(): Promise<boolean> {
+  get IsKeyEnciphermentEnabled(): Promise<number> {
     return this.#has(0x20);
   }
 
-  get IsDataEnciphermentEnabled(): Promise<boolean> {
+  get IsDataEnciphermentEnabled(): Promise<number> {
     return this.#has(0x10);
   }
 
-  get IsKeyAgreementEnabled(): Promise<boolean> {
+  get IsKeyAgreementEnabled(): Promise<number> {
     return this.#has(0x08);
   }
 
-  get IsKeyCertSignEnabled(): Promise<boolean> {
+  get IsKeyCertSignEnabled(): Promise<number> {
     return this.#has(0x04);
   }
 
-  get IsCRLSignEnabled(): Promise<boolean> {
+  get IsCRLSignEnabled(): Promise<number> {
     return this.#has(0x02);
   }
 
-  get IsEncipherOnlyEnabled(): Promise<boolean> {
+  get IsEncipherOnlyEnabled(): Promise<number> {
     return this.#has(0x01);
   }
 
-  get IsDecipherOnlyEnabled(): Promise<boolean> {
+  get IsDecipherOnlyEnabled(): Promise<number> {
     return this.#has(0x8000);
   }
 }
@@ -228,12 +244,12 @@ export class ExtendedKeyUsage {
     this.#x509 = x509;
   }
 
-  get IsPresent(): Promise<boolean> {
-    return Promise.resolve(extendedKeyUsages(this.#x509) !== null);
+  get IsPresent(): Promise<number> {
+    return flag(extendedKeyUsages(this.#x509) !== null);
   }
 
-  get IsCritical(): Promise<boolean> {
-    return Promise.resolve(extensionOf(this.#x509, EXTENSION_EXTENDED_KEY_USAGE)?.critical ?? false);
+  get IsCritical(): Promise<number> {
+    return flag(extensionOf(this.#x509, EXTENSION_EXTENDED_KEY_USAGE)?.critical ?? false);
   }
 
   get EKUs(): Promise<Ekus> {
@@ -248,20 +264,20 @@ export class BasicConstraints {
     this.#x509 = x509;
   }
 
-  get IsPresent(): Promise<boolean> {
-    return Promise.resolve(basicConstraints(this.#x509) !== null);
+  get IsPresent(): Promise<number> {
+    return flag(basicConstraints(this.#x509) !== null);
   }
 
-  get IsCritical(): Promise<boolean> {
-    return Promise.resolve(extensionOf(this.#x509, EXTENSION_BASIC_CONSTRAINTS)?.critical ?? false);
+  get IsCritical(): Promise<number> {
+    return flag(extensionOf(this.#x509, EXTENSION_BASIC_CONSTRAINTS)?.critical ?? false);
   }
 
-  get IsCertificateAuthority(): Promise<boolean> {
-    return Promise.resolve(basicConstraints(this.#x509)?.ca ?? false);
+  get IsCertificateAuthority(): Promise<number> {
+    return flag(basicConstraints(this.#x509)?.ca ?? false);
   }
 
-  get IsPathLenConstraintPresent(): Promise<boolean> {
-    return Promise.resolve((basicConstraints(this.#x509)?.pathLength ?? null) !== null);
+  get IsPathLenConstraintPresent(): Promise<number> {
+    return flag((basicConstraints(this.#x509)?.pathLength ?? null) !== null);
   }
 
   get PathLenConstraint(): Promise<number> {

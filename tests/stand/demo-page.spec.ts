@@ -136,15 +136,15 @@ test.describe("with the Rutoken adapter", () => {
       SubjectName: expect.stringContaining("CN=Stand User"),
       IsValid: true,
       GetInfo: { SUBJECT_SIMPLE_NAME: "Stand User", ISSUER_SIMPLE_NAME: "Stand Test CA", SUBJECT_UPN: "" },
-      KeyUsage: { IsPresent: true, IsCritical: true, IsDigitalSignatureEnabled: true, IsKeyCertSignEnabled: false },
+      KeyUsage: { IsPresent: 1, IsCritical: 1, IsDigitalSignatureEnabled: 1, IsKeyCertSignEnabled: 0 },
       ExtendedKeyUsage: {
-        IsPresent: true,
+        IsPresent: 1,
         EKUs: [
           { Name: 2, OID: "1.3.6.1.5.5.7.3.2" },
           { Name: 4, OID: "1.3.6.1.5.5.7.3.4" },
         ],
       },
-      BasicConstraints: { IsPresent: false },
+      BasicConstraints: { IsPresent: 0 },
       PublicKey: { Algorithm: "1.2.643.7.1.1.1.1", Length: 512, EncodedKey: expect.stringMatching(/^BE/) },
     });
     // Every value was read: no property of the 1.14.0 objects answered with an error.
@@ -199,7 +199,7 @@ test.describe("with the Rutoken adapter", () => {
       cades_bes_attributes: true,
     });
     expect(result.rawSignature).toMatchObject({ verified: true, tampered: { error: expect.stringContaining("0x80090006") } });
-    expect(result.rawSignature.signature).toMatch(/^[0-9a-f]{2}( [0-9a-f]{2}){63}$/i);
+    expect(result.rawSignature.signature).toMatch(/^[0-9A-F]{128}$/);
     expect(result.keyPin).toEqual({ signed: true });
     expect(result.cachePin).toEqual({ CachePin: true, first: true, second: true, afterCacheKeyFalse: false });
     // Attributes, RawSignature, KeyPin, then the two CachePin signatures.

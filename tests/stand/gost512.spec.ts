@@ -172,7 +172,7 @@ test("RawSignature and XMLDSig with the 512-bit key verify independently and in 
      return { raw, rawVerified: true, xml: await xml.Sign(signer) };`,
   );
   expect(error).toBeUndefined();
-  expect(value!.raw).toMatch(/^[0-9A-F]{2}( [0-9A-F]{2}){127}$/);
+  expect(value!.raw).toMatch(/^[0-9A-F]{256}$/);
   expect(verifyRaw(certificatePem, Buffer.from(content), value!.raw)).toEqual({ valid: true, length: 128 });
   const report = verifyXml(value!.xml);
   expect(report.valid).toBe(true);

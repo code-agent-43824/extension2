@@ -1,4 +1,4 @@
-import { decodeTime, encode, octets, read } from "../asn1.ts";
+import { encode, octets, read } from "../asn1.ts";
 import { attribute, encodeTime } from "../cms-sign.ts";
 import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
@@ -51,18 +51,18 @@ export class CPAttribute {
   // The value as encoded, for an attribute read from a verified signature.
   #der: Uint8Array | undefined;
 
-  // An attribute of a verified signature: its value as text where Name says what it is (the signing time as
-  // SigningTime gives it, a document's name or description), otherwise Base64 of its DER, as with
-  // CAPICOM_ENCODE_BASE64. Not compared with CryptoPro's plug-in.
+  // An attribute of a verified signature, its Value as plug-in 2.0.15700 gives it (the owner's comparison,
+  // docs/JOURNAL.md, 2026-10-29): a document's name or description as text; any other, the signing time included, the
+  // contents of its value without the outer tag and length, read as UTF-8 with U+FFFD for what is not (a UTCTime comes
+  // out as "261028193617Z"). With CAPICOM_ENCODE_BASE64, Base64 of the value's DER (not compared).
   static fromSignature(oid: string, der: Uint8Array): CPAttribute {
     const result = new CPAttribute();
     result.setOid(oid);
     result.#der = der;
     try {
       const node = read(der);
-      if (result.#name === constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_SIGNING_TIME) result.#value = decodeTime(node).toISOString();
-      else if (result.#name !== constants.CADESCOM_ATTRIBUTE_OTHER) result.#value = new TextDecoder("utf-16le").decode(octets(node)).replace(/\0+$/, "");
-      else result.#value = btoa(bytesBinary(der));
+      const named = result.#name === constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_NAME || result.#name === constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_DOCUMENT_DESCRIPTION;
+      result.#value = named ? new TextDecoder("utf-16le").decode(octets(node)).replace(/\0+$/, "") : new TextDecoder("utf-8", { ignoreBOM: true }).decode(node.value);
     } catch {
       result.#value = btoa(bytesBinary(der));
     }

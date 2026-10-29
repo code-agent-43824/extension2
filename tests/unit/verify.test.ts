@@ -176,7 +176,7 @@ describe("CadesSignedData.VerifyCades", () => {
 });
 
 describe("the verified signer's AuthenticatedAttributes2", () => {
-  it("gives CryptoPro's four signed attributes: the signing time as SigningTime has it, the others' DER in Base64", async () => {
+  it("gives CryptoPro's four signed attributes as plug-in 2.0.15700 does: each value's contents read as UTF-8", async () => {
     const data = signedData();
     await data.VerifyCades(fixtures.cryptopro.bes, BES);
     const signer = await firstSigner(data);
@@ -188,9 +188,13 @@ describe("the verified signer's AuthenticatedAttributes2", () => {
       read.push([await attribute.Name, await (await attribute.OID).Value, await attribute.Value]);
     }
     expect(read.map(([, oid]) => oid)).toEqual(["1.2.840.113549.1.9.3", "1.2.840.113549.1.9.5", "1.2.840.113549.1.9.4", "1.2.840.113549.1.9.16.2.47"]);
-    expect(read[1]).toEqual([constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_SIGNING_TIME, "1.2.840.113549.1.9.5", await signer.SigningTime]);
-    // contentType: the OID of data, as encoded.
-    expect(read[0]).toEqual([constants.CADESCOM_ATTRIBUTE_OTHER, "1.2.840.113549.1.9.3", "BgkqhkiG9w0BBwE="]);
+    // The signing time is the UTCTime's text, the same moment SigningTime gives as a date.
+    expect(read[1]).toEqual([constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_SIGNING_TIME, "1.2.840.113549.1.9.5", "260924062127Z"]);
+    expect(new Date(await signer.SigningTime).toISOString()).toBe("2026-09-24T06:21:27.000Z");
+    // contentType: the contents of the OID of data, 2A 86 48 86 F7 0D 01 07 01, the bytes that are not UTF-8 as U+FFFD.
+    expect(read[0]).toEqual([constants.CADESCOM_ATTRIBUTE_OTHER, "1.2.840.113549.1.9.3", "*\uFFFDH\uFFFD\uFFFD\r\u0001\u0007\u0001"]);
+    // signingCertificateV2 without its outer SEQUENCE: 30 81 85 30 81 82 30 0A …, as the owner saw CryptoPro's begin.
+    expect(String(read[3]![2]).startsWith("0\uFFFD\uFFFD0\uFFFD\uFFFD0\n")).toBe(true);
     const time = await attributes.Item(2);
     await time.propset_ValueEncoding(constants.CADESCOM_ENCODE_BASE64);
     expect(Buffer.from(String(await time.Value), "base64")[0]).toBe(0x17);

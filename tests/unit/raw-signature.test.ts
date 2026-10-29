@@ -61,20 +61,20 @@ async function hashOf(session: Session, value: string, algorithm: number = const
 const HASH = "92CD0CB36B10BFB88DEF198F80B7D2E667DBDA064D346405C25EEF77FFE375D7";
 
 describe("CAdESCOM.RawSignature", () => {
-  it("signs a hash on the token after the PIN: CMS's s||r reversed, hex pairs with spaces, and verifies it", async () => {
+  it("signs a hash on the token after the PIN: CMS's s||r reversed, upper-case hex without spaces, and verifies it", async () => {
     const { plugin, dialog, signed, session } = setup();
     const certificate = await tokenCertificate(session);
     const hashed = await hashOf(session, HASH);
     const raw = createObject("CAdESCOM.RawSignature", session) as RawSignature;
     const signature = await raw.SignHash(hashed, certificate);
-    expect(signature).toMatch(/^[0-9A-F]{2}( [0-9A-F]{2}){63}$/);
+    expect(signature).toMatch(/^[0-9A-F]{128}$/);
     expect(signed).toEqual([HASH.toLowerCase().replace(/(..)(?!$)/g, "$1:")]);
     expect(plugin.calls.login).toEqual([userPin]);
     expect(plugin.calls.logout).toBe(1);
     expect(dialog.requests[0]).toMatchObject({ action: "просит подписать хеш данных.", confirm: "Подписать" });
     await (createObject("CAdESCOM.RawSignature", session) as RawSignature).VerifyHash(hashed, certificate, signature);
-    // Without the spaces too, as CryptoPro's sample says a hash may come.
-    await (createObject("CAdESCOM.RawSignature", session) as RawSignature).VerifyHash(hashed, certificate, signature.replace(/ /g, "").toLowerCase());
+    // In pairs separated by spaces and in lower case too, as plug-in 2.0.15700 and CryptoPro's documentation take it.
+    await (createObject("CAdESCOM.RawSignature", session) as RawSignature).VerifyHash(hashed, certificate, signature.replace(/(..)(?!$)/g, "$1 ").toLowerCase());
   });
 
   it("refuses a signature of another hash, or one in CMS's byte order, with NTE_BAD_SIGNATURE", async () => {
@@ -84,7 +84,7 @@ describe("CAdESCOM.RawSignature", () => {
     const signature = await raw.SignHash(await hashOf(session, HASH), certificate);
     const other = await hashOf(session, `${HASH.slice(0, -2)}D8`);
     await expect(raw.VerifyHash(other, certificate, signature)).rejects.toMatchObject({ number: 0x80090006 });
-    const cmsOrder = signature.split(" ").reverse().join(" ");
+    const cmsOrder = signature.match(/../g)!.reverse().join("");
     await expect(raw.VerifyHash(await hashOf(session, HASH), certificate, cmsOrder)).rejects.toMatchObject({ number: 0x80090006 });
   });
 

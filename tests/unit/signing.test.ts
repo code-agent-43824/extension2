@@ -398,4 +398,13 @@ describe("an attribute read from a signature", () => {
     // A value that does not parse as its name says comes as Base64 too.
     expect(await CPAttribute.fromSignature(DOCUMENT_NAME, Uint8Array.of(0x30, 0x00)).Value).toBe("MAA=");
   });
+
+  it("gives the signing time and any other attribute as the contents of the value read as UTF-8, as CryptoPro does", async () => {
+    const { CPAttribute } = await import("../../src/page/objects/signer.ts");
+    const time = CPAttribute.fromSignature("1.2.840.113549.1.9.5", Uint8Array.from([0x17, 13, ...Buffer.from("261028193617Z")]));
+    expect([await time.Name, await time.Value]).toEqual([constants.CADESCOM_AUTHENTICATED_ATTRIBUTE_SIGNING_TIME, "261028193617Z"]);
+    const other = CPAttribute.fromSignature("1.2.3.4", Uint8Array.of(0x04, 6, 0xef, 0xbb, 0xbf, 0x41, 0xd0, 0x94));
+    // A byte order mark stays, "Д" is two bytes of UTF-8.
+    expect([await other.Name, await other.Value]).toEqual([constants.CADESCOM_ATTRIBUTE_OTHER, "\uFEFFAД"]);
+  });
 });

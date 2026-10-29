@@ -174,9 +174,9 @@ test("signs a hash with RawSignature and verifies it in the page; the independen
       return { signature, certificate: await certificate.Export(cadesplugin.CADESCOM_ENCODE_BASE64) };
     }`,
   );
-  expect(signature).toMatch(/^[0-9A-F]{2}( [0-9A-F]{2}){63}$/);
+  expect(signature).toMatch(/^[0-9A-F]{128}$/);
   const certificatePem = `-----BEGIN CERTIFICATE-----\n${certificate}-----END CERTIFICATE-----\n`;
   expect(verifyRaw(certificatePem, content, signature)).toEqual({ valid: true, length: 64 });
   // CMS's byte order is not CryptoPro's: the same bytes the other way round must not pass.
-  expect(verifyRaw(certificatePem, content, signature.split(" ").reverse().join(" ")).valid).toBe(false);
+  expect(verifyRaw(certificatePem, content, signature.match(/../g)!.reverse().join("")).valid).toBe(false);
 });

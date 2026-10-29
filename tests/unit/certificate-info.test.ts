@@ -84,47 +84,38 @@ describe("GetInfo", () => {
 });
 
 describe("the extensions' objects", () => {
-  it("KeyUsage and ExtendedKeyUsage of the stand's user certificate", async () => {
+  it("KeyUsage and ExtendedKeyUsage of the stand's user certificate, their flags 1 and 0 as CryptoPro's", async () => {
     const { session } = setup();
     const store = createObject("CAdESCOM.Store", session) as Store;
     await store.Open();
     const user = await (await (store.Certificates as Promise<Certificates>)).Item(1);
     const usage = await user.KeyUsage();
-    expect([await usage.IsPresent, await usage.IsCritical, await usage.IsDigitalSignatureEnabled, await usage.IsNonRepudiationEnabled, await usage.IsKeyCertSignEnabled]).toEqual([
-      true,
-      true,
-      true,
-      true,
-      false,
-    ]);
+    expect([await usage.IsPresent, await usage.IsCritical, await usage.IsDigitalSignatureEnabled, await usage.IsNonRepudiationEnabled, await usage.IsKeyCertSignEnabled]).toEqual([1, 1, 1, 1, 0]);
     const eku = await user.ExtendedKeyUsage();
-    expect([await eku.IsPresent, await eku.IsCritical]).toEqual([true, false]);
+    expect([await eku.IsPresent, await eku.IsCritical]).toEqual([1, 0]);
     const ekus = await eku.EKUs;
     expect(await ekus.Count).toBe(2);
     const first = await ekus.Item(1);
     expect([await first.Name, await first.OID]).toEqual([constants.CAPICOM_EKU_CLIENT_AUTH, "1.3.6.1.5.5.7.3.2"]);
     expect(await (await ekus.Item(2)).Name).toBe(4);
     const constraints = await user.BasicConstraints();
-    expect([await constraints.IsPresent, await constraints.IsCertificateAuthority]).toEqual([false, false]);
+    expect([await constraints.IsPresent, await constraints.IsCertificateAuthority]).toEqual([0, 0]);
   });
 
   it("BasicConstraints with a path length, an unknown EKU, and Extensions by index and by OID", async () => {
     const { session } = setup();
     const certificate = await imported(session, rich);
     const constraints = await certificate.BasicConstraints();
-    expect(await Promise.all([constraints.IsPresent, constraints.IsCritical, constraints.IsCertificateAuthority, constraints.IsPathLenConstraintPresent, constraints.PathLenConstraint])).toEqual([
-      true,
-      true,
-      true,
-      true,
-      0,
-    ]);
+    expect(await Promise.all([constraints.IsPresent, constraints.IsCritical, constraints.IsCertificateAuthority, constraints.IsPathLenConstraintPresent, constraints.PathLenConstraint])).toEqual([1, 1, 1, 1, 0]);
     expect(await (await (await (await certificate.ExtendedKeyUsage()).EKUs).Item(2)).Name).toBe(constants.CAPICOM_EKU_OTHER);
-    expect(await (await certificate.KeyUsage()).IsPresent).toBe(false);
+    expect(await (await certificate.KeyUsage()).IsPresent).toBe(0);
     const extensions = await certificate.Extensions();
     expect(await extensions.Count).toBe(7);
     const eku = await extensions.Item(2);
-    expect([await (await eku.OID).Value, await (await eku.OID).Name, await eku.IsCritical]).toEqual(["2.5.29.37", 21, true]);
+    expect([await (await eku.OID).Value, await (await eku.OID).Name, await eku.IsCritical]).toEqual(["2.5.29.37", 21, 1]);
+    // The names plug-in 2.0.15700 gives under ru_RU.UTF-8; an OID it was not seen naming stays as it is.
+    expect(await (await eku.OID).FriendlyName).toBe("Улучшенный ключ");
+    expect(await (await (await extensions.Item("2.5.29.32")).OID).FriendlyName).toBe("2.5.29.32");
     const policies = await extensions.Item("2.5.29.32");
     expect(await (await policies.EncodedData).Value()).toBe(`${Buffer.from(seq(seq(oid("1.2.643.100.113.1")), seq(oid("1.2.643.100.113.2")))).toString("base64")}\n`);
     await expect((await policies.EncodedData).Format()).rejects.toMatchObject({ number: 0x80004001 });
@@ -160,9 +151,10 @@ describe("Certificates.Find", () => {
     return names;
   }
 
-  it("by a piece of the root's name, the chain going through the extension's stores", async () => {
+  it("by a piece of the root's name, case-sensitive as CryptoPro's, the chain going through the extension's stores", async () => {
     const { session } = setup();
-    expect(await found(session, constants.CAPICOM_CERTIFICATE_FIND_ROOT_NAME, "stand test")).toEqual(["Stand User", "Иванов", "Отдел"]);
+    expect(await found(session, constants.CAPICOM_CERTIFICATE_FIND_ROOT_NAME, "Stand Test")).toEqual(["Stand User", "Иванов", "Отдел"]);
+    expect(await found(session, constants.CAPICOM_CERTIFICATE_FIND_ROOT_NAME, "stand test")).toEqual([]);
     const without = fakeSession(fakePlugin(), new FakePinDialog([]));
     expect(await found(without, constants.CAPICOM_CERTIFICATE_FIND_ROOT_NAME, "Stand")).toEqual([]);
   });

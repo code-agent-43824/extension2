@@ -476,9 +476,11 @@ export class Certificates {
           return at < x509.notBefore.getTime();
         case constants.CAPICOM_CERTIFICATE_FIND_TIME_EXPIRED:
           return x509.notAfter.getTime() < at;
+        // Case-sensitive, in the root's name as SubjectName gives it (quotes doubled), as plug-in 2.0.15700 finds it
+        // (the owner's comparison, docs/JOURNAL.md, 2026-10-29).
         case constants.CAPICOM_CERTIFICATE_FIND_ROOT_NAME: {
           const root = await item.rootName();
-          return root !== undefined && root.toLowerCase().includes(wanted.toLowerCase());
+          return root !== undefined && root.includes(wanted);
         }
         case constants.CAPICOM_CERTIFICATE_FIND_TEMPLATE_NAME:
           return parsing(() => templateNames(x509).some((name) => name.toLowerCase() === wanted.toLowerCase()));
