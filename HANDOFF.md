@@ -1,14 +1,22 @@
 # HANDOFF — что не закончено
 
-Обновлено: 2026-10-28.
+Обновлено: 2026-10-29.
 
-**Ничего не в работе.** Последними сделаны действия 38 и 39 [`docs/PLAN.md`](docs/PLAN.md): пункты 19–22 чек-листа
-для 1.11–1.15 и ключа 512 бит, скрипты `tools/dump-fields.js` и `tools/check-api.js`, выпуск 1.15.2 для проверки;
-стенд на последнем выпуске форка SoftHSMv2. Состояние —
+**Ничего не в работе.** Последним сделано действие 40 [`docs/PLAN.md`](docs/PLAN.md): расхождения ручной проверки 1.15.2
+и сверки с КриптоПро исправлены в 1.15.3. Состояние —
 [`docs/STATUS.md`](docs/STATUS.md).
 
 **Ждём от владельца** — без его слова не начинать:
 
+- Образцы к задаче 2026-10-29 (`check-api.json`, `cryptopro-check-api.json`, `cryptopro.json`, `ours.json`,
+  `compare-fields.txt`, `cryptopro-xades.xml` с `stand-ca.pem`) до агента не дошли: 1.15.3 сделан по описанию. Когда
+  пришлёт — сверить с ними `Value` атрибутов подписанта (`TextDecoder` против того, как КриптоПро заменяет неверные
+  байты UTF-8) и прогнать `cryptopro-xades.xml` через `verify_xmldsig.py`; образец XAdES — в `tests/fixtures/`.
+- `setup-cryptopro-csp.ts` после правок (корневой в `mRoot`, certmgr без ввода, `-inst_to_cont`) — его прогон: у агента
+  нет пакетов КриптоПро. Если плагин КриптоПро не доверяет корневому из `mRoot` — вернуть `uRoot` с ответом в окне GTK
+  (`DISPLAY`).
+- `PrivateKey.ProviderType`: у нас свойства нет, у КриптоПро для ключа в HDIMAGE — 80; для ключа на Рутокене данных нет
+  — нужен ли он и какой (`JOURNAL.md`, 2026-10-29).
 - Прогон [`docs/MANUAL-CHECK.md`](docs/MANUAL-CHECK.md) на настоящем Рутокене (действие 7 этапа 5). Что прислал —
   проверить: подписи — `tests/tools/verify_cms.py` и `verify_xmldsig.py` с сертификатом его УЦ и нашей проверкой
   (сертификат УЦ — на вторую вкладку настроек); `cryptopro.json` и `ours.json` — `scripts/compare-fields.ts`;
