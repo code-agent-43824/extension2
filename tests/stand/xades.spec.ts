@@ -6,8 +6,12 @@
 // start (127.0.0.1, and CryptoPro's, reached only with STAND_ONLINE=1), and a refusal is seen with the stand's service
 // named by another host, localhost.
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { stand, standDir } from "../../scripts/setup-stand.ts";
+import { encode } from "../../src/page/asn1.ts";
+import { digest } from "../../src/page/gost.ts";
+import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
 import { blankPage, clearSites, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
 import { startTsa, verifyXml, type TimestampService } from "./verify.ts";
@@ -161,6 +165,42 @@ test("signs XAdES-BES enveloping, and in a prefixed template without an Id, whic
   expect(filled.signed).toMatch(/<ds:Signature xmlns:ds="[^"]+" Id="Signature1-[0-9a-f-]+">/);
   expect(filled.signed).toContain("<xades:CertDigest><ds:DigestMethod ");
   expectXades(filled.signed);
+});
+
+// The layout of CryptoPro's own XAdES-BES (the owner's sample, docs/JOURNAL.md, 2026-10-29): the ds: prefix,
+// QualifyingProperties in the default namespace, EN 319 132's SigningCertificateV2 with IssuerSerialV2. The extension
+// fills such a template as it comes, so the independent verifier gets a signature laid out the same way; with the
+// signed properties canonicalized inclusively, lxml used to get their digest wrong.
+test("the independent verifier takes XAdES laid out as CryptoPro's: default namespace, SigningCertificateV2", async () => {
+  const page = await openStandPage(context, `${server.url}/`);
+  const certificate = parseCertificate(pemToDer(readFileSync(join(standDir, "user.pem"), "utf8")));
+  const certDigest = Buffer.from(digest("streebog256", certificate.der)).toString("base64");
+  // RFC 5035's IssuerSerial: GeneralNames with the issuer as a directoryName, and the serial number.
+  const serial = Uint8Array.from(Buffer.from(certificate.serialNumber, "hex"));
+  const issuerSerial = Buffer.from(encode(0x30, encode(0x30, encode(0xa4, certificate.issuerDer)), encode(0x02, serial))).toString("base64");
+  const gost = "urn:ietf:params:xml:ns:cpxmlsec:algorithms:gostr34112012-256";
+  const template =
+    `<document><title>Договор</title><ds:Signature xmlns:ds="${DS}" Id="sig-1"><ds:SignedInfo>` +
+    '<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>' +
+    '<ds:SignatureMethod Algorithm="urn:ietf:params:xml:ns:cpxmlsec:algorithms:gostr34102012-gostr34112012-256"/>' +
+    `<ds:Reference URI=""><ds:Transforms><ds:Transform Algorithm="${DS}enveloped-signature"/>` +
+    `<ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/></ds:Transforms><ds:DigestMethod Algorithm="${gost}"/><ds:DigestValue/></ds:Reference>` +
+    // No transform: the signed properties go in by inclusive C14N, the default namespace declared above them.
+    `<ds:Reference Type="http://uri.etsi.org/01903#SignedProperties" URI="#sp-1"><ds:DigestMethod Algorithm="${gost}"/><ds:DigestValue/></ds:Reference>` +
+    "</ds:SignedInfo><ds:SignatureValue/>" +
+    `<ds:Object><QualifyingProperties xmlns="${XADES}" Target="#sig-1"><SignedProperties Id="sp-1"><SignedSignatureProperties>` +
+    `<SigningTime/><SigningCertificateV2><Cert><CertDigest><ds:DigestMethod Algorithm="${gost}"/><ds:DigestValue>${certDigest}</ds:DigestValue></CertDigest>` +
+    `<IssuerSerialV2>${issuerSerial}</IssuerSerialV2></Cert></SigningCertificateV2></SignedSignatureProperties></SignedProperties></QualifyingProperties></ds:Object>` +
+    "</ds:Signature></document>";
+  const { signed, error } = await signXades(page, template, { type: "TEMPLATE", xades: "BES" }, ["XML-подпись XAdES-BES по шаблону"]);
+  expect(error).toBeUndefined();
+  expect(signed).toContain(`<QualifyingProperties xmlns="${XADES}" Target="#sig-1">`);
+  expect(signed).toContain("<SigningCertificateV2>");
+  expectXades(signed);
+  expect(await verifyInPage(page, signed!)).toEqual({ count: 1 });
+  // Another certificate's issuer and serial in IssuerSerialV2 do not pass.
+  const other = Buffer.from(encode(0x30, encode(0x30, encode(0xa4, certificate.issuerDer)), encode(0x02, Uint8Array.of(0x01)))).toString("base64");
+  expect(verifyXml(signed!.replace(issuerSerial, other)).signatures[0]!.checks.xades_issuer_serial).toBe(false);
 });
 
 test("signs XAdES-T with a timestamp from the stand's service, which the independent verifier checks", async () => {
