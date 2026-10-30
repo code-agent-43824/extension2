@@ -1,0 +1,54 @@
+<?xml version="1.0"?>
+<document><title>&#x414;&#x43E;&#x433;&#x43E;&#x432;&#x43E;&#x440;</title><ds:Signature xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Id="Signature1-a9a0de8e1-a40a-b386-8b9f-94bb77e7ad4">
+<ds:SignedInfo>
+<ds:CanonicalizationMethod Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+<ds:SignatureMethod Algorithm="urn:ietf:params:xml:ns:cpxmlsec:algorithms:gostr34102012-gostr34112012-256"/>
+<ds:Reference URI="">
+<ds:Transforms>
+<ds:Transform Algorithm="http://www.w3.org/2000/09/xmldsig#enveloped-signature"/>
+<ds:Transform Algorithm="http://www.w3.org/2001/10/xml-exc-c14n#"/>
+</ds:Transforms>
+<ds:DigestMethod Algorithm="urn:ietf:params:xml:ns:cpxmlsec:algorithms:gostr34112012-256"/>
+<ds:DigestValue>ywUumaBjpkMuBvRKQSQmN6lAVamYlO91qRwuIrIxO0A=</ds:DigestValue>
+</ds:Reference>
+<ds:Reference Type="http://uri.etsi.org/01903#SignedProperties" URI="#SignedPropertiesReferenceId1-a9a0de8e1-a40a-b386-8b9f-94bb77e7ad4">
+<ds:DigestMethod Algorithm="urn:ietf:params:xml:ns:cpxmlsec:algorithms:gostr34112012-256"/>
+<ds:DigestValue>79UGvctF/D4Vd19ZBZ3Jcml/Fyu+ZCMFQZlSXvKCLWI=</ds:DigestValue>
+</ds:Reference>
+</ds:SignedInfo>
+<ds:SignatureValue>zqV3Dng/YEfLH/QHl3kcL/bLrbFB8SLf/Kq5bs16KnuqwV3VHvPLOkvO0QsCNFzP
+6iM8cXtf7/r058vhJ9aoSA==</ds:SignatureValue>
+<ds:KeyInfo>
+<ds:X509Data>
+<ds:X509Certificate>MIIB9TCCAaKgAwIBAgIQQk1tahrSJESRlzQ27UHPZTAKBggqhQMHAQEDAjA6MQsw
+CQYDVQQGEwJSVTETMBEGA1UECgwK0KHRgtC10L3QtDEWMBQGA1UEAwwNU3RhbmQg
+VGVzdCBDQTAeFw0yNjEwMjcxOTMwMjZaFw0yODEwMjcxOTMwMjZaMFkxLzAtBgNV
+BAMeJgQaBEAEOAQ/BEIEPgQfBEAEPgAgBD0EMAAgBEEEQgQ1BD0ENAQ1MRkwFwYD
+VQQKHhAEHwRABD4EMgQ1BEAEOgQwMQswCQYDVQQGEwJSVTBmMB8GCCqFAwcBAQEB
+MBMGByqFAwICIwEGCCqFAwcBAQICA0MABECLzVpRdL5bwphcpzH9rSdRBUu8R2ln
+X5PK5SlyejfRQqLXXbCPAKmGgar8z7O9Mkgep0IG3EQHj/xFGFoFfm2wo14wXDAO
+BgNVHQ8BAf8EBAMCA/gwHQYDVR0lBBYwFAYIKwYBBQUHAwIGCCsGAQUFBwMEMCsG
+A1UdEAQkMCKADzIwMjYxMDI3MTkzMDI2WoEPMjAyNzEwMjgxOTMwMjZaMAoGCCqF
+AwcBAQMCA0EAu12C0RvOVfT7u9pCHOY6CpnzRJi1TPRBfzy3XlChkAlM/K8y2/IE
+ciUuDmwnbAaOHuMtakJ9ZjSxPls8bbkD8g==</ds:X509Certificate>
+</ds:X509Data>
+</ds:KeyInfo>
+<ds:Object>
+<QualifyingProperties xmlns="http://uri.etsi.org/01903/v1.3.2#" Target="#Signature1-a9a0de8e1-a40a-b386-8b9f-94bb77e7ad4">
+<SignedProperties Id="SignedPropertiesReferenceId1-a9a0de8e1-a40a-b386-8b9f-94bb77e7ad4">
+<SignedSignatureProperties>
+<SigningTime>2026-10-28T19:48:18.561Z</SigningTime>
+<SigningCertificateV2>
+<Cert>
+<CertDigest>
+<ds:DigestMethod xmlns:ds="http://www.w3.org/2000/09/xmldsig#" Algorithm="urn:ietf:params:xml:ns:cpxmlsec:algorithms:gostr34112012-256"/>
+<ds:DigestValue xmlns:ds="http://www.w3.org/2000/09/xmldsig#">362w2pHjZ6WEMwi2SnyD/dcqQCedJSm6oT72Z8d368E=</ds:DigestValue>
+</CertDigest>
+<IssuerSerialV2>MFIwPqQ8MDoxCzAJBgNVBAYTAlJVMRMwEQYDVQQKDArQodGC0LXQvdC0MRYwFAYDVQQDDA1TdGFuZCBUZXN0IENBAhBCTW1qGtIkRJGXNDbtQc9l</IssuerSerialV2>
+</Cert>
+</SigningCertificateV2>
+</SignedSignatureProperties>
+</SignedProperties>
+</QualifyingProperties>
+</ds:Object>
+</ds:Signature></document>

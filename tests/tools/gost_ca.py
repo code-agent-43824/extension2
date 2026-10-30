@@ -1,8 +1,8 @@
 """Test certificate authority for the stand, independent of the Rutoken stack.
 
 Issues a GOST R 34.10-2012/256 certificate for a PKCS #10 request made on the
-fake Rutoken. The CA key lives in software (gostcrypto) under the given
-directory and is created on first use.
+fake Rutoken, and the CA's empty certificate revocation list. The CA key lives in
+software (gostcrypto) under the given directory and is created on first use.
 
 Byte-order conventions (established on the stand, see docs/JOURNAL.md):
 - a public key in SubjectPublicKeyInfo is x||y, each little-endian; gostcrypto
@@ -12,6 +12,7 @@ Byte-order conventions (established on the stand, see docs/JOURNAL.md):
   32-byte halves swapped.
 
 Usage: gost_ca.py issue CA_DIR CSR_PEM OUT_CERT_PEM
+       gost_ca.py crl CA_DIR OUT_CRL_PEM
 """
 
 import base64
@@ -186,8 +187,28 @@ def issue(ca_dir, csr_pem_path, out_path):
     open(out_path, "w").write(pem("CERTIFICATE", cert))
 
 
+# An empty CRL (v2, CRL number 1) valid for a year: CryptoPro checks revocation and refuses a certificate of a CA that
+# publishes none (0x800B010E).
+def empty_crl(ca_dir, out_path):
+    ca_key, ca_cert = load_or_create_ca(ca_dir)
+    ca_subject = core.load(ca_cert)[0][5].dump()
+    now = datetime.datetime.now(datetime.timezone.utc).replace(microsecond=0)
+    sig_alg = seq(oid(OID_SIG_GOST2012_256))
+    tbs = seq(
+        integer(1),
+        sig_alg,
+        ca_subject,
+        utc(now - datetime.timedelta(days=1)),
+        utc(now + datetime.timedelta(days=365)),
+        explicit(0, seq(extension("2.5.29.20", integer(1)))),
+    )
+    open(out_path, "w").write(pem("X509 CRL", seq(tbs, sig_alg, bitstring(gost_sign(ca_key, tbs)))))
+
+
 if __name__ == "__main__":
     if len(sys.argv) == 5 and sys.argv[1] == "issue":
         issue(sys.argv[2], sys.argv[3], sys.argv[4])
+    elif len(sys.argv) == 4 and sys.argv[1] == "crl":
+        empty_crl(sys.argv[2], sys.argv[3])
     else:
         sys.exit(__doc__)

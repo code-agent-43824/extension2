@@ -8,6 +8,7 @@
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { stand, standDir } from "../../scripts/setup-stand.ts";
 import { encode } from "../../src/page/asn1.ts";
 import { digest } from "../../src/page/gost.ts";
@@ -201,6 +202,17 @@ test("the independent verifier takes XAdES laid out as CryptoPro's: default name
   // Another certificate's issuer and serial in IssuerSerialV2 do not pass.
   const other = Buffer.from(encode(0x30, encode(0x30, encode(0xa4, certificate.issuerDer)), encode(0x02, Uint8Array.of(0x01)))).toString("base64");
   expect(verifyXml(signed!.replace(issuerSerial, other)).signatures[0]!.checks.xades_issuer_serial).toBe(false);
+});
+
+// XAdES-BES made by CryptoPro's plug-in 2.0.15700 itself, in the owner's run of 1.15.4, with the CA of his stand
+// (docs/JOURNAL.md, 2026-10-30): its signed properties go in by inclusive C14N, with no transform.
+test("the independent verifier and the extension's Verify take a XAdES-BES made by CryptoPro", async () => {
+  const signed = readFileSync(join(repoRoot, "tests", "fixtures", "cryptopro-xades.xml"), "utf8");
+  const report = verifyXml(signed, join(repoRoot, "tests", "fixtures", "cryptopro-xades-ca.pem"));
+  expect(report.signatures[0]!.checks).toEqual(besChecks);
+  expect(report.valid).toBe(true);
+  const page = await openStandPage(context, `${server.url}/`);
+  expect(await verifyInPage(page, signed)).toEqual({ count: 1 });
 });
 
 test("signs XAdES-T with a timestamp from the stand's service, which the independent verifier checks", async () => {

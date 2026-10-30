@@ -29,7 +29,8 @@ export const cryptoproCsp = {
   container: "\\\\.\\HDIMAGE\\stand-cryptopro",
   commonName: "КриптоПро на стенде",
 };
-export const cryptoproCspTrustedSites = [`http://127.0.0.1:${cryptoproCsp.pagePort}`, "https://testgost2012.cryptopro.ru"];
+// www.cryptopro.ru for the demo pages the owner opens by hand: the plug-in asks about it in a GTK window otherwise.
+export const cryptoproCspTrustedSites = [`http://127.0.0.1:${cryptoproCsp.pagePort}`, "https://testgost2012.cryptopro.ru", "https://www.cryptopro.ru"];
 
 // In dependency order. pcscd and GTK are left out on purpose: no card reader and no display on the stand.
 const packages = [
@@ -117,8 +118,10 @@ function install(debDir: string): void {
 // window), with a certificate from the stand's test CA. The CA goes into the computer's root store: certmgr asks the
 // user before adding to their own (uRoot), on the terminal or in a GTK window, and in the owner's cloud environment
 // (root, no display) it did not finish after the answer (docs/JOURNAL.md, 2026-10-29); a root added by root for the
-// whole computer is not asked about. The certificate goes into the user's My store bound to the key, and into the
-// container itself: webtools.html lists the signers from the containers' certificates.
+// whole computer is not asked about. CryptoPro checks revocation, so the CA's empty CRL goes into the computer's CA
+// store: without it CryptoPro refuses its own signature (0x800B010E, the owner's run of 1.15.4). The certificate goes
+// into the user's My store bound to the key, and into the container itself: webtools.html lists the signers from the
+// containers' certificates (certmgr calls -inst_to_cont legacy, and does it).
 function provisionContainer(): void {
   const work = join(cryptoproCsp.dir, "work");
   rmSync(work, { recursive: true, force: true });
@@ -141,6 +144,9 @@ function provisionContainer(): void {
   if (!listed("uRoot").includes(caThumbprint) && !listed("mRoot").includes(caThumbprint)) {
     runUnattended(`${bin}/certmgr`, ["-inst", "-store", "mRoot", "-file", join(caDir, "ca.pem")]);
   }
+  const crl = join(work, "ca.crl");
+  run(venvPython, [join(repoRoot, "tests", "tools", "gost_ca.py"), "crl", caDir, crl]);
+  runUnattended(`${bin}/certmgr`, ["-inst", "-crl", "-store", "mCA", "-file", crl]);
   runUnattended(`${bin}/certmgr`, ["-inst", "-store", "uMy", "-file", certificate, "-cont", cryptoproCsp.container, "-at_signature"]);
   runUnattended(`${bin}/certmgr`, ["-inst", "-file", certificate, "-cont", cryptoproCsp.container, "-inst_to_cont", "-at_signature"]);
 }

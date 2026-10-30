@@ -118,8 +118,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   certificate, and the report it writes. English, being executed by a model.
 - `tests/unit/` — Vitest unit tests (`vitest.config.ts` limits Vitest to this directory); `fakes.ts` holds the
   fake plugin and PIN window; `tests/fixtures/` holds copies of a stand certificate and its CA so they run without
-  the stand, and `verify.json` signatures made by CryptoPro's plug-in and crafted ones (how: `docs/JOURNAL.md`,
-  2026-09-24) with the CA they chain to.
+  the stand, `verify.json` signatures made by CryptoPro's plug-in and crafted ones (how: `docs/JOURNAL.md`,
+  2026-09-24) with the CA they chain to, and `cryptopro-xades.xml`, a XAdES-BES by CryptoPro's plug-in with its CA
+  (the owner's run, 2026-10-30) for `xades.spec.ts`.
 - `tests/stand/` — Playwright tests on the stand; `harness.ts` launches Chromium with the adapter and serves pages, offline;
   `smoke.spec.ts` checks the stand itself (plugin, adapter, fake token) without the extension; `sites.spec.ts` the
   per-site enabling from the options page and the popup; `restore.spec.ts` restarts a profile set to continue where it
@@ -144,7 +145,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `enveloped-xml.page.ts`, the page code with a fake plugin whose `derive` the spec answers with the stand CA's key
   (the fake token cannot make that key); `verify.ts` runs the independent tools on a signature or an encrypted
   message, and starts `tsa.py`.
-- `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, `verify_cms.py` CMS verifier with CAdES-T
+- `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA and its empty CRL, `verify_cms.py` CMS verifier with CAdES-T
   timestamps, `tsa.py` RFC 3161 timestamp service with a certificate from the test CA, `verify_xmldsig.py` XMLDSig and XAdES
   verifier on lxml, `verify_raw.py` RawSignature's bare signatures, `enveloped_info.py` what an EnvelopedData is encrypted with and for), hash-pinned in
   `requirements.txt`.
