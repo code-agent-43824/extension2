@@ -2,6 +2,34 @@
 
 Новые записи сверху.
 
+## 2026-11-16 — как страницы говорят с Госплагином и с плагином Госуслуг
+
+**Гипотеза.** Страница общается с обоими плагинами только через их расширения, так что подмену можно сделать на
+уровне страницы, не трогая ядер.
+
+**Что сделали.** Прочитали отчёты владельца о плагинах на fake Рутокене (2026-11-04, IFCPlugin 3.1.1 и Госплагин 1.3.42);
+скачали расширение Госплагина 1.3.43.1 из Chrome Web Store (`jabjbhgjaidecageckilhonbggakppme`, MV3) и расширение
+IFCPlugin 1.2.8 для Firefox с ds-plugin.gosuslugi.ru (в Chrome Web Store `pbefkdcndngodfeigfdgiodgnmbgcfha` больше не
+отдаётся: ответ 204), прочитали их скрипты. Код расширений в репозиторий не кладём.
+
+**Что показала проверка.**
+
+- IFCPlugin: content script на 19 доменах (`document_end`) кладёт в `body` `div#ifcplugin-extension-is-installed` и, если
+  открылся порт к фоновому скрипту, `div#ifc-plugin-is-installed`. Страница шлёт `window.postMessage(JSON.stringify({type:
+  "TO_IFC_EXT", msg_data}))`, `msg_data` уходит нативному хосту `ru.rtlabs.ifcplugin` как есть; ответ хоста приходит
+  строкой `{"type":"FROM_IFC_EXT","msg_data":…}`, разрыв порта — `{"type":"IFC_EXT_DISCONNECT"}`. Запрос хоста —
+  `{"func_name","params"}`, ответ — `{"error_code",…}` (отчёт владельца: список функций и кодов).
+- Госплагин: content script на всех сайтах (`document_start`, все фреймы) по `DOMContentLoaded` кладёт в `head`
+  `<meta content="extension" property="gosuslugi.plugin.extension.content">` (если такая уже есть — уступает и
+  отключается) и слушает `window.postMessage` объектов с `meta.format.category = "gosuslugi.plugin"` и пустым `node`:
+  `registered`, `loadScripts` (вставляет в страницу свои `system.js`, `crypto.js`, `formats.js` из
+  `web_accessible_resources`), `chunkSize`, `cancelChunks` отвечает сам, остальное везёт ядру; ответ — тот же объект с
+  `node` отправителя и `method.result` строкой JSON. На странице — объекты `gosuslugiPluginSystem`/`gosuslugiPluginCrypto`
+  с методами `system.*` и `crypto.*` из отчёта.
+
+**Вывод.** Обе подмены — на уровне страницы и нашего изолированного мира: метки, сообщения и свои реализации
+страничных объектов; ответы ядер — по эталону (действие 43).
+
 ## 2026-10-30 — прогон владельца 1.15.4: всё сошлось, КриптоПро нужен список отзыва УЦ стенда
 
 **Гипотеза.** 1.15.3–1.15.4 устранили расхождения прогона 1.15.2; правки стенда и инструментов работают у владельца.
