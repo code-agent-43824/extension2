@@ -81,10 +81,12 @@ test.describe("on the stand token", () => {
     expect(await page.evaluate(() => typeof (window as unknown as { cadesplugin?: unknown }).cadesplugin)).toBe("undefined");
     expect(await ifc(page, "version")).toEqual({ error_code: 0, version: "3.1.1" });
     expect(await ifc(page, "create", { file_config: "/etc/ifc.cfg" })).toEqual({ error_code: 0 });
-    // The fork's serial and slot description, as the core showed them.
-    expect(await ifc(page, "get_list_info")).toEqual({
+    // The fork's slot description, as the core showed it; the serial is the token's, in hex (each stand build has its own).
+    const list = (await ifc(page, "get_list_info")) as { ifc_list: { serial_number: string }[] };
+    expect(list.ifc_list[0]!.serial_number).toMatch(/^[0-9A-F]{8}$/);
+    expect(list).toEqual({
       error_code: 0,
-      ifc_list: [{ alg: "gost2001", alias: "ruTokenECP", description: "Aktiv Rutoken ECP 0", model: "Rutoken ECP", name: "Актив Рутокен ЭЦП", num: "0", path: "librtpkcs11ecp.so", serial_number: "40313400", skip_pkcs11_list: "", type: "pkcs11" }],
+      ifc_list: [{ alg: "gost2001", alias: "ruTokenECP", description: "Aktiv Rutoken ECP 0", model: "Rutoken ECP", name: "Актив Рутокен ЭЦП", num: "0", path: "librtpkcs11ecp.so", serial_number: list.ifc_list[0]!.serial_number, skip_pkcs11_list: "", type: "pkcs11" }],
       ifc_list_length: 1,
     });
     const entry = { cert_issuer: opensslName(user.issuer), cert_sign_alg: user.publicKeyAlgorithm, cert_sn: opensslSerial(user), cert_subject: opensslName(user.subject), cert_valid_from: opensslTime(user.notBefore), cert_valid_to: opensslTime(user.notAfter), id: user.thumbprint };

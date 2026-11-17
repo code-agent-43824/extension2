@@ -65,6 +65,13 @@ async function openGosPage(context: BrowserContext): Promise<Page> {
   return page;
 }
 
+// The token's store name, "Rutoken ECP <serial in hex>".
+async function storeName(page: Page): Promise<string> {
+  const [provider] = JSON.parse((await api(page, "gosuslugiPluginCrypto", "providers", {})).method.result) as { name: string }[];
+  expect(provider!.name).toMatch(/^Rutoken ECP [0-9A-F]{8}$/);
+  return provider!.name;
+}
+
 // Signs through the PIN window, as a user does.
 async function withPin(page: Page, call: Promise<Answer>): Promise<Answer> {
   await pinDialog(page).locator("input[name=pin]").fill(userPin);
@@ -129,9 +136,12 @@ test.describe("on the stand token", () => {
     expect((await api(page, "gosuslugiPluginSystem", "lastError")).method.result).toBe("0 Application 'Успешное выполнение операции'");
     expect((await api(page, "gosuslugiPluginSystem", "ipConfig")).method.result).toBe("[]");
     expect(JSON.parse((await api(page, "gosuslugiPluginSystem", "config")).method.result)[1].format.type).toBe("crypto");
-    expect(JSON.parse((await api(page, "gosuslugiPluginCrypto", "providers", {})).method.result)).toEqual([{ name: "Rutoken ECP 40313400", type: "0", version: "hardware version: 67.4 firmware version: 34.2", token: "true" }]);
+    // The token's serial in hex, as the core names it (each stand build has its own).
+    const providers = JSON.parse((await api(page, "gosuslugiPluginCrypto", "providers", {})).method.result);
+    const store = await storeName(page);
+    expect(providers).toEqual([{ name: store, type: "0", version: "hardware version: 67.4 firmware version: 34.2", token: "true" }]);
     const tokens = JSON.parse((await api(page, "gosuslugiPluginCrypto", "tokens", {})).method.result);
-    expect(tokens).toMatchObject([{ store: "Rutoken ECP 40313400", provider: "Rutoken ECP 40313400", label: "stand", serial: "40313400", model: "Rutoken ECP", containers: [user.thumbprint] }]);
+    expect(tokens).toMatchObject([{ store, provider: store, label: "stand", serial: store.slice("Rutoken ECP ".length), model: "Rutoken ECP", containers: [user.thumbprint] }]);
     const certificates = JSON.parse((await api(page, "gosuslugiPluginCrypto", "certificates", { store: "", fields: {} })).method.result);
     expect(certificates).toHaveLength(1);
     expect(certificates[0]).toMatchObject({
@@ -144,7 +154,7 @@ test.describe("on the stand token", () => {
       hasPrivateKey: "true",
       keyUsage: "dataencipherment;digitalsignature;keyagreement;keyencipherment;nonrepudiation",
       enhancedKeyUsage: "1.3.6.1.5.5.7.3.2;1.3.6.1.5.5.7.3.4",
-      provider: "Rutoken ECP 40313400",
+      provider: store,
       container: user.thumbprint,
     });
     expect(JSON.parse((await api(page, "gosuslugiPluginCrypto", "certificates", { store: "", fields: { thumbprint: "00" } })).method.result)).toEqual([]);
@@ -156,7 +166,7 @@ test.describe("on the stand token", () => {
     expect((junk.meta.content as { transferEncoding: string }).transferEncoding).toBe("");
     const data = Buffer.from("Привет, мир!");
     const hash = JSON.parse((await api(page, "gosuslugiPluginCrypto", "hash", { certificate, file: file("Привет, мир!"), algorithm: "" })).method.result);
-    expect(hash).toEqual({ hash: Buffer.from(digest("streebog256", data)).toString("hex").toUpperCase(), provider: "Rutoken ECP 40313400", algorithm: "1.2.643.7.1.1.2.2" });
+    expect(hash).toEqual({ hash: Buffer.from(digest("streebog256", data)).toString("hex").toUpperCase(), provider: store, algorithm: "1.2.643.7.1.1.2.2" });
     expect(JSON.parse((await api(page, "gosuslugiPluginCrypto", "hash", JSON.stringify({ file: file("Привет, мир!"), algorithm: "sha256" }))).method.result)).toEqual({
       hash: Buffer.from(digest("sha256", data)).toString("hex"),
       provider: "",
@@ -227,9 +237,10 @@ test.describe("on a copy of the token", () => {
 
   test("makes a key and request, installs the issued certificate, signs with it and deletes it", async () => {
     const page = await openGosPage(context);
+    const store = await storeName(page);
     const answer = await withPin(
       page,
-      api(page, "gosuslugiPluginCrypto", "certificateRequest", { subject: "2.5.4.3=Запрос Госплагина;2.5.4.6=RU", provider: "Rutoken ECP 40313400", extendedKeyUsageOids: "1.3.6.1.5.5.7.3.2", certificatePolicies: "1.2.643.100.113.1", keyUsage: "", publicKeyAlgorithmParamSet: "" }),
+      api(page, "gosuslugiPluginCrypto", "certificateRequest", { subject: "2.5.4.3=Запрос Госплагина;2.5.4.6=RU", provider: store, extendedKeyUsageOids: "1.3.6.1.5.5.7.3.2", certificatePolicies: "1.2.643.100.113.1", keyUsage: "", publicKeyAlgorithmParamSet: "" }),
     );
     const result = JSON.parse(answer.method.result);
     expect(result.container.name).toMatch(/^rt1-[0-9a-f-]{36}$/);
@@ -241,12 +252,12 @@ test.describe("on a copy of the token", () => {
     const issued = parseCertificate(pemToDer(readFileSync(join(outDir, "gos.pem"), "utf8")));
     const issuedFile = { content: Buffer.from(issued.der).toString("base64"), path: "", contentEncoding: "base64" };
     expect(await api(page, "gosuslugiPluginCrypto", "addCertificate", { certificate: issuedFile, container: "", store: "" })).toMatchObject({ code: "30013" });
-    expect((await withPin(page, api(page, "gosuslugiPluginCrypto", "addCertificate", { certificate: issuedFile, container: "", store: "Rutoken ECP 40313400" }))).method.result).toBe("");
+    expect((await withPin(page, api(page, "gosuslugiPluginCrypto", "addCertificate", { certificate: issuedFile, container: "", store }))).method.result).toBe("");
     // Again: there already, no PIN.
-    expect((await api(page, "gosuslugiPluginCrypto", "addCertificate", { certificate: issuedFile, container: "", store: "Rutoken ECP 40313400" })).method.result).toBe("");
+    expect((await api(page, "gosuslugiPluginCrypto", "addCertificate", { certificate: issuedFile, container: "", store })).method.result).toBe("");
     const signed = await withPin(page, api(page, "gosuslugiPluginCrypto", "signature", { files: [file("Новым ключом")], certificate: issuedFile, type: "attached" }));
     expect(verifyCms(JSON.parse(signed.method.result)[0].content).valid).toBe(true);
-    expect((await withPin(page, api(page, "gosuslugiPluginCrypto", "deleteCertificate", { certificate: issuedFile, store: "Rutoken ECP 40313400" }))).method.result).toBe("true");
-    expect(await api(page, "gosuslugiPluginCrypto", "deleteCertificate", { certificate: issuedFile, store: "Rutoken ECP 40313400" })).toMatchObject({ code: "30019" });
+    expect((await withPin(page, api(page, "gosuslugiPluginCrypto", "deleteCertificate", { certificate: issuedFile, store }))).method.result).toBe("true");
+    expect(await api(page, "gosuslugiPluginCrypto", "deleteCertificate", { certificate: issuedFile, store })).toMatchObject({ code: "30019" });
   });
 });
