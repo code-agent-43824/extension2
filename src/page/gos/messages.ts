@@ -81,8 +81,9 @@ export function localAnswer(message: PageMessage, result: string, extraMeta: Rec
 // The core's time in its route: "17.11.2026, 13:39:57".
 const coreTime = () => new Date().toLocaleString("ru-RU");
 
-// An answer of the core: its result, or its error.
-export function coreAnswer(message: PageMessage, result: string, error?: GosError): Record<string, unknown> {
+// An answer of the core: its result, or its error. `who` is the user and computer it names: made up by the extension
+// (src/page/identity.ts).
+export function coreAnswer(message: PageMessage, result: string, error?: GosError, who: { user: string; computer: string } = { user: "(none)", computer: "(none)" }): Record<string, unknown> {
   const route = firstRoute(message);
   return {
     id: message.id,
@@ -99,8 +100,7 @@ export function coreAnswer(message: PageMessage, result: string, error?: GosErro
       content: { type: "", charset: "", transferEncoding: error ? "" : "binary" },
       routes: [{ node: route.node, time: route.time }, { node: "plugin", time: coreTime() }, contentRoute()],
       data: {},
-      // The core names the user and the computer here; the extension does not tell them.
-      userAgent: JSON.stringify({ user: "(none)", pc: "(none)", process: "gosuslugi_plugin" }),
+      userAgent: JSON.stringify({ user: who.user, pc: who.computer, process: "gosuslugi_plugin" }),
     },
   };
 }

@@ -8,6 +8,7 @@ import type { Clock } from "../rutoken.ts";
 import { loadScripts, register, registered, SCRIPTS } from "./api.ts";
 import { callCore, newCoreContext, type CoreContext, type Files } from "./core.ts";
 import { CATEGORY, CONTENT_NODE, coreAnswer, GosError, localAnswer, type PageMessage } from "./messages.ts";
+import { pageIdentity, type FakeIdentity } from "../identity.ts";
 
 type Win = Window & Record<string, unknown>;
 
@@ -52,7 +53,7 @@ export function startGosplugin(win: Win, clock: Clock): void {
   let active = false;
   let chunkSize = 524288;
   let context: Promise<CoreContext> | undefined;
-  const coreContext = () => (context ??= pageSession(win, clock).then(newCoreContext));
+  const coreContext = () => (context ??= pageSession(win, clock).then((session) => newCoreContext(session, pageIdentity(win, clock), win.navigator?.platform ?? "")));
   const post = (answer: unknown) => win.postMessage(answer, "*");
 
   const handle = async (message: PageMessage) => {
@@ -93,8 +94,10 @@ export function startGosplugin(win: Win, clock: Clock): void {
         return;
     }
     let ready: CoreContext;
+    let who: FakeIdentity;
     try {
       ready = await coreContext();
+      who = await ready.identity;
     } catch {
       return post(coreAnswer(message, "", new GosError(20001)));
     }
@@ -102,12 +105,12 @@ export function startGosplugin(win: Win, clock: Clock): void {
       const fromObject = data !== null && typeof data === "object";
       const request = fromObject && (data as { certificate?: unknown }).certificate instanceof Blob ? { ...(data as object), certificate: await fromBlob((data as { certificate: Blob }).certificate) } : data;
       const result = await callCore(ready, module, type, request, filesOf(win, fromObject, type === "signature" || type === "signatureV2"));
-      post(coreAnswer(message, result));
+      post(coreAnswer(message, result, undefined, who));
     } catch (error) {
       const gosError = error instanceof GosError ? error : new GosError(20001);
       if (!(error instanceof GosError)) console.warn("Рутокен вместо Госплагина:", error);
       ready.lastError = gosError.errorMessage;
-      post(coreAnswer(message, "", gosError));
+      post(coreAnswer(message, "", gosError, who));
     }
   };
 

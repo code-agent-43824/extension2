@@ -2,6 +2,7 @@
 import { CadesError } from "./errors.ts";
 import type { Session } from "./objects/session.ts";
 import type { PinRequest } from "./pin-dialog.ts";
+import { thumbprintOfCertId, type TokenKeyIds } from "./key-ids.ts";
 import { RutokenError, rutokenErrorCode } from "./rutoken.ts";
 
 // HRESULTs CryptoPro reports for the same situations.
@@ -110,22 +111,30 @@ export function knownKey(session: Session, serial: string, certId: string): bool
   return keyChecks.get(session)?.get(serial)?.get(certId);
 }
 
+// At each login, while the Rutoken Plugin answers them: which certificate has its key, kept for the page, and the keys'
+// ids, kept by the extension for the Gosuslugi plug-ins' lists asked without a PIN (src/page/key-ids.ts).
 async function checkKeys(session: Session, deviceId: number, serial: string): Promise<void> {
   const tokens = keyChecks.get(session) ?? new Map<string, Map<string, boolean>>();
   keyChecks.set(session, tokens);
-  if (tokens.has(serial)) return;
   const plugin = session.plugin;
   const keys = new Map<string, boolean>();
+  const ids: TokenKeyIds = { certificates: {}, keys: [] };
   for (const certId of await plugin.enumerateCertificates(deviceId, await plugin.CERT_CATEGORY_USER)) {
     try {
-      await plugin.getKeyByCertificate(deviceId, certId);
+      ids.certificates[thumbprintOfCertId(certId)] = await plugin.getKeyByCertificate(deviceId, certId);
       keys.set(certId, true);
     } catch (error) {
       // Only "no key has been found" says so; anything else leaves it unknown.
       if (rutokenErrorCode(error) === RutokenError.KEY_NOT_FOUND) keys.set(certId, false);
     }
   }
-  tokens.set(serial, keys);
+  if (!tokens.has(serial)) tokens.set(serial, keys);
+  try {
+    ids.keys = await plugin.enumerateKeys(deviceId, "");
+  } catch {
+    ids.keys = Object.values(ids.certificates);
+  }
+  session.rememberKeyIds(serial, ids);
 }
 
 // The operations of a page that log in, chained: each starts once the one before it has logged out.
@@ -173,6 +182,11 @@ export function withGivenPin<T>(session: Session, deviceId: number, pin: string,
     try {
       return await work();
     } finally {
+      try {
+        await checkKeys(session, deviceId, String(await session.plugin.getDeviceInfo(deviceId, await session.plugin.TOKEN_INFO_SERIAL)));
+      } catch {
+        // The ids stay as they were known.
+      }
       await logout(session, deviceId);
     }
   });

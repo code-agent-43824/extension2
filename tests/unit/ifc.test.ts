@@ -90,12 +90,20 @@ describe("IFCPlugin's functions", () => {
     expect(await ask("get_list_certs_by_cryptoid_array", {})).toEqual({ error_code: 0, result_array: [] });
   });
 
-  it("lists keys after the site's PIN: a certificate's, and one without a certificate by its id in Windows-1251", async () => {
-    const { ask, plugin } = setup();
+  it("lists keys after the site's PIN by their ids in Windows-1251, and from then on the certificates too", async () => {
+    // The certificate's key is "key1".
+    const { ask, plugin } = setup({ getKeyByCertificate: async () => "6b:65:79:31" });
+    plugin.enumerateKeys = async () => ["6b:65:79:31", "0a:bc"];
     expect(await ask("get_list_keys", { cryptoID: "ruTokenECP/0" })).toEqual({ error_code: 5 });
     expect(await ask("get_list_keys", { cryptoID: "ruTokenECP/0", userPin: "1111" })).toEqual({ error_code: 160 });
+    // Before any login the certificate goes by its thumbprint.
+    expect(((await ask("get_list_certs", { cryptoID: "ruTokenECP/0" })) as { cert_list: { id: string }[] }).cert_list[0]!.id).toBe(standUser.thumbprint);
     const keys = (await ask("get_list_keys", { cryptoID: "ruTokenECP/0", userPin })) as { keys_list: Record<string, string>[] };
-    expect(keys.keys_list.map((key) => key.id)).toEqual([standUser.thumbprint, decodeCp1251(Uint8Array.of(0x0a, 0xbc))]);
+    expect(keys.keys_list.map((key) => key.id)).toEqual(["key1", decodeCp1251(Uint8Array.of(0x0a, 0xbc))]);
+    // The login told the extension the key's id: the list without a PIN shows it, and it names the container.
+    expect(((await ask("get_list_certs", { cryptoID: "ruTokenECP/0" })) as { cert_list: { id: string }[] }).cert_list[0]!.id).toBe("key1");
+    expect(await ask("load_x509_from_container", { containerId: "ruTokenECP/0/key1" })).toEqual({ error_code: 0, x509Handle: 2 });
+    expect(await ask("load_x509_from_container", { containerId: container })).toEqual({ error_code: 0, x509Handle: 3 });
     expect(keys.keys_list[1]).toEqual({ cert_issuer: "", cert_sign_alg: "", cert_sn: "", cert_subject: "", cert_valid_from: "", cert_valid_to: "", id: "\nј" });
     // No window: the PIN is the site's, and the login ends with the request (the refused one never began).
     expect(plugin.calls.login).toEqual(["1111", userPin]);

@@ -36,6 +36,17 @@
       как для других сайтов.</p>
   </section>
 
+  <section id="identity-section">
+    <h1>Госплагин: пользователь, компьютер и сеть</h1>
+    <p class="note">Настоящий Госплагин сообщает сайту имя пользователя, имя компьютера и сетевые адаптеры. Расширение
+      сообщает вымышленные: их один раз даёт генератор fakerapi.it, а если он не ответил — один из трёх встроенных
+      наборов. Настоящие данные этого компьютера расширению не видны и никуда не уходят.</p>
+    <dl id="identity" class="identity"></dl>
+    <p id="identity-empty" class="note" hidden>Ещё не созданы: появятся, когда сайт впервые обратится к Госплагину.</p>
+    <button type="button" id="identity-new">Создать заново</button>
+    <span id="identity-status" class="note" role="status"></span>
+  </section>
+
   <section id="validity-section">
     <h1>Проверка сертификатов</h1>
     <label><input type="checkbox" name="extended-validity"> Расширенная проверка валидности сертификата</label>

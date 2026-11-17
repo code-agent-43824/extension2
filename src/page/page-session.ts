@@ -7,6 +7,7 @@ import { offerRootByLink } from "./root-links.ts";
 import { addCertificate, storeCertificates } from "./roots.ts";
 import { loadRutokenPlugin, type Clock } from "./rutoken.ts";
 import { timestampAccess, timestampResponse } from "./timestamps.ts";
+import { loadKeyIds, saveKeyIds, type KeyIds } from "./key-ids.ts";
 
 // The adapter's page script is injected at document_start, so by DOMContentLoaded it is either there
 // or about to be. Waiting the full load timeout for an adapter that is not installed would only delay
@@ -18,6 +19,7 @@ const sessions = new WeakMap<object, Promise<Session>>();
 export function pageSession(win: Window & Record<string, unknown>, clock: Clock): Promise<Session> {
   let session = sessions.get(win);
   if (!session) {
+    let keyIds: Promise<KeyIds> | undefined;
     session = loadRutokenPlugin(win, ADAPTER_WAIT_MS, clock).then((plugin): Session => ({
       plugin,
       origin: win.location?.origin ?? "",
@@ -30,6 +32,13 @@ export function pageSession(win: Window & Record<string, unknown>, clock: Clock)
       },
       timestampAccess: (url) => timestampAccess(win, clock, url),
       timestamp: (url, request) => timestampResponse(win, clock, url, request),
+      keyIds: () => (keyIds ??= loadKeyIds(win, clock)),
+      rememberKeyIds(serial, ids) {
+        void (keyIds ??= loadKeyIds(win, clock)).then((known) => {
+          known[serial] = ids;
+        });
+        saveKeyIds(win, serial, ids);
+      },
     }));
     sessions.set(win, session);
   }

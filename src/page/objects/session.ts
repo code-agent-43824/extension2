@@ -3,6 +3,7 @@ import type { RootOffer } from "../root-links.ts";
 import type { AddStore, StoreCertificates } from "../roots.ts";
 import type { RutokenPlugin } from "../rutoken.ts";
 import type { X509 } from "../x509.ts";
+import type { KeyIds, TokenKeyIds } from "../key-ids.ts";
 
 // What emulated objects share: the loaded Rutoken Plugin and the page they serve.
 export interface Session {
@@ -23,4 +24,7 @@ export interface Session {
   // service's answer to a TimeStampReq (src/page/timestamps.ts).
   timestampAccess(url: string): Promise<void>;
   timestamp(url: string, request: Uint8Array): Promise<Uint8Array>;
+  // The keys' CKA_IDs learnt at earlier logins, and the ones a login has just learnt (src/page/key-ids.ts).
+  keyIds(): Promise<KeyIds>;
+  rememberKeyIds(serial: string, keyIds: TokenKeyIds): void;
 }

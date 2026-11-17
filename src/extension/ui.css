@@ -38,3 +38,6 @@ fieldset.plugins legend { padding: 0; margin-bottom: 4px; color: #555; }
 .plugins-inline { display: flex; flex-wrap: wrap; gap: 4px 14px; flex: 1; }
 #add .plugins-inline { margin: 8px 0; }
 .radios { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }
+dl.identity { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 8px 0; }
+dl.identity dt { color: #555; }
+dl.identity dd { margin: 0; }

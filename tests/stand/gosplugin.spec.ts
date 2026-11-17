@@ -11,7 +11,7 @@ import { caDir } from "../../scripts/provision-token.ts";
 import { stand, standDir, userPin, venvPython } from "../../scripts/setup-stand.ts";
 import { digest } from "../../src/page/gost.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
-import { clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { clearSites, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { verifyCms, verifyXml } from "./verify.ts";
 
 // A page as the plug-in's sites talk to it: its own messages for the extension, and the plug-in's objects once loaded.
@@ -151,7 +151,10 @@ test.describe("on the stand token", () => {
     expect((handshake.meta.routes as { node: string }[]).map((route) => route.node)).toEqual(["gosuslugi.plugin.extension.system", "plugin", "gosuslugi.plugin.extension.content"]);
     expect((await api(page, "gosuslugiPluginSystem", "echo", "привет")).method.result).toBe("привет");
     expect((await api(page, "gosuslugiPluginSystem", "lastError")).method.result).toBe("0 Application 'Успешное выполнение операции'");
-    expect((await api(page, "gosuslugiPluginSystem", "ipConfig")).method.result).toBe("[]");
+    // Made up: offline the generator does not answer, and the first built-in identity is taken.
+    const interfaces = JSON.parse((await api(page, "gosuslugiPluginSystem", "ipConfig")).method.result);
+    expect(interfaces.map((entry: { name: string; hardwareAddress: string }) => [entry.name, entry.hardwareAddress])).toEqual([["enp3s0", "3C:52:82:A1:6E:08"], ["lo", "00:00:00:00:00:00"]]);
+    expect(JSON.parse(handshake.meta.userAgent as string)).toEqual({ user: "a.smirnov", pc: "DESKTOP-4K7QF2M", process: "gosuslugi_plugin" });
     expect(JSON.parse((await api(page, "gosuslugiPluginSystem", "config")).method.result)[1].format.type).toBe("crypto");
     // The token's serial in hex, as the core names it (each stand build has its own).
     const providers = JSON.parse((await api(page, "gosuslugiPluginCrypto", "providers", {})).method.result);
@@ -276,5 +279,29 @@ test.describe("on a copy of the token", () => {
     expect(verifyCms(JSON.parse(signed.method.result)[0].content).valid).toBe(true);
     expect((await withPin(page, api(page, "gosuslugiPluginCrypto", "deleteCertificate", { certificate: issuedFile, store }))).method.result).toBe("true");
     expect(await api(page, "gosuslugiPluginCrypto", "deleteCertificate", { certificate: issuedFile, store })).toMatchObject({ code: "30019" });
+  });
+});
+
+test.describe("online", () => {
+  test.skip(!process.env.STAND_ONLINE, "needs the internet: set STAND_ONLINE=1");
+
+  test("makes the user, computer and network with the generator, and anew from the options page", async () => {
+    const context = await launchStand({ extensions: [stand.adapter, standExtension()], online: ["fakerapi.it"] });
+    try {
+      await clearSites(context);
+      await enableSite(context, server.url, ["gos"]);
+      const page = await openGosPage(context);
+      const who = JSON.parse((await api(page, "gosuslugiPluginSystem", "handshake")).meta.userAgent as string);
+      expect(who.user).not.toBe("a.smirnov");
+      const options = await context.newPage();
+      await options.goto(`${await extensionOrigin(context)}/options.html`);
+      await expect(options.locator("#identity")).toContainText(who.user);
+      await expect(options.locator("#identity")).toContainText("fakerapi.it");
+      await options.locator("#identity-new").click();
+      await expect(options.locator("#identity-status")).toHaveText("Готово.");
+      await expect(options.locator("#identity")).not.toContainText(who.user);
+    } finally {
+      await context.close();
+    }
   });
 });

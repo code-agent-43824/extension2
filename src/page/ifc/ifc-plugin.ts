@@ -16,6 +16,7 @@ import type { Clock } from "../rutoken.ts";
 import { pageSettings, type Settings } from "../settings.ts";
 import { certificateLines, sizeText } from "../signing.ts";
 import { pkcs11Serial, userCertificates, type TokenCertificate } from "../token.ts";
+import type { TokenKeyIds } from "../key-ids.ts";
 import { PinRejected, SCARD_W_CANCELLED_BY_USER, withGivenPin, withLogin } from "../token-login.ts";
 import { parseCertificate, pemToDer, type X509 } from "../x509.ts";
 import { opensslExtensions, opensslName, opensslSerial, opensslTime } from "./openssl-text.ts";
@@ -135,13 +136,37 @@ interface Resolved {
   digest: DigestName;
 }
 
-// What a container id names, without a login: a certificate by its thumbprint, or a key this page made or listed.
+// The keys' ids of a token known from earlier logins (src/page/key-ids.ts).
+async function knownIds(context: Context, token: Token): Promise<TokenKeyIds> {
+  return (await context.session.keyIds())[token.serial] ?? { certificates: {}, keys: [] };
+}
+
+// A certificate's id as the core shows it: its key's CKA_ID in Windows-1251, once a login has told it; until then, the
+// certificate's thumbprint.
+async function certificateId(context: Context, token: Token, x509: X509): Promise<string> {
+  const keyId = (await knownIds(context, token)).certificates[x509.thumbprint];
+  return keyId ? nameOfKeyId(keyId) : x509.thumbprint;
+}
+
+async function certificateList(context: Context, token: Token): Promise<Answer[]> {
+  const result: Answer[] = [];
+  for (const certificate of await tokenCertificates(context, token)) result.push(certificateEntry(certificate.x509, await certificateId(context, token, certificate.x509)));
+  return result;
+}
+
+// What a container id names, without a login: a certificate by its key's id or its thumbprint, or a key known from a
+// login or made on this page.
 async function resolve(context: Context, containerId: unknown): Promise<Resolved> {
   const { token, id } = await containerOf(context, containerId);
-  const certificate = (await tokenCertificates(context, token)).find((candidate) => candidate.x509.thumbprint === id.toUpperCase());
-  if (certificate) return { token, certificate, size: keySize(certificate.x509), digest: keyDigest(certificate.x509) };
+  const certificates = await tokenCertificates(context, token);
+  const known = await knownIds(context, token);
+  const byKey = Object.entries(known.certificates).find(([, keyId]) => nameOfKeyId(keyId) === id);
+  const certificate = certificates.find((candidate) => candidate.x509.thumbprint === (byKey ? byKey[0] : id.toUpperCase()));
+  if (certificate) return { token, certificate, ...(byKey ? { keyId: byKey[1] } : {}), size: keySize(certificate.x509), digest: keyDigest(certificate.x509) };
   const named = context.named.get(`${token.serial}/${id}`);
   if (named) return { token, keyId: named.keyId, size: named.size, digest: sizeDigest(named.size) };
+  const knownKey = known.keys.find((keyId) => nameOfKeyId(keyId) === id);
+  if (knownKey) return { token, keyId: knownKey, size: 256, digest: "streebog256" };
   // A key by its name, found after a login (keyOf).
   const keyId = keyIdOfName(id);
   if (!keyId) throw new IfcError(1);
@@ -154,7 +179,7 @@ async function keyOf(context: Context, resolved: Resolved): Promise<{ keyId: str
   const deviceId = resolved.token.deviceId;
   if (resolved.certificate) {
     try {
-      return { keyId: await plugin.getKeyByCertificate(deviceId, resolved.certificate.certId), certificate: resolved.certificate };
+      return { keyId: resolved.keyId ?? (await plugin.getKeyByCertificate(deviceId, resolved.certificate.certId)), certificate: resolved.certificate };
     } catch {
       throw new IfcError(1);
     }
@@ -293,16 +318,16 @@ const handlers: Record<string, Handler> = {
 
   async get_list_certs(context, params) {
     const token = await tokenOf(context, params.cryptoID);
-    return { cert_list: (await tokenCertificates(context, token)).map((certificate) => certificateEntry(certificate.x509, certificate.x509.thumbprint)) };
+    return { cert_list: await certificateList(context, token) };
   },
 
   async get_list_certs_by_cryptoid_array(context, params) {
     const ids = Array.isArray(params.cryptoID_array) ? params.cryptoID_array : [];
-    const lists: { tokenCertificates: TokenCertificate[]; id: string }[] = [];
-    for (const id of ids) lists.push({ id: String(id), tokenCertificates: await tokenCertificates(context, await tokenOf(context, id)) });
-    const result_array = lists.map(({ id, tokenCertificates }) => ({ cert_list: tokenCertificates.map((certificate) => certificateEntry(certificate.x509, certificate.x509.thumbprint)), crypto_id: id }));
+    const lists: { certificates: Answer[]; id: string }[] = [];
+    for (const id of ids) lists.push({ id: String(id), certificates: await certificateList(context, await tokenOf(context, id)) });
+    const result_array = lists.map(({ id, certificates }) => ({ cert_list: certificates, crypto_id: id }));
     if (params.show_progress === true) {
-      const count = lists.reduce((sum, list) => sum + list.tokenCertificates.length, 0);
+      const count = lists.reduce((sum, list) => sum + list.certificates.length, 0);
       for (let counter = 0; counter <= count; counter++) context.progress({ certs_count: count, error_code: 0, intermediate: 1, progress_counter: counter });
       return { intermediate: 0, result_array };
     }
@@ -328,7 +353,7 @@ const handlers: Record<string, Handler> = {
       for (const keyId of await plugin.enumerateKeys(token.deviceId, "")) {
         const certificate = byKey.get(keyId);
         if (certificate) {
-          result.push(certificateEntry(certificate.x509, certificate.x509.thumbprint));
+          result.push(certificateEntry(certificate.x509, nameOfKeyId(keyId)));
           continue;
         }
         const name = nameOfKeyId(keyId);

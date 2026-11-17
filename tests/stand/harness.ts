@@ -97,7 +97,10 @@ function continueWhereLeftOff(profile: string): void {
 
 export async function launchStand({ extensions = [stand.adapter], profile = stand.profile, home = stand.home, online = [], restoreSession = false }: StandOptions = {}) {
   const list = extensions.join(",");
-  const network = online.length ? proxyOptions() : [];
+  // Offline, the extensions' own requests stay local too: Playwright's routes below reach only the pages, and Chromium
+  // would otherwise use the environment's proxy for a service worker's fetch (the Gosplugin identity's generator,
+  // src/extension/identity.ts).
+  const network = online.length ? proxyOptions() : ["--no-proxy-server", "--host-resolver-rules=MAP * ~NOTFOUND, EXCLUDE 127.0.0.1, EXCLUDE localhost"];
   // The profile outlives builds, and Chromium keeps running the service worker it cached for an unpacked
   // extension of the same version: a rebuilt background.js would not run (docs/JOURNAL.md).
   if (restoreSession) continueWhereLeftOff(profile);

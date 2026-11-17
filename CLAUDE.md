@@ -73,7 +73,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   prompt can close the popup, so `finishPendingSite` in the service worker finishes an interrupted enabling; tabs a
   browser restores at start-up load before page.js is there, so `reloadTabsWithoutScript` reloads those without
   the bridge's `BRIDGE_MARKER`), `background.ts`
-  (service worker keeping the registration in sync and running `install.ts` and `timestamps.ts`), `popup.*` (the button's window, a switch per plug-in), `options.*` (site list with each site's plug-ins, IFCPlugin's PIN switch, the extended validity and root offer switches, the confirmed timestamp services, certificate stores), `roots.ts` (the two certificate stores in
+  (service worker keeping the registration in sync and running `install.ts` and `timestamps.ts`), `popup.*` (the button's window, a switch per plug-in), `options.*` (site list with each site's plug-ins, IFCPlugin's PIN switch, Gosplugin's made-up identity, the extended validity and root offer switches, the confirmed timestamp services, certificate stores), `identity.ts` (that identity: from the fakerapi.it generator, asked by the service worker once, or the next of
+  three built-in ones; kept in `chrome.storage.local`), `roots.ts` (the two certificate stores in
   `chrome.storage.local`: the built-in roots, and the roots of other CAs and intermediates added from files, a
   self-signed one counting as a root) + `roots-view.ts` (their tabs and cards on the options page) + `roots-bridge.ts`
   (isolated-world content script registered beside page.js, handing it the enabled roots, intermediates, the
@@ -91,7 +92,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `request.ts` req_gen's PKCS#10; `cp1251.ts` the container names), `gos/` (Gosplugin: `gos-plugin.ts` the page's
   messages, `messages.ts` the extension's and the core's answers, `api.ts` the objects `loadScripts` puts on the page,
   `core.ts` the core's methods, `config.ts` its catalog, `xmldsig.ts`, `smev-transform.ts` for normalize),
-  `settings.ts` (asks the bridge for IFCPlugin's PIN switch), `cadesplugin.ts`
+  `settings.ts` (asks the bridge for IFCPlugin's PIN switch), `key-ids.ts` (the keys' CKA_IDs, which the Rutoken
+  Plugin gives only after a login: learnt at every login, kept by the bridge, for the Gosuslugi plug-ins' ids and
+  containers), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
@@ -182,7 +185,8 @@ running its cached service worker, so `launchStand` deletes `Default/Service Wor
 clicked) and turn sites on with `enableSite`, through the options page. Firefox (`firefox.ts`): Playwright cannot drive
 Mozilla's Firefox, so the tests talk WebDriver BiDi themselves; our extension's pages open only with
 `-remote-allow-system-access`, and while one is open in a tab the adapter answers in seconds — close it before using a
-site page.
+site page. Offline (no `online` hosts), `launchStand` also cuts the extensions' own network (`--no-proxy-server`, only
+local names resolve): Playwright's routes reach the pages only, and a service worker would use the environment's proxy.
 
 ## Settled decisions
 

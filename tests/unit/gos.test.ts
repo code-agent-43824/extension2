@@ -59,7 +59,14 @@ describe("Gosplugin's core", () => {
     const { call, context } = setup();
     expect(await call("system", "handshake")).toBe("plugin handshake");
     expect(await call("system", "echo", "привет")).toBe("привет");
-    expect(await call("system", "ipConfig")).toBe("[]");
+    // Made up: the built-in identity when the extension gave none, named as on Linux for an unknown platform.
+    const interfaces = JSON.parse(await call("system", "ipConfig"));
+    expect(interfaces.map((entry: { name: string; hardwareAddress: string }) => [entry.name, entry.hardwareAddress])).toEqual([["enp3s0", "3C:52:82:A1:6E:08"], ["lo", "00:00:00:00:00:00"]]);
+    expect(interfaces[0].networkAddressEntries[0]).toEqual({
+      ip: { loopback: "false", multicast: "false", scopeId: "", address: "192.168.1.37" },
+      netmask: { loopback: "false", multicast: "false", scopeId: "", address: "255.255.255.0" },
+      broadcast: { loopback: "false", multicast: "false", scopeId: "", address: "192.168.1.255" },
+    });
     expect(await call("system", "lastError")).toBe("0 Application 'Успешное выполнение операции'");
     await expect(call("system", "nosuch")).rejects.toMatchObject({ code: 20005, errorMessage: "20005 Application 'Не найден метод': nosuch" });
     context.lastError = "x";
@@ -110,6 +117,16 @@ describe("Gosplugin's core", () => {
     await expect(call("crypto", "signature", { files, certificate: { content: b64(other.der), contentEncoding: "base64" }, type: "attached" })).rejects.toMatchObject({ code: 30005 });
     // The user cancels the window.
     await expect(call("crypto", "signature", { files, certificate, type: "attached" })).rejects.toMatchObject({ code: 20003 });
+  });
+
+  it("names containers by the keys' ids once a login has told them, by thumbprints before", async () => {
+    const { call, plugin } = setup({ getKeyByCertificate: async () => "72:74:31" }, [userPin]);
+    plugin.enumerateKeys = async () => ["72:74:31", "41:42"];
+    const container = async () => JSON.parse(await call("crypto", "certificates", "{}"))[0].container;
+    expect(await container()).toBe(user.thumbprint);
+    await call("crypto", "signature", { files: [{ content: "YQ==", contentEncoding: "base64" }], certificate, type: "attached" });
+    expect(await container()).toBe("rt1");
+    expect(JSON.parse(await call("crypto", "tokens", "{}"))[0].containers).toEqual(["rt1", "AB"]);
   });
 
   it("makes the key rt1-<uuid> and the request with the token's signing tool", async () => {

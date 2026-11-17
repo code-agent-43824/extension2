@@ -3,6 +3,7 @@
 // services the user let the extension reach (timestamps.ts).
 import { ADD_MESSAGE, CONFIRM_ANSWER, CONFIRM_DETAILS, CONFIRM_PING, Installer, type AddMessage } from "./install.ts";
 import { finishPendingSite, LIST_KEYS, pruneSites, reloadTabsWithoutScript, syncContentScript } from "./sites.ts";
+import { identity, IDENTITY_MESSAGE } from "./identity.ts";
 import { pruneTsaServices, TSA_ACCESS_MESSAGE, TSA_ANSWER, TSA_DETAILS, TSA_FETCH_MESSAGE, Timestamps, type TsaAccessMessage, type TsaFetchMessage, type TsaResult } from "./timestamps.ts";
 
 // One sync at a time: two overlapping syncs would register the same script id twice.
@@ -55,6 +56,10 @@ chrome.runtime.onMessage.addListener((message: { type?: string; id?: unknown; in
     return false;
   }
   if (sender.id !== chrome.runtime.id || !sender.tab) return false;
+  if (message?.type === IDENTITY_MESSAGE) {
+    identity().then(sendResponse, () => sendResponse(undefined));
+    return true;
+  }
   if (message?.type === ADD_MESSAGE) {
     installer.add(message as Partial<AddMessage>, sender.url).then(sendResponse, (error: unknown) => sendResponse(failed(error)));
     return true;

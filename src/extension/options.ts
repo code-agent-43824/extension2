@@ -19,6 +19,7 @@ import {
   sitePlugins,
 } from "./sites.ts";
 import { forgetTsaService, TSA_KEY, tsaServices } from "./timestamps.ts";
+import { IDENTITY_KEY, newIdentity, storedIdentity } from "./identity.ts";
 
 const byId = (id: string) => document.getElementById(id)!;
 
@@ -135,3 +136,40 @@ function setupIfcPin(): void {
 }
 
 setupIfcPin();
+
+// Gosplugin's made-up user, computer and network, and a way to make new ones.
+function setupIdentity(): void {
+  const list = byId("identity");
+  const show = async () => {
+    const identity = await storedIdentity();
+    byId("identity-empty").hidden = identity !== undefined;
+    list.replaceChildren(
+      ...(identity
+        ? ([
+            ["Пользователь", identity.user],
+            ["Компьютер", identity.computer],
+            ["IP-адрес", identity.ip],
+            ["MAC-адрес", identity.mac],
+            ["Откуда", identity.source.startsWith("built-in") ? `встроенный набор ${identity.source.slice("built-in ".length)}` : identity.source],
+          ] as const).flatMap(([name, value]) => {
+            const term = document.createElement("dt");
+            term.textContent = name;
+            const definition = document.createElement("dd");
+            definition.textContent = value;
+            return [term, definition];
+          })
+        : []),
+    );
+  };
+  byId("identity-new").addEventListener("click", async () => {
+    byId("identity-status").textContent = "Запрашиваю генератор…";
+    const identity = await newIdentity();
+    byId("identity-status").textContent = identity.source === "fakerapi.it" ? "Готово." : "Генератор не ответил: взят встроенный набор.";
+  });
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && IDENTITY_KEY in changes) void show();
+  });
+  void show();
+}
+
+setupIdentity();
