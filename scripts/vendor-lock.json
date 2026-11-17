@@ -118,5 +118,17 @@
     "file": "cryptopro/products/cades/demopage/basic_certificates.js",
     "url": "https://www.cryptopro.ru/sites/default/files/products/cades/demopage/basic_certificates.js",
     "sha256": "d4bc3e108ccdc5e0b2e6af4214766fa4a782402b9a0bcbe5cc8aac39c2c4e82e"
+  },
+  "ifcplugin": {
+    "file": "gosplugins/IFCPlugin-x86_64.deb",
+    "url": "https://ds-plugin.gosuslugi.ru/plugin/upload/assets/distrib/IFCPlugin-x86_64.deb",
+    "sha256": "127f21971984697c5431c49cee82e0da21c4fbbafa17bfb6839a3b19cdbe0a3e",
+    "optional": true
+  },
+  "gosplugin": {
+    "file": "gosplugins/Gosplugin_Linux-Debian_Installer.deb.zip",
+    "url": "https://gu-st.ru/content/Gosplugin/Gosplugin_Linux-Debian_Installer.deb.zip",
+    "sha256": "332b321e069c34eda5c22ded50696d5bd58df077408262c74fbe9894e7611ef8",
+    "optional": true
   }
 }

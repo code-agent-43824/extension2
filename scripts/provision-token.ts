@@ -37,24 +37,32 @@ export interface KeyProvision {
   subject?: { rdn: string; value: string }[];
   // Where the request and the certificate are written, as `<name>.csr.pem` and `<name>.pem` in the stand directory.
   name?: string;
+  // A key id with no zero byte: IFCPlugin's core reads CKA_ID as a C string and cannot pair a key whose id has one
+  // with its certificate (docs/JOURNAL.md, 2026-11-17).
+  idWithoutZero?: boolean;
 }
 
 // Returns the certificate (PEM).
-export async function provisionKey({ home = stand.home, bits = 256, subject = subjectAttributes, name = "user" }: KeyProvision = {}): Promise<string> {
+export async function provisionKey({ home = stand.home, bits = 256, subject = subjectAttributes, name = "user", idWithoutZero = false }: KeyProvision = {}): Promise<string> {
   const server = await servePages({ "/": blankPage });
   const context = await launchStand({ home });
   try {
     const page = await openStandPage(context, `${server.url}/`);
     const { deviceId, csr } = await page.evaluate(
-      async ({ loadPlugin, pin, subject, bits }) => {
+      async ({ loadPlugin, pin, subject, bits, idWithoutZero }) => {
         const plugin = await (0, eval)(loadPlugin)();
         const [deviceId] = await plugin.enumerateDevices();
         await plugin.login(deviceId, pin);
-        const keyId = await plugin.generateKeyPair(deviceId, undefined, "", {
-          publicKeyAlgorithm: bits === 512 ? plugin.PUBLIC_KEY_ALGORITHM_GOST3410_2012_512 : plugin.PUBLIC_KEY_ALGORITHM_GOST3410_2012_256,
-          signatureSize: bits * 2,
-          keySpec: plugin.KEY_SPEC_SIGN_AND_EXCHANGE,
-        });
+        let keyId: string;
+        for (;;) {
+          keyId = await plugin.generateKeyPair(deviceId, undefined, "", {
+            publicKeyAlgorithm: bits === 512 ? plugin.PUBLIC_KEY_ALGORITHM_GOST3410_2012_512 : plugin.PUBLIC_KEY_ALGORITHM_GOST3410_2012_256,
+            signatureSize: bits * 2,
+            keySpec: plugin.KEY_SPEC_SIGN_AND_EXCHANGE,
+          });
+          if (!idWithoutZero || !keyId.split(":").includes("00")) break;
+          await plugin.deleteKeyPair(deviceId, keyId);
+        }
         const csr = await plugin.createPkcs10(
           deviceId,
           keyId,
@@ -64,7 +72,7 @@ export async function provisionKey({ home = stand.home, bits = 256, subject = su
         );
         return { deviceId, csr };
       },
-      { loadPlugin: loadPluginSource, pin: userPin, subject, bits },
+      { loadPlugin: loadPluginSource, pin: userPin, subject, bits, idWithoutZero },
     );
 
     const csrPath = join(standDir, `${name}.csr.pem`);

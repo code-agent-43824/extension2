@@ -12,6 +12,8 @@ export interface VendorEntry {
   file: string;
   url: string;
   sha256: string;
+  // Fetched only when an opt-in experiment asks for it (fetchVendor), not with the stand.
+  optional?: boolean;
 }
 
 export const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
@@ -28,6 +30,14 @@ export function sha256File(path: string): string {
 export function vendorPath(name: string): string {
   const entry = readLock()[name];
   if (!entry) throw new Error(`unknown vendor entry: ${name}`);
+  return join(vendorDir, entry.file);
+}
+
+// Fetches one entry, an optional one included, and answers its path.
+export function fetchVendor(name: string): string {
+  const entry = readLock()[name];
+  if (!entry) throw new Error(`unknown vendor entry: ${name}`);
+  fetchEntry(name, entry);
   return join(vendorDir, entry.file);
 }
 
@@ -55,5 +65,5 @@ function fetchEntry(name: string, entry: VendorEntry): void {
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {
   mkdirSync(vendorDir, { recursive: true });
-  for (const [name, entry] of Object.entries(readLock())) fetchEntry(name, entry);
+  for (const [name, entry] of Object.entries(readLock())) if (!entry.optional) fetchEntry(name, entry);
 }
