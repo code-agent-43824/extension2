@@ -51,6 +51,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `node scripts/setup-gosplugins.ts` — after `npm run stand`: fetch the real IFCPlugin and Gosplugin packages (optional
   `vendor-lock.json` entries, never committed) and unpack their cores under `stand/gosplugins` on the fork, with a copy
   of the stand HOME, as the reference for emulating them (Gosplugin's PIN window needs `xvfb`, `xdotool`, `x11-utils` from apt).
+  Then, after a build, `STAND_GOSPLUGINS=1 npx playwright test tests/stand/gosplugins-reference.spec.ts` — the opt-in
+  comparison of the extension's IFCPlugin and Gosplugin with the real cores on that token copy.
 - `node scripts/import-roots.ts <lsb-cprocsp-ca-certs .deb>` — regenerate `src/extension/builtin-roots.ts` from a new
   CryptoPro CSP release (the package comes with the CSP download, after logging in to CryptoPro's site).
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
@@ -157,7 +159,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   on the options page; `validity.spec.ts` the extended validity check and the demo page adding its root; `enrollment.spec.ts` the
   certsrv calls offline on a copy of the token, with the question about the root; `ifc.spec.ts` IFCPlugin's protocol
   and functions, its signatures checked independently, key and request on a copy of the token; `gosplugin.spec.ts`
-  Gosplugin's messages, loaded objects and methods, likewise; `with-cryptopro-csp.spec.ts` (opt-in)
+  Gosplugin's messages, loaded objects and methods, likewise; `gosplugins-reference.spec.ts` (opt-in) the same requests
+  to the real cores and to the extension, compared, each verifying the other's signatures; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `webtools.spec.ts` runs CryptoPro's `webtools.html`
   (readers and containers, signing with CAdES-T and XAdES, encryption); `openssl-gost.spec.ts` (opt-in) checks encryption against OpenSSL's GOST
   engine; `enveloped-xml.spec.ts` runs XML encryption in Chromium without the extension or the token: esbuild bundles

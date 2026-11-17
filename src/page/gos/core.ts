@@ -105,9 +105,10 @@ export function certificateFields(x509: X509, onToken?: { token: Token }): Recor
   };
 }
 
+// certificateFields' answer: the asked fields, or all, sorted by name as the core writes them.
 function only(fields: Record<string, string>, wanted: unknown): Record<string, string> {
-  if (!Array.isArray(wanted) || !wanted.length) return fields;
-  return Object.fromEntries(wanted.map(String).filter((name) => name in fields).map((name) => [name, fields[name]!]));
+  const names = Array.isArray(wanted) && wanted.length ? wanted.map(String).filter((name) => name in fields) : Object.keys(fields);
+  return Object.fromEntries([...new Set(names)].sort().map((name) => [name, fields[name]!]));
 }
 
 interface FileInfo {
