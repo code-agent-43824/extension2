@@ -64,6 +64,8 @@ export function gosHost(): NativeHost {
   return nativeHost(gosplugins.gos.binary, ["chrome-extension://jabjbhgjaidecageckilhonbggakppme/"], {
     ...process.env,
     HOME: gosplugins.home,
+    // A desktop's UTF-8 locale: under C the core fails on a certificate label in Cyrillic (boost's codecvt).
+    LANG: "C.UTF-8",
     DISPLAY: display,
     QT_PLUGIN_PATH: `${root}/plugins`,
     LD_LIBRARY_PATH: `${root}/bin:${root}/lib`,
@@ -90,7 +92,9 @@ export function gosMessage(module: string, method: string, data = ""): Record<st
   };
 }
 
-// Types the PIN into the core's PIN window once it shows (and ticks "remember" when asked), or presses Escape.
+// Types the PIN into the core's PIN window once it shows (and ticks "remember" when asked), or presses Escape. Qt
+// ignores synthetic key events sent to a window, so the window gets the focus (there is no window manager on the
+// display) and the keys go through XTEST.
 export function typePin(pin: string | undefined, { remember = false, timeoutMs = 30_000 } = {}): void {
   const env = { ...process.env, DISPLAY: display };
   const deadline = Date.now() + timeoutMs;
@@ -100,12 +104,13 @@ export function typePin(pin: string | undefined, { remember = false, timeoutMs =
     if (!window) execFileSync("sleep", ["0.2"]);
   }
   if (!window) throw new Error("the core's PIN window did not show");
-  execFileSync("xdotool", ["windowactivate", "--sync", window], { env });
+  execFileSync("sleep", ["0.5"]);
+  execFileSync("xdotool", ["windowfocus", "--sync", window], { env });
   if (pin === undefined) {
-    execFileSync("xdotool", ["key", "--window", window, "Escape"], { env });
+    execFileSync("xdotool", ["key", "Escape"], { env });
     return;
   }
-  execFileSync("xdotool", ["type", "--window", window, pin], { env });
-  if (remember) execFileSync("xdotool", ["key", "--window", window, "Tab", "space"], { env });
-  execFileSync("xdotool", ["key", "--window", window, "Return"], { env });
+  execFileSync("xdotool", ["type", "--delay", "30", pin], { env });
+  if (remember) execFileSync("xdotool", ["key", "Tab", "space"], { env });
+  execFileSync("xdotool", ["key", "Return"], { env });
 }

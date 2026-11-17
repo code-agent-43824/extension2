@@ -48,6 +48,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `STAND_OPENSSL_GOST=1 npx playwright test tests/stand/openssl-gost.spec.ts tests/stand/enveloped-xml.spec.ts` —
   after a build: the opt-in experiment checking CMS and XML encryption against OpenSSL's GOST engine
   (`apt install libengine-gost-openssl`), both directions.
+- `node scripts/setup-gosplugins.ts` — after `npm run stand`: fetch the real IFCPlugin and Gosplugin packages (optional
+  `vendor-lock.json` entries, never committed) and unpack their cores under `stand/gosplugins` on the fork, with a copy
+  of the stand HOME, as the reference for emulating them (Gosplugin's PIN window needs `xvfb`, `xdotool`, `x11-utils` from apt).
 - `node scripts/import-roots.ts <lsb-cprocsp-ca-certs .deb>` — regenerate `src/extension/builtin-roots.ts` from a new
   CryptoPro CSP release (the package comes with the CSP download, after logging in to CryptoPro's site).
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
@@ -107,7 +110,9 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `scripts/` — Node scripts run directly by Node's type stripping (no build step): `fetch-vendor.ts` +
   `vendor-lock.json` (pinned third-party files), `build.ts` (esbuild), `package.ts` (the ZIP), `gen-constants.ts`, `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
   PINs, paths), `provision-token.ts` (key + certificate on the fake token; `provisionKey` for a 512-bit key or a copy of the HOME), `setup-cryptopro-csp.ts` (the real
-  CryptoPro CSP + plug-in, a key in a CryptoPro file container, a stand profile copy with CryptoPro's native host).
+  CryptoPro CSP + plug-in, a key in a CryptoPro file container, a stand profile copy with CryptoPro's native host),
+  `setup-gosplugins.ts` (the Gosuslugi plug-ins' cores and their HOME; keys without a zero byte in `CKA_ID`, which
+  IFCPlugin's core reads as a C string).
 - `tools/` — pasted by hand into the DevTools console on a cadesplugin page, with CryptoPro or with ours
   (`docs/MANUAL-CHECK.md`, the manual install and checklist): `dump-fields.js` dumps the plug-in and certificate
   fields and what `Find` picks as JSON, without a PIN, and `scripts/compare-fields.ts` diffs a real-CryptoPro dump
@@ -144,7 +149,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   engine; `enveloped-xml.spec.ts` runs XML encryption in Chromium without the extension or the token: esbuild bundles
   `enveloped-xml.page.ts`, the page code with a fake plugin whose `derive` the spec answers with the stand CA's key
   (the fake token cannot make that key); `verify.ts` runs the independent tools on a signature or an encrypted
-  message, and starts `tsa.py`.
+  message, and starts `tsa.py`; `gosplugins.ts` talks to the Gosuslugi plug-ins' cores over Native Messaging and
+  types into Gosplugin's PIN window on Xvfb.
 - `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA and its empty CRL, `verify_cms.py` CMS verifier with CAdES-T
   timestamps, `tsa.py` RFC 3161 timestamp service with a certificate from the test CA, `verify_xmldsig.py` XMLDSig and XAdES
   verifier on lxml, `verify_raw.py` RawSignature's bare signatures, `enveloped_info.py` what an EnvelopedData is encrypted with and for), hash-pinned in

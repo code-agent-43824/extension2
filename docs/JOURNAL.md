@@ -2,6 +2,39 @@
 
 Новые записи сверху.
 
+## 2026-11-17 — ядро Госплагина 1.3.42 на fake Рутокене: как оно отвечает
+
+**Гипотеза.** Ядро Госплагина на копии токена стенда даст точные ответы для эмуляции, в том числе с PIN: его окно
+на Qt можно заполнять на Xvfb.
+
+**Что сделали.** `gosHost()` из `tests/stand/gosplugins.ts`, кадры как от расширения 1.3.43, PIN — `typePin` через
+`xdotool`. Прошли методы `system.*` и `crypto.*` из задачи, с ошибками.
+
+**Что показала проверка.**
+
+- В локали C ядро отвечает «Общая ошибка» (20001, `boost::filesystem::path codecvt to wstring`), как только на токене
+  есть метка не на латинице. Нужна UTF-8 (`LANG=C.UTF-8`), как на рабочем столе пользователя.
+- Окно PIN не принимает синтетические события (`xdotool --window`), только XTEST после `windowfocus` (оконного менеджера
+  на Xvfb нет).
+- Ответ ядра несёт ещё `code` (строка, «0» при успехе) и `errorMessage` вида `<код> <группа> '<текст>'`; маршрут
+  ядра — `{"node":"plugin","time":"17.11.2026, 05:59:27"}`; `meta.userAgent` — JSON с пользователем и машиной. Расширение
+  добавляет свой маршрут, ставит `node` по первому маршруту страницы и обнуляет `method.data`.
+- `crypto.hash` — хэш заглавными шестнадцатеричными, `provider` и OID; без PIN. `crypto.signature`: `attached`,
+  `detached` (CAdES-BES), `xmldsig`; один PIN на все файлы; `signatureV2` — `{certificate, signatures}`. Отмена в окне
+  PIN — 20003, другой тип — 30022.
+- `xmldsig` — подпись последним потомком корня, exc-c14n, `Reference URI=""` без трансформаций, без `KeyInfo`, с
+  объявлением XML. Подпись `SignedInfo` верна, а что хэширует `DigestValue`, не нашли: ни документ, ни документ с пустым
+  шаблоном подписи, ни одна из канонизаций, ни UTF-16 (как и в отчёте владельца).
+- `certificateRequest` — ключ `rt1-<uuid>` и PKCS#10 со средством подписи «Рутокен ЭЦП 3.0», после PIN;
+  `addCertificate` — нужен `store` (имя провайдера, иначе 30013), PIN; повтор — успех без PIN; `deleteCertificate` —
+  `"true"`, повтор — 30019.
+- `normalize` знает только `urn://smev-gov-ru/xmldsig/transform` (другое — 30008, пусто — 30015, элемент без
+  пространства имён — 31013).
+
+**Вывод.** Эталон Госплагина снят, кроме дайджеста `xmldsig`. Эмуляция ставит туда хэш документа без подписи (что
+проверит обычный верификатор с enveloped-трансформацией); если сайты на этом споткнутся, вернуться к вопросу на живом
+ядре с трассой xml-security-c.
+
 ## 2026-11-17 — ядро IFCPlugin 3.1.1 на fake Рутокене: как оно отвечает
 
 **Гипотеза.** Ядро IFCPlugin (`ifc_chrome_host` из deb 3.1.1), запущенное на копии токена стенда, даст точные ответы для
@@ -32,10 +65,29 @@
   данными — 0: сверяется вложенное содержимое.
 - `load_x509_from_data` с `cert` (PEM) и `cert_data_type` 0 — дескриптор; мусор — 9; `get_x509_info` чужого дескриптора —
   9; `get_guid` — 36 знаков `XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX` (с `prefix` — он первым знаком); неизвестная функция — 17.
-- `sign_xml`, `key_gen`, `req_gen`, `set_x509` с первыми параметрами — 17, 1, 5, 1: параметры ещё подбирать.
+- Параметры остальных функций нашлись по строкам и дизассемблеру `libwebparser.so`:
+  - `sign_xml` (`containerId`, `userPin`, `wsu_id`, `inDataType`, `outDataType`, `data`) заполняет готовый шаблон
+    WS-Security: элемент, у которого любой атрибут равен `wsu_id`, канонизируется exc-c14n (алгоритмы шаблона ядро не
+    читает), хэш — в `DigestValue` ссылки `#<wsu_id>`, подпись `SignedInfo` — в `SignatureValue`; `BinarySecurityToken` ядро
+    не заполняет. Документ возвращается заново сериализованным libxml2, без XML-объявления. Подпись проходит
+    `verify_xmldsig.py` (с `wsu:Id`). Нет элемента с таким id — 27; не XML — 5; шаблон без `DigestValue` — ядро падает.
+  - `verify_xml` (`containerId`, `wsu_id`, `inDataType`, `sign`) берёт сертификат из `BinarySecurityToken` (пустой — 5),
+    хэш — по ключу контейнера: верно — `{"error_code":0,"verify_result":0}`, иначе 19, нет id — 27.
+  - `key_gen` (`containerId`, `userPin`) — `{"error_code":0,"real_id":"<containerId>"}`, `CKA_ID` — байты имени. С исходным
+    `ifc.cfg` (`alg = "gost2001"`) форк отвергает ключ ГОСТ 2001 (`CKR_ATTRIBUTE_VALUE_INVALID`) — 1; с `gost2012_256` —
+    ключ с параметрами 1.2.643.2.2.36.0.
+  - `req_gen`: `subject` — объект `{oids_count, oid_1, oid_type_1, value_1, …}` с индексами от 1 (с нуля — 5);
+    `req_format` 1 — PEM (`req_pem`, `req_pem_length`), 2 и по умолчанию — Base64 (`req_base64`, `req_base64_length`),
+    другое — 17; `extendedKeyUsage`, `certificatePolicies` — массивы OID; `signInstrument` идёт в 1.2.643.100.111;
+    `csrExtensions` — синтаксис OpenSSL `X509V3_EXT_nconf`. Key usage всегда «digitalSignature, nonRepudiation,
+    keyEncipherment, dataEncipherment». Строки `signInstrument` и `csrExtensions` ядро кодирует в UTF-8 дважды.
+  - `set_x509` (`containerId`, `userPin`, `x509Handle`) — 0; сертификат с таким ID уже есть — 1.
+  - `get_list_certs_by_cryptoid_array` — `result_array` из `{cert_list, crypto_id}`; с `show_progress` перед ответом идут
+    кадры `{"certs_count","error_code":0,"intermediate":1,"progress_counter"}` (N + 1, N — сертификатов на токене), а в
+    ответе — `"intermediate":0`.
 
-**Вывод.** Ядро как эталон работает; базовый набор IFCPlugin снят. Записи ответов — у агента (в репозиторий не кладём:
-в них сертификаты и подписи, которые копия токена делает каждый раз заново).
+**Вывод.** Ядро как эталон работает; IFCPlugin снят целиком в объёме задачи. Записи ответов — у агента (в репозиторий
+не кладём: в них сертификаты и подписи, которые копия токена делает каждый раз заново).
 
 ## 2026-11-17 — стенд на форке `.100` и на Chrome for Testing 153
 
