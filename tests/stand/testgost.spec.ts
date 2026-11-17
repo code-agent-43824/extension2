@@ -8,7 +8,7 @@ import { cpSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { vendorDir } from "../../scripts/fetch-vendor.ts";
 import { stand, standDir, userPin } from "../../scripts/setup-stand.ts";
-import { clearSites, directoryRoutes, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { clearSites, directoryRoutes, enableSite, extensionOrigin, launchStand, newPage, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { verifyCms } from "./verify.ts";
 
 const ca = "https://testgost2012.cryptopro.ru";
@@ -117,7 +117,7 @@ for (const { bits, type, keySize, hash, commonName } of variants) {
       await expect(page.locator("#spnNotTrusted")).toBeVisible({ timeout: 30_000 });
       await page.screenshot({ path: join(outDir, `${bits}-4a-not-trusted.png`), fullPage: true });
       const extension = await extensionOrigin(context);
-      const confirm = context.waitForEvent("page", { predicate: (candidate) => candidate.url().startsWith(`${extension}/confirm.html`), timeout: 30_000 });
+      const confirm = newPage(context, `${extension}/confirm.html`);
       await page.getByText("установите этот сертификат ЦС").click();
       const window = await confirm;
       await expect(window.locator("#subject")).toContainText("Тестовый УЦ ООО \"КРИПТО-ПРО\"");

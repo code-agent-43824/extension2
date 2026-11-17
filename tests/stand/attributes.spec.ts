@@ -6,7 +6,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { caDir } from "../../scripts/provision-token.ts";
 import { stand } from "../../scripts/setup-stand.ts";
-import { addRoots, blankPage, clearSites, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { addRoots, blankPage, newPage, clearSites, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
 import { startTsa, verifyCms, type TimestampService } from "./verify.ts";
 
@@ -132,7 +132,7 @@ test("CAdES-BES with the document's name and description, the chain without the 
 test("CAdES-T with the site's attributes: the timestamp comes through the extension after the user's yes", async () => {
   const page = await openStandPage(context, `${server.url}/`);
   const origin = await extensionOrigin(context);
-  const opened = context.waitForEvent("page", (candidate) => candidate.url().startsWith(`${origin}/tsa-access.html`));
+  const opened = newPage(context, `${origin}/tsa-access.html`);
   await startSigning(page, { type: "T", options: "CHAIN_EXCEPT_ROOT", tsaAddress: tsa.url });
   await (await opened).locator("button[name=allow]").click();
   await expect(pinDialog(page)).toContainText(`Служба штампов времени: ${new URL(tsa.url).host}`, { timeout: 30_000 });

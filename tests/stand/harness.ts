@@ -159,6 +159,22 @@ export function standExtension(hosts: string[] = []): string {
 }
 
 // Our extension's id: unpacked extensions get one derived from their path.
+// A window or tab the browser opens from now on whose address starts with `prefix`, such as the extension's own
+// windows. Chrome for Testing 153 announces a new page before it has its address, so the address is waited for rather
+// than read in the "page" event; pages already open when this is called do not count.
+export function newPage(context: BrowserContext, prefix: string, timeoutMs = 30_000): Promise<Page> {
+  const before = new Set(context.pages());
+  const deadline = Date.now() + timeoutMs;
+  return (async () => {
+    for (;;) {
+      const found = context.pages().find((page) => !before.has(page) && page.url().startsWith(prefix));
+      if (found) return found;
+      if (Date.now() > deadline) throw new Error(`no new page at ${prefix}`);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  })();
+}
+
 export async function extensionOrigin(context: BrowserContext): Promise<string> {
   const deadline = Date.now() + 15000;
   for (;;) {

@@ -13,7 +13,7 @@ import { stand, standDir } from "../../scripts/setup-stand.ts";
 import { encode } from "../../src/page/asn1.ts";
 import { digest } from "../../src/page/gost.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
-import { blankPage, clearSites, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { blankPage, clearSites, enableSite, extensionOrigin, launchStand, newPage, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
 import { startTsa, verifyXml, type TimestampService } from "./verify.ts";
 
@@ -82,7 +82,7 @@ async function result(page: Page): Promise<{ signed?: string; error?: string }> 
 // The extension's window asking about a timestamp service, once `start` has made the page ask for one.
 async function accessWindow(start: () => Promise<void>): Promise<Page> {
   const origin = await extensionOrigin(context);
-  const opened = context.waitForEvent("page", (candidate) => candidate.url().startsWith(`${origin}/tsa-access.html`));
+  const opened = newPage(context, `${origin}/tsa-access.html`);
   await start();
   return opened;
 }

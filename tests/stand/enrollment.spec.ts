@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { caDir } from "../../scripts/provision-token.ts";
 import { stand, standDir, userPin, venvPython } from "../../scripts/setup-stand.ts";
-import { blankPage, clearSites, enableSite, extensionOrigin, launchStand, loadPluginSource, openStandPage, servePages, setOptionSwitch, standExtension, type PageServer } from "./harness.ts";
+import { blankPage, clearSites, enableSite, extensionOrigin, launchStand, loadPluginSource, newPage, openStandPage, servePages, setOptionSwitch, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
 
 const outDir = join(standDir, "enrollment");
@@ -106,7 +106,7 @@ function certsOnly(certificates: Buffer[]): string {
 
 async function confirmWindow(): Promise<Page> {
   const origin = await extensionOrigin(context);
-  const window = await context.waitForEvent("page", (candidate) => candidate.url().startsWith(`${origin}/confirm.html`));
+  const window = await newPage(context, `${origin}/confirm.html`);
   await expect(window.locator("#subject")).toContainText("Stand Test CA");
   await expect(window.locator("#fingerprint")).toHaveText(`Отпечаток (sha1): ${caThumbprint.match(/.{8}/g)!.join(" ")}`);
   // For a look at the window afterwards.

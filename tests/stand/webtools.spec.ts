@@ -7,7 +7,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { vendorDir } from "../../scripts/fetch-vendor.ts";
 import { stand, standDir, tokenLabel } from "../../scripts/setup-stand.ts";
-import { clearSites, directoryRoutes, enableSite, extensionOrigin, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { clearSites, directoryRoutes, enableSite, extensionOrigin, launchStand, newPage, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { enterPin, pinDialog } from "./testgost-certs.ts";
 import { envelopedInfo, startTsa, verifyCms, verifyXml, type VerifyReport } from "./verify.ts";
 
@@ -167,7 +167,7 @@ test("signs XAdES-T with the stand's timestamp service in the TSA field and veri
     await page.locator("#textarea_sign_data").fill("<document>Документ со штампом</document>");
     await page.locator("#textarea_sign_signed_msg").fill("");
     const origin = await extensionOrigin(context);
-    const window = context.waitForEvent("page", (candidate) => candidate.url().startsWith(`${origin}/tsa-access.html`));
+    const window = newPage(context, `${origin}/tsa-access.html`);
     await page.locator("#btnSign").click();
     await (await window).locator("button[name=allow]").click();
     await expect(pinDialog(page)).toContainText(`Служба штампов времени: ${new URL(tsa.url).host}`, { timeout: 30_000 });

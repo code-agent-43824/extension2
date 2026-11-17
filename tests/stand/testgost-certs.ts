@@ -2,7 +2,7 @@
 // CryptoPro's test CA testgost2012.cryptopro.ru, with the key made on the (fake) Rutoken through our extension.
 import { expect, type BrowserContext, type Page } from "@playwright/test";
 import { userPin } from "../../scripts/setup-stand.ts";
-import { openStandPage } from "./harness.ts";
+import { extensionOrigin, newPage, openStandPage } from "./harness.ts";
 
 export const testgostCa = "https://testgost2012.cryptopro.ru";
 
@@ -64,7 +64,7 @@ export async function issueTestgost(context: BrowserContext, { commonName, dn }:
   const installed = page.getByText("Новый сертификат успешно установлен.");
   await expect(notTrusted.or(installed)).toBeVisible({ timeout: 60_000 });
   if (await notTrusted.isVisible()) {
-    const confirm = context.waitForEvent("page", (window) => window.url().includes("/confirm.html"));
+    const confirm = newPage(context, `${await extensionOrigin(context)}/confirm.html`);
     await page.getByText("установите этот сертификат ЦС").click();
     const alerted = page.waitForEvent("dialog");
     await (await confirm).locator("button[name=install]").click();

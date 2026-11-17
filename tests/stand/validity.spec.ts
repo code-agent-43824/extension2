@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { vendorDir } from "../../scripts/fetch-vendor.ts";
 import { caDir } from "../../scripts/provision-token.ts";
 import { stand } from "../../scripts/setup-stand.ts";
-import { clearSites, directoryRoutes, enableSite, extensionOrigin, launchStand, openStandPage, servePages, setExtendedValidity, standExtension, type PageServer } from "./harness.ts";
+import { clearSites, directoryRoutes, enableSite, extensionOrigin, launchStand, newPage, openStandPage, servePages, setExtendedValidity, standExtension, type PageServer } from "./harness.ts";
 
 const demoPath = "/sites/default/files/products/cades/demopage/cades_bes_sample.html";
 const caPem = readFileSync(join(caDir, "ca.pem"), "utf8");
@@ -51,7 +51,7 @@ async function demoPage(): Promise<{ page: Page; alerts: string[] }> {
 // Clicks the demo page's link and returns the extension's confirmation window it opens.
 async function installRoot(page: Page): Promise<Page> {
   const origin = await extensionOrigin(context);
-  const opened = context.waitForEvent("page", (candidate) => candidate.url().startsWith(`${origin}/confirm.html`));
+  const opened = newPage(context, `${origin}/confirm.html`);
   // The link is among the ones the page's "show more" switch reveals.
   if (!(await page.locator("#showMoreCheckbox").isChecked())) await page.locator("label[for=showMoreCheckbox]").click();
   await page.getByText("Установить корневой сертификат тестового УЦ").click();
