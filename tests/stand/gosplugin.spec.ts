@@ -85,11 +85,28 @@ test.describe("on the stand token", () => {
   test.beforeAll(async () => {
     context = await launchStand({ extensions: [stand.adapter, standExtension()] });
     await clearSites(context);
-    await enableSite(context, server.url, ["gos"]);
+    // Both Gosuslugi plug-ins, as for tools/dump-gosplugins.js.
+    await enableSite(context, server.url, ["ifc", "gos"]);
   });
 
   test.afterAll(async () => {
     await context?.close();
+  });
+
+  test("tools/dump-gosplugins.js reads both plug-ins without a PIN", async () => {
+    const page = await openStandPage(context, `${server.url}/gos.html`);
+    await page.locator("#ifc-plugin-is-installed").waitFor({ state: "attached" });
+    const dump = JSON.parse(await page.evaluate(readFileSync(join(repoRoot, "tools", "dump-gosplugins.js"), "utf8")));
+    expect(dump.ifc.markers).toEqual([true, true]);
+    expect(dump.ifc.version).toEqual({ error_code: 0, version: "3.1.1" });
+    expect(dump.ifc.certificates).toHaveLength(1);
+    expect(dump.ifc.certificates[0].info.cert_info.base64).toBe(certificate.content);
+    expect(dump.ifc.errors).toEqual({ no_slot: { error_code: 10 }, bad_slot: { error_code: 25 }, keys_without_pin: { error_code: 5 }, unknown_function: { error_code: 17 } });
+    // Read before loadScripts: the extension's mark only.
+    expect(dump.gos.meta).toEqual(["gosuslugi.plugin.extension.content"]);
+    expect(dump.gos.certificates.method.result).toHaveLength(1);
+    expect(dump.gos.unknownSignatureType.code).toBe("30022");
+    await expect(pinDialog(page)).toHaveCount(0);
   });
 
   test("marks the page and answers the extension's own messages as the plug-in's extension does", async () => {

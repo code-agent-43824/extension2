@@ -130,7 +130,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   (`docs/MANUAL-CHECK.md`, the manual install and checklist): `dump-fields.js` dumps the plug-in and certificate
   fields and what `Find` picks as JSON, without a PIN, and `scripts/compare-fields.ts` diffs a real-CryptoPro dump
   against ours; `check-api.js` signs (PIN windows) what the demo pages do not call — site attributes read back,
-  RawSignature, KeyPin, CachePin, HasPrivateKey. `demo-page.spec.ts` runs both on the stand.
+  RawSignature, KeyPin, CachePin, HasPrivateKey. `demo-page.spec.ts` runs both on the stand. `dump-gosplugins.js` dumps
+  what IFCPlugin and Gosplugin answer, without a PIN, real or ours; `gosplugin.spec.ts` runs it.
 - `docs/AGENT-CHECK.md` — instructions for an agent with a desktop (Claude Cowork): the release set of
   `MANUAL-CHECK.md` in a Chromium window started by hand on the stand's fake Rutoken, with a testgost2012
   certificate, and the report it writes. English, being executed by a model.
