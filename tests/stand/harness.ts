@@ -9,6 +9,7 @@ import type { AddressInfo } from "node:net";
 import { dirname, extname, join, relative } from "node:path";
 import { extensionDir } from "../../scripts/build.ts";
 import { chromiumExecutable, stand, standDir, standEnv } from "../../scripts/setup-stand.ts";
+import { PLUGINS, type Plugin } from "../../src/page/modes.ts";
 
 export interface Route {
   type: string;
@@ -217,13 +218,35 @@ async function optionsPage(context: BrowserContext): Promise<Page> {
   return page;
 }
 
-// Turns the extension on for `site` the way a user does on the options page.
-export async function enableSite(context: BrowserContext, site: string): Promise<void> {
+// Turns the extension on for `site` the way a user does on the options page, as the given plug-ins (CryptoPro's by
+// default), and waits until the service worker has registered page.js for it as them (src/extension/sites.ts).
+export async function enableSite(context: BrowserContext, site: string, plugins: readonly Plugin[] = ["cryptopro"]): Promise<void> {
   const page = await optionsPage(context);
+  for (const plugin of PLUGINS) await page.locator(`#add input[name=${plugin}]`).setChecked(plugins.includes(plugin));
   await page.locator("input[name=site]").fill(site);
   await page.locator("#add button[type=submit]").click();
   await page.locator("#sites li", { hasText: new URL(site).origin }).waitFor();
   await page.close();
+  await whenShimFor(context, site, plugins);
+}
+
+// Waits until page.js is registered for `site` as exactly `plugins`.
+export async function whenShimFor(context: BrowserContext, site: string, plugins: readonly Plugin[]): Promise<void> {
+  const sorted = PLUGINS.filter((plugin) => plugins.includes(plugin));
+  const id = sorted.join() === "cryptopro" ? "cades-shim" : `shim-${sorted.join("-")}`;
+  const worker = await extensionWorker(context);
+  await worker.evaluate(
+    async ({ id, pattern }) => {
+      for (let i = 0; i < 200; i++) {
+        const scripts = await chrome.scripting.getRegisteredContentScripts();
+        const main = scripts.filter((script) => script.world === "MAIN" && script.matches?.includes(pattern));
+        if (main.length === 1 && main[0]!.id === id) return;
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+      throw new Error(`page.js is not registered as ${id} for ${pattern}`);
+    },
+    { id, pattern: `${new URL(site).origin}/*` },
+  );
 }
 
 export async function disableSite(context: BrowserContext, site: string): Promise<void> {

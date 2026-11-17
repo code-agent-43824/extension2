@@ -8,7 +8,12 @@
 <body class="popup">
   <h1>КриптоПро через Рутокен</h1>
   <p id="site" class="site"></p>
-  <label id="toggle" hidden><input type="checkbox" name="enabled"> Включено на этом сайте</label>
+  <fieldset id="plugins" class="plugins" hidden>
+    <legend>Включено на этом сайте</legend>
+    <label><input type="checkbox" name="cryptopro"> КриптоПро ЭЦП Browser plug-in</label>
+    <label><input type="checkbox" name="ifc"> Плагин Госуслуг (IFCPlugin)</label>
+    <label><input type="checkbox" name="gos"> Госплагин</label>
+  </fieldset>
   <p id="note" class="note"></p>
   <p><a href="options.html" target="_blank">Настройки</a></p>
   <script src="popup.js"></script>

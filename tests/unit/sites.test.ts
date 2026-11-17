@@ -1,22 +1,31 @@
 /// <reference types="chrome" />
 import { describe, expect, it } from "vitest";
 import {
+  disablePlugin,
   disableSite,
   enabledSites,
   enableSite,
   finishPendingSite,
+  ifcPinWindow,
+  LIST_KEYS,
   matchPattern,
   PENDING_KEY,
+  pluginSites,
   pruneSites,
   reloadTabsWithoutScript,
   BRIDGE_ID,
   BRIDGE_MARKER,
   SCRIPT_ID,
+  setIfcPinWindow,
+  SHIM_IDS,
+  shimScript,
   siteOf,
+  sitePlugins,
   syncContentScript,
   TSA_KEY,
   whenRegistered,
 } from "../../src/extension/sites.ts";
+import { MODES_KEY, modeScript, takePlugins } from "../../src/page/modes.ts";
 
 // The parts of chrome.* the site list uses. `granted` holds host permissions; `grant` decides what
 // the user answers to Chrome's prompt; `required` ones cannot be removed.
@@ -25,6 +34,8 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
   const store: Record<string, unknown> = {};
   // Every moment the registration changed, how many of the two scripts were registered after it.
   const registeredCounts: number[] = [];
+  // The registrations after every change.
+  const snapshots: chrome.scripting.RegisteredContentScript[][] = [];
   const granted = new Set<string>(required);
   const reloaded: number[] = [];
   // What page.js was registered for when each tab was reloaded.
@@ -67,6 +78,7 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
       unregisterContentScripts: async ({ ids = [] }: chrome.scripting.ContentScriptFilter = {}) => {
         scripts = scripts.filter((script) => !ids.includes(script.id));
         registeredCounts.push(scripts.length);
+        snapshots.push(structuredClone(scripts));
       },
       registerContentScripts: async (list: chrome.scripting.RegisteredContentScript[]) => {
         for (const script of list) {
@@ -74,6 +86,7 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
           scripts.push(script);
         }
         registeredCounts.push(scripts.length);
+        snapshots.push(structuredClone(scripts));
       },
       updateContentScripts: async (list: chrome.scripting.RegisteredContentScript[]) => {
         for (const script of list) {
@@ -82,6 +95,7 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
           scripts[index] = { ...scripts[index]!, ...script };
         }
         registeredCounts.push(scripts.length);
+        snapshots.push(structuredClone(scripts));
       },
       executeScript: async ({ target, func, args = [] }: { target: { tabId: number }; func: (...a: unknown[]) => unknown; args?: unknown[] }) => {
         const tab = tabs.find((t) => t.id === target.tabId)!;
@@ -98,7 +112,7 @@ function fakeChrome({ grant = true, required = [] as string[], closeOnPrompt = f
       },
     },
   };
-  return { api: api as unknown as typeof chrome, store, granted, reloaded, matchesAtReload, registeredCounts, scripts: () => scripts };
+  return { api: api as unknown as typeof chrome, store, granted, reloaded, matchesAtReload, registeredCounts, snapshots, scripts: () => scripts };
 }
 
 describe("site list", () => {
@@ -271,5 +285,116 @@ describe("site list", () => {
     expect(await enabledSites(chrome.api)).toEqual([]);
     chrome.store.sites = ["https://a.example", 7];
     expect(await enabledSites(chrome.api)).toEqual(["https://a.example"]);
+  });
+});
+
+describe("plug-ins of a site", () => {
+  const common = { runAt: "document_start", allFrames: true, persistAcrossSessions: true } as const;
+
+  it("keeps a list per plug-in, CryptoPro's under the key of the single list before them", async () => {
+    const chrome = fakeChrome();
+    expect(LIST_KEYS).toEqual({ cryptopro: "sites", ifc: "ifcSites", gos: "gosSites" });
+    expect(await enableSite("https://a.example", chrome.api, undefined, ["ifc", "gos"])).toBe(true);
+    expect(await enableSite("https://b.example", chrome.api)).toBe(true);
+    expect(chrome.store).toMatchObject({ sites: ["https://b.example"], ifcSites: ["https://a.example"], gosSites: ["https://a.example"] });
+    expect(await enabledSites(chrome.api)).toEqual(["https://a.example", "https://b.example"]);
+    expect(await sitePlugins("https://a.example", chrome.api)).toEqual(["ifc", "gos"]);
+    expect(await pluginSites("cryptopro", chrome.api)).toEqual(["https://b.example"]);
+    // One plug-in off: the others and the access stay; the last one off takes the access back.
+    await disablePlugin("https://a.example", "gos", chrome.api);
+    expect(await sitePlugins("https://a.example", chrome.api)).toEqual(["ifc"]);
+    expect(chrome.granted.has("https://a.example/*")).toBe(true);
+    await disablePlugin("https://a.example", "ifc", chrome.api);
+    expect(await enabledSites(chrome.api)).toEqual(["https://b.example"]);
+    expect(chrome.granted.has("https://a.example/*")).toBe(false);
+  });
+
+  it("names a registration by its set of plug-ins, CryptoPro's alone as before, flags first", () => {
+    expect(shimScript(["cryptopro"])).toEqual({ id: SCRIPT_ID, js: ["page.js"] });
+    expect(shimScript(["gos", "cryptopro"])).toEqual({ id: "shim-cryptopro-gos", js: ["modes/cryptopro.js", "modes/gos.js", "page.js"] });
+    expect(shimScript(["ifc"])).toEqual({ id: "shim-ifc", js: ["modes/ifc.js", "page.js"] });
+    expect(new Set(SHIM_IDS).size).toBe(7);
+    expect(SHIM_IDS).toContain(SCRIPT_ID);
+    expect(SHIM_IDS).toContain("shim-cryptopro-ifc-gos");
+  });
+
+  it("registers page.js once per set of plug-ins in use, and the bridge on every enabled site", async () => {
+    const chrome = fakeChrome();
+    await enableSite("https://a.example", chrome.api);
+    await enableSite("https://b.example", chrome.api, undefined, ["ifc"]);
+    await enableSite("https://c.example", chrome.api, undefined, ["gos", "cryptopro"]);
+    await enableSite("https://d.example", chrome.api, undefined, ["ifc"]);
+    expect(await syncContentScript(chrome.api)).toEqual(["https://a.example/*", "https://b.example/*", "https://c.example/*", "https://d.example/*"]);
+    const byId = (scripts: chrome.scripting.RegisteredContentScript[]) => [...scripts].sort((x, y) => x.id.localeCompare(y.id));
+    expect(byId(chrome.scripts())).toEqual(byId([
+      { id: SCRIPT_ID, js: ["page.js"], world: "MAIN", matches: ["https://a.example/*"], ...common },
+      { id: "shim-ifc", js: ["modes/ifc.js", "page.js"], world: "MAIN", matches: ["https://b.example/*", "https://d.example/*"], ...common },
+      { id: "shim-cryptopro-gos", js: ["modes/cryptopro.js", "modes/gos.js", "page.js"], world: "MAIN", matches: ["https://c.example/*"], ...common },
+      { id: BRIDGE_ID, js: ["roots-bridge.js"], world: "ISOLATED", matches: ["https://a.example/*", "https://b.example/*", "https://c.example/*", "https://d.example/*"], ...common },
+    ]));
+    await whenRegistered(chrome.api, 0);
+  });
+
+  it("moves a site to its new set's registration before it leaves the old one, so it never goes without page.js", async () => {
+    const chrome = fakeChrome();
+    await enableSite("https://a.example", chrome.api);
+    await enableSite("https://b.example", chrome.api);
+    await syncContentScript(chrome.api);
+    await enableSite("https://a.example", chrome.api, undefined, ["ifc"]);
+    await syncContentScript(chrome.api);
+    await disablePlugin("https://a.example", "cryptopro", chrome.api);
+    await syncContentScript(chrome.api);
+    const shims = (scripts: chrome.scripting.RegisteredContentScript[]) => scripts.filter((script) => script.id !== BRIDGE_ID);
+    for (const snapshot of chrome.snapshots) {
+      expect(shims(snapshot).some((script) => script.matches?.includes("https://a.example/*"))).toBe(true);
+    }
+    expect(shims(chrome.scripts()).map(({ id, matches }) => ({ id, matches })).sort((x, y) => x.id.localeCompare(y.id))).toEqual([
+      { id: SCRIPT_ID, matches: ["https://b.example/*"] },
+      { id: "shim-ifc", matches: ["https://a.example/*"] },
+    ]);
+    // The registration of a set no site uses any more goes.
+    await disableSite("https://b.example", chrome.api);
+    await syncContentScript(chrome.api);
+    expect(chrome.scripts().map((script) => script.id).sort()).toEqual([BRIDGE_ID, "shim-ifc"]);
+    await whenRegistered(chrome.api, 0);
+  });
+
+  it("finishes turning on the plug-ins the popup asked for when Chrome's prompt closed it", async () => {
+    const chrome = fakeChrome({ closeOnPrompt: true });
+    void enableSite("https://a.example", chrome.api, 7, ["gos"]);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    await finishPendingSite(chrome.api);
+    expect(await sitePlugins("https://a.example", chrome.api)).toEqual(["gos"]);
+    expect(chrome.matchesAtReload).toEqual([[]]);
+    expect(chrome.scripts().find((script) => script.id === "shim-gos")?.matches).toEqual(["https://a.example/*"]);
+    // A pending site of a build before stage 8 names no plug-ins: CryptoPro's.
+    chrome.store[PENDING_KEY] = { site: "https://b.example" };
+    chrome.granted.add("https://b.example/*");
+    await finishPendingSite(chrome.api);
+    expect(await sitePlugins("https://b.example", chrome.api)).toEqual(["cryptopro"]);
+  });
+
+  it("drops a site whose access was revoked from every list", async () => {
+    const chrome = fakeChrome();
+    await enableSite("https://a.example", chrome.api, undefined, ["cryptopro", "ifc", "gos"]);
+    chrome.granted.delete("https://a.example/*");
+    await pruneSites(chrome.api);
+    expect(chrome.store).toMatchObject({ sites: [], ifcSites: [], gosSites: [] });
+  });
+
+  it("keeps IFCPlugin's PIN switch, off by default", async () => {
+    const chrome = fakeChrome();
+    expect(await ifcPinWindow(chrome.api)).toBe(false);
+    await setIfcPinWindow(true, chrome.api);
+    expect(await ifcPinWindow(chrome.api)).toBe(true);
+  });
+
+  it("hands page.js the plug-ins its flag scripts named, and only once", () => {
+    const global = {} as Record<string, unknown>;
+    expect(takePlugins(global)).toEqual(["cryptopro"]);
+    for (const plugin of ["gos", "ifc"] as const) new Function("globalThis", modeScript(plugin))(global);
+    expect(global[MODES_KEY]).toEqual(["gos", "ifc"]);
+    expect(takePlugins(global)).toEqual(["ifc", "gos"]);
+    expect(MODES_KEY in global).toBe(false);
   });
 });

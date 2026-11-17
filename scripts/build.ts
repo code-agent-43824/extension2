@@ -1,11 +1,12 @@
 // Builds the extension into dist/extension/ for Chrome and dist/firefox/ for Firefox, from the same code: the manifest
 // with the version from package.json, the page-world script bundled into one file (a MAIN-world content script
-// cannot import modules), and the extension's own pages and background script from src/extension/.
+// cannot import modules) with its flag scripts, and the extension's own pages and background script from src/extension/.
 import { build } from "esbuild";
 import { copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { repoRoot } from "./fetch-vendor.ts";
+import { MODE_FILES, modeScript, PLUGINS } from "../src/page/modes.ts";
 
 export const extensionDir = join(repoRoot, "dist", "extension");
 export const firefoxDir = join(repoRoot, "dist", "firefox");
@@ -56,6 +57,9 @@ async function buildTarget(target: Target, outDir: string): Promise<void> {
     logLevel: "warning",
   } as const;
   await build({ ...common, entryPoints: [join(repoRoot, "src", "page", "main.ts")], outfile: join(outDir, "page.js"), alias: aliases });
+  // The flag scripts registered before page.js: which plug-ins it plays (src/page/modes.ts).
+  mkdirSync(join(outDir, "modes"));
+  for (const plugin of PLUGINS) writeFileSync(join(outDir, MODE_FILES[plugin]), modeScript(plugin));
   const extension = join(repoRoot, "src", "extension");
   await build({
     ...common,

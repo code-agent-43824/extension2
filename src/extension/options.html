@@ -7,15 +7,34 @@
 </head>
 <body class="options">
   <h1>Сайты, на которых работает расширение</h1>
-  <p class="note">На остальных сайтах расширение ничего не делает: сайт видит компьютер без КриптоПро или работает
-    с настоящим КриптоПро, если он установлен.</p>
+  <p class="note">У каждого сайта отмечено, каким плагином расширение для него будет: КриптоПро ЭЦП Browser plug-in,
+    плагином Госуслуг (IFCPlugin) или Госплагином — подписывая Рутокеном через Рутокен Плагин. На остальных сайтах
+    расширение ничего не делает: сайт видит компьютер без этих плагинов или работает с настоящими, если они
+    установлены.</p>
   <ul id="sites"></ul>
   <p id="empty" class="note" hidden>Пока ни одного сайта.</p>
   <form id="add">
     <label>Адрес сайта <input name="site" type="url" placeholder="https://example.ru" required></label>
     <button type="submit">Включить</button>
+    <span class="plugins-inline">
+      <label><input type="checkbox" name="cryptopro" checked> КриптоПро</label>
+      <label><input type="checkbox" name="ifc"> Плагин Госуслуг (IFCPlugin)</label>
+      <label><input type="checkbox" name="gos"> Госплагин</label>
+    </span>
   </form>
   <p id="error" class="error" role="alert"></p>
+
+  <section id="ifc-section">
+    <h1>Плагин Госуслуг (IFCPlugin)</h1>
+    <p class="note">Сайт, рассчитанный на этот плагин, сам спрашивает PIN-код токена на своей странице и передаёт его
+      плагину вместе с запросом.</p>
+    <div class="radios">
+      <label><input type="radio" name="ifc-pin" value="site"> Не спрашивать PIN-код (как в оригинале)</label>
+      <label><input type="radio" name="ifc-pin" value="window"> Запрашивать PIN-код в окне</label>
+    </div>
+    <p class="note">Во втором случае PIN-код, переданный сайтом, не используется: расширение спрашивает его в своём окне,
+      как для других сайтов.</p>
+  </section>
 
   <section id="validity-section">
     <h1>Проверка сертификатов</h1>

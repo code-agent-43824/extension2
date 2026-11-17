@@ -12,6 +12,7 @@ import {
   enableSite,
   extensionOrigin,
   launchStand,
+  whenShimFor,
   openStandPage,
   servePages,
   standExtension,
@@ -94,7 +95,8 @@ test("the button's popup switches the current site on and reloads it", async () 
   await popup.goto(`${await extensionOrigin(context)}/popup.html`);
   await expect(popup.locator("#site")).toHaveText(server.url);
   await expect(popup.getByRole("link", { name: "Настройки" })).toHaveAttribute("href", "options.html");
-  const checkbox = popup.locator("input[name=enabled]");
+  await expect(popup.locator("#plugins label")).toHaveText(["КриптоПро ЭЦП Browser plug-in", "Плагин Госуслуг (IFCPlugin)", "Госплагин"]);
+  const checkbox = popup.locator("input[name=cryptopro]");
   await expect(checkbox).not.toBeChecked();
   // click, not check(): the popup closes itself before check() could see the box ticked.
   const reloaded = site.waitForEvent("load", { timeout: 15_000 });
@@ -102,4 +104,41 @@ test("the button's popup switches the current site on and reloads it", async () 
   await checkbox.click();
   await Promise.all([reloaded, closed]);
   await expectShim(site, true);
+});
+
+test("each plug-in is turned on by itself: as the Gosuslugi plug-ins alone the site gets no cadesplugin", async () => {
+  await enableSite(context, server.url, ["ifc", "gos"]);
+  const page = await openStandPage(context, server.url + demoPath);
+  await expectShim(page, false);
+  // CryptoPro's turned on in the site's line of the options page: the site gets the plug-in too.
+  const options = await context.newPage();
+  await options.goto(`${await extensionOrigin(context)}/options.html`);
+  const item = options.locator("#sites li", { hasText: server.url });
+  await expect(item.locator("input[name=ifc]")).toBeChecked();
+  await expect(item.locator("input[name=gos]")).toBeChecked();
+  await item.locator("input[name=cryptopro]").check();
+  await whenShimFor(context, server.url, ["cryptopro", "ifc", "gos"]);
+  await page.reload();
+  await expectShim(page, true);
+  // Both Gosuslugi plug-ins off: CryptoPro's alone, under its registration from before them.
+  await item.locator("input[name=ifc]").uncheck();
+  await item.locator("input[name=gos]").uncheck();
+  await whenShimFor(context, server.url, ["cryptopro"]);
+  await page.reload();
+  await expectShim(page, true);
+  // The last one off: the site leaves the list.
+  await item.locator("input[name=cryptopro]").uncheck();
+  await expect(item).toHaveCount(0);
+  await options.close();
+});
+
+test("the options page will not add a site as no plug-in", async () => {
+  const page = await context.newPage();
+  await page.goto(`${await extensionOrigin(context)}/options.html`);
+  await page.locator("#add input[name=cryptopro]").uncheck();
+  await page.locator("input[name=site]").fill(server.url);
+  await page.locator("#add button[type=submit]").click();
+  await expect(page.locator("#error")).toHaveText("Отметьте, каким плагином быть на сайте.");
+  await expect(page.locator("#sites li")).toHaveCount(0);
+  await page.close();
 });

@@ -1,8 +1,8 @@
-// Service worker: keeps the page-world script registered for exactly the enabled sites, adds the certificates sites
+// Service worker: keeps the page-world script registered for exactly the enabled sites, as their plug-ins, adds the certificates sites
 // add to the Root and CA stores, asking the user first for a root (install.ts), and gets XAdES-T's timestamps from the
 // services the user let the extension reach (timestamps.ts).
 import { ADD_MESSAGE, CONFIRM_ANSWER, CONFIRM_DETAILS, CONFIRM_PING, Installer, type AddMessage } from "./install.ts";
-import { finishPendingSite, pruneSites, reloadTabsWithoutScript, STORAGE_KEY, syncContentScript } from "./sites.ts";
+import { finishPendingSite, LIST_KEYS, pruneSites, reloadTabsWithoutScript, syncContentScript } from "./sites.ts";
 import { pruneTsaServices, TSA_ACCESS_MESSAGE, TSA_ANSWER, TSA_DETAILS, TSA_FETCH_MESSAGE, Timestamps, type TsaAccessMessage, type TsaFetchMessage, type TsaResult } from "./timestamps.ts";
 
 // One sync at a time: two overlapping syncs would register the same script id twice.
@@ -30,7 +30,7 @@ chrome.permissions.onRemoved.addListener(() => {
   sync();
 });
 chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && STORAGE_KEY in changes) sync();
+  if (area === "local" && Object.values(LIST_KEYS).some((key) => key in changes)) sync();
 });
 
 const installer = new Installer();

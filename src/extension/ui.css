@@ -33,3 +33,8 @@ body.confirm .question { margin-top: 14px; }
 body.confirm .toolbar { justify-content: flex-end; margin-top: 16px; }
 body.confirm .toolbar button { min-width: 88px; }
 #fingerprint strong { white-space: nowrap; }
+fieldset.plugins { border: none; padding: 0; margin: 8px 0; display: flex; flex-direction: column; gap: 4px; }
+fieldset.plugins legend { padding: 0; margin-bottom: 4px; color: #555; }
+.plugins-inline { display: flex; flex-wrap: wrap; gap: 4px 14px; flex: 1; }
+#add .plugins-inline { margin: 8px 0; }
+.radios { display: flex; flex-direction: column; gap: 4px; margin: 8px 0; }

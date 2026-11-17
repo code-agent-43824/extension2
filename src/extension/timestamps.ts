@@ -6,7 +6,7 @@
 // where the user can take it back. Only an address the user said yes to as a timestamp service is posted to: access
 // alone is not enough, since the enabled sites have it too, and a site must not read another one's answers through us.
 import { PromptWindows } from "./prompt-windows.ts";
-import { enabledSites, matchPattern, releaseAccess, siteOf, TSA_KEY, tsaServices } from "./sites.ts";
+import { matchPattern, pluginSites, releaseAccess, siteOf, TSA_KEY, tsaServices } from "./sites.ts";
 
 export { TSA_KEY, tsaServices };
 
@@ -101,7 +101,7 @@ export class Timestamps {
 
   async #site(url: string | undefined): Promise<string | undefined> {
     const origin = siteOf(url);
-    return origin && (await enabledSites(this.#api)).includes(origin) ? origin : undefined;
+    return origin && (await pluginSites("cryptopro", this.#api)).includes(origin) ? origin : undefined;
   }
 
   // The user said yes to the service, and Chrome still gives access to it.

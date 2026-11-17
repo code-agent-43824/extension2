@@ -8,7 +8,7 @@ import type { AddStore } from "../page/roots.ts";
 import { parseCertificate, type X509 } from "../page/x509.ts";
 import { PromptWindows } from "./prompt-windows.ts";
 import { base64ToDer, certificatesInFile, installCertificate, isSelfSigned } from "./roots.ts";
-import { enabledSites, siteOf } from "./sites.ts";
+import { pluginSites, siteOf } from "./sites.ts";
 
 export const ADD_MESSAGE = "cryptopro-via-rutoken:add-certificate";
 export const CONFIRM_DETAILS = "cryptopro-via-rutoken:confirm-details";
@@ -61,7 +61,7 @@ export class Installer {
   // A request from the content script of the page at `url`.
   async add(message: Partial<AddMessage>, url: string | undefined): Promise<AddResult> {
     const origin = siteOf(url);
-    if (!origin || !(await enabledSites(this.#api)).includes(origin)) return failure("Сайт не включён в расширении.", E_ACCESSDENIED);
+    if (!origin || !(await pluginSites("cryptopro", this.#api)).includes(origin)) return failure("Сайт не включён в расширении.", E_ACCESSDENIED);
     const { store, certificate } = message;
     let der: Uint8Array;
     try {
