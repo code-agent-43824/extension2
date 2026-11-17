@@ -1,13 +1,14 @@
 // Runs on the enabled sites in the extension's isolated world, next to page.js: answers page.js's request
 // for the certificate stores (src/page/roots.ts) with the enabled roots and intermediates and the extended
-// validity and root offer switches, and passes its Store.Add (install.ts) and XAdES-T's timestamp requests
-// (src/page/timestamps.ts, timestamps.ts) on to the service worker.
+// validity and root offer switches, and for the other settings (src/page/settings.ts), and passes its Store.Add
+// (install.ts) and XAdES-T's timestamp requests (src/page/timestamps.ts, timestamps.ts) on to the service worker.
 import { ADD_REQUEST, ADD_RESPONSE, ROOTS_REQUEST, ROOTS_RESPONSE, type AddRequest, type AddResponse, type RootsRequest, type RootsResponse } from "../page/roots.ts";
 import { TSA_ACCESS_REQUEST, TSA_ACCESS_RESPONSE, TSA_REQUEST, TSA_RESPONSE, type TsaAccessRequest, type TsaAccessResponse, type TsaRequest, type TsaResponse } from "../page/timestamps.ts";
 import { ADD_MESSAGE, type AddMessage, type AddResult } from "./install.ts";
 import { enabledCertificates, extendedValidity, offerRoot } from "./roots.ts";
 import { TSA_ACCESS_MESSAGE, TSA_FETCH_MESSAGE, type TsaAccessMessage, type TsaFetchMessage, type TsaResult } from "./timestamps.ts";
-import { BRIDGE_MARKER } from "./sites.ts";
+import { SETTINGS_REQUEST, SETTINGS_RESPONSE, type SettingsRequest, type SettingsResponse } from "../page/settings.ts";
+import { BRIDGE_MARKER, ifcPinWindow } from "./sites.ts";
 
 const E_FAIL = 0x80004005;
 
@@ -23,7 +24,7 @@ function forward(message: object): Promise<TsaResult> {
 }
 
 window.addEventListener("message", (event: MessageEvent) => {
-  const data = event.data as Partial<RootsRequest | AddRequest | TsaAccessRequest | TsaRequest> | null;
+  const data = event.data as Partial<RootsRequest | AddRequest | TsaAccessRequest | TsaRequest | SettingsRequest> | null;
   if (event.source !== window || typeof data?.id !== "string") return;
   const id = data.id;
   if (data.type === ROOTS_REQUEST) {
@@ -31,6 +32,8 @@ window.addEventListener("message", (event: MessageEvent) => {
       const response: RootsResponse = { type: ROOTS_RESPONSE, id, certificates: roots, intermediates, extendedValidity: extended, offerRoot: offer };
       window.postMessage(response, "*");
     });
+  } else if (data.type === SETTINGS_REQUEST) {
+    void ifcPinWindow().then((asked) => window.postMessage({ type: SETTINGS_RESPONSE, id, ifcPinWindow: asked } satisfies SettingsResponse, "*"));
   } else if (data.type === ADD_REQUEST) {
     const { store, certificate } = data as Partial<AddRequest>;
     const answer = (result: AddResult) => window.postMessage({ type: ADD_RESPONSE, id, error: result?.error } satisfies AddResponse, "*");

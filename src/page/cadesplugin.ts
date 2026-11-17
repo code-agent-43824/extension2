@@ -6,23 +6,16 @@ import { constants } from "./constants.ts";
 import { getLastError } from "./errors.ts";
 import { createObject } from "./objects/index.ts";
 import type { Session } from "./objects/session.ts";
-import { showCertificateDialog } from "./certificate-dialog.ts";
-import { openPinDialog } from "./pin-dialog.ts";
-import { offerRootByLink } from "./root-links.ts";
-import { addCertificate, storeCertificates } from "./roots.ts";
-import { timestampAccess, timestampResponse } from "./timestamps.ts";
-import { loadRutokenPlugin, type Clock } from "./rutoken.ts";
+import { pageSession } from "./page-session.ts";
+import type { Clock } from "./rutoken.ts";
 import { asyncSpawn } from "./spawn.ts";
+
+export { ADAPTER_WAIT_MS } from "./page-session.ts";
 
 // Texts and timeout from cadesplugin_api.js 2.4.5; sites show the texts to users as they are.
 export const PLUGIN_UNAVAILABLE = "Плагин недоступен";
 export const LOAD_TIMEOUT = "Истекло время ожидания загрузки плагина";
 const DEFAULT_LOAD_TIMEOUT_MS = 20000;
-
-// The adapter's page script is injected at document_start, so by DOMContentLoaded it is either there
-// or about to be. Waiting the full load timeout for an adapter that is not installed would only delay
-// the "unavailable" answer.
-export const ADAPTER_WAIT_MS = 3000;
 
 const EXTENSION_VERSION_REQUEST = "cadesplugin_extension_version_request";
 const EXTENSION_VERSION_RESPONSE = "cadesplugin_extension_version_response:";
@@ -76,23 +69,11 @@ export function createCadesplugin(win: PageWindow, clock: Clock): Cadesplugin {
       () => fail(LOAD_TIMEOUT, "истекло время ожидания", win.cadesplugin_timeout_failed_callback as Callback),
       timeout,
     );
-    loadRutokenPlugin(win, ADAPTER_WAIT_MS, clock).then(
-      (plugin) => {
+    pageSession(win, clock).then(
+      (session) => {
         if (settled) return;
         settled = true;
-        resolveSession({
-          plugin,
-          origin: win.location?.origin ?? "",
-          pinDialog: (request, remember) => openPinDialog(win.document, request, remember),
-          showCertificate: (fields) => showCertificateDialog(win.document, fields),
-          storeCertificates: () => storeCertificates(win, clock),
-          addCertificate: (store, certificate) => addCertificate(win, clock, store, certificate),
-          offerRootByLink(offer) {
-            offerRootByLink(win, offer, this.addCertificate);
-          },
-          timestampAccess: (url) => timestampAccess(win, clock, url),
-          timestamp: (url, request) => timestampResponse(win, clock, url, request),
-        });
+        resolveSession(session);
         (win.cadesplugin_plugin_loaded_callback as Callback)?.();
         resolvePlugin();
       },

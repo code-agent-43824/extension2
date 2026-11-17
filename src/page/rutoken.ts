@@ -90,6 +90,10 @@ export interface KeyPairOptions {
   publicKeyAlgorithm: number;
   signatureSize: number;
   keySpec: number;
+  // The parameter set ("A", "B", "C", "XA", "XB") and the key's CKA_ID as colon-separated hex, both taken by the
+  // plugin (checked on the stand, docs/JOURNAL.md 2026-11-17).
+  paramset?: string;
+  id?: string;
 }
 
 // `rdn` is a name from the plugin's list (commonName, organizationalUnitName, …) or a dotted OID;

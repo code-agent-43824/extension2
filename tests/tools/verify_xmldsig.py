@@ -47,7 +47,14 @@ SIGNATURES = {
     "urn:ietf:params:xml:ns:cpxmlsec:algorithms:gostr34102012-gostr34112012-256": 32,
     "urn:ietf:params:xml:ns:cpxmlsec:algorithms:gostr34102012-gostr34112012-512": 64,
 }
-ID_ATTRIBUTES = ["{http://www.w3.org/XML/1998/namespace}id", "Id", "ID", "id"]
+# wsu:Id: the WS-Security messages IFCPlugin's sign_xml signs (SOAP of SMEV 2).
+ID_ATTRIBUTES = [
+    "{http://www.w3.org/XML/1998/namespace}id",
+    "Id",
+    "ID",
+    "id",
+    "{http://docs.oasis-open.org/wss/2004/01/oasis-200401-wss-wssecurity-utility-1.0.xsd}Id",
+]
 
 
 XML_NS = "{http://www.w3.org/XML/1998/namespace}"

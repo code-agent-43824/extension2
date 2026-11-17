@@ -154,9 +154,22 @@ def load_or_create_ca(ca_dir):
     return key, cert
 
 
+def request_signature_valid(request):
+    """The request's proof of possession: its signature verifies with the key it carries."""
+    from verify_cms import gost_verify  # verify_cms imports this module
+
+    info = request[0]
+    spki = info[2]
+    paramset = spki[0][1][0].dotted
+    point = core.load(spki[1].contents[1:]).native
+    return gost_verify((paramset, point), info.dump(), request[2].contents[1:])
+
+
 def issue(ca_dir, csr_pem_path, out_path):
     ca_key, ca_cert = load_or_create_ca(ca_dir)
     request = core.load(unpem(open(csr_pem_path).read()))
+    if not request_signature_valid(request):
+        sys.exit("the request's signature does not verify")
     info = request[0]
     subject = info[1].dump()
     spki = info[2].dump()

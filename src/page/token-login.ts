@@ -131,6 +131,53 @@ async function checkKeys(session: Session, deviceId: number, serial: string): Pr
 // The operations of a page that log in, chained: each starts once the one before it has logged out.
 const queues = new WeakMap<Session, Promise<unknown>>();
 
+function enqueue<T>(session: Session, run: () => Promise<T>): Promise<T> {
+  const previous = queues.get(session) ?? Promise.resolve();
+  const result = previous.then(run, run);
+  queues.set(session, result.catch(() => undefined));
+  return result;
+}
+
+// Logs out, whatever happened: no login is left behind for the page to reuse.
+async function logout(session: Session, deviceId: number): Promise<void> {
+  try {
+    await session.plugin.logout(deviceId);
+  } catch {
+    // The token may have been removed; nothing is left logged in then.
+  }
+}
+
+// A PIN the token refused, or the token's PIN is locked.
+export class PinRejected extends Error {
+  readonly locked: boolean;
+
+  constructor(locked: boolean) {
+    super(locked ? "PIN-код Рутокена заблокирован." : "Неверный PIN-код.");
+    this.name = "PinRejected";
+    this.locked = locked;
+  }
+}
+
+// One operation logged in with a PIN the caller has, without the PIN window: IFCPlugin's way, whose sites ask the PIN
+// on their own pages and pass it in the request. Through the same queue as withLogin.
+export function withGivenPin<T>(session: Session, deviceId: number, pin: string, work: () => Promise<T>): Promise<T> {
+  return enqueue(session, async () => {
+    let ok: boolean;
+    try {
+      ok = await tryLogin(session, deviceId, pin);
+    } catch (error) {
+      if (error instanceof CadesError && error.number === SCARD_W_CHV_BLOCKED) throw new PinRejected(true);
+      throw error;
+    }
+    if (!ok) throw new PinRejected(false);
+    try {
+      return await work();
+    } finally {
+      await logout(session, deviceId);
+    }
+  });
+}
+
 // One operation at a time per page, its PIN window included. The Rutoken Plugin's login belongs to the token, not to
 // an operation: a second operation's login finds it there (ALREADY_LOGGED_IN), and the first one's logout then ends
 // it under the second one, which fails with error 19 — webtools.html lists the containers after the PIN as it loads,
@@ -147,18 +194,10 @@ export function withLogin<T>(session: Session, deviceId: number, request: PinReq
       } catch {
         // Not knowing keeps HasPrivateKey() as it was.
       }
-      // Leave no login behind for the page to reuse.
-      try {
-        await session.plugin.logout(deviceId);
-      } catch {
-        // The token may have been removed; nothing is left logged in then.
-      }
+      await logout(session, deviceId);
     }
   };
-  const previous = queues.get(session) ?? Promise.resolve();
-  const result = previous.then(run, run);
-  queues.set(session, result.catch(() => undefined));
-  return result;
+  return enqueue(session, run);
 }
 
 // The one connected token, for operations where the site names none (creating a key, writing a

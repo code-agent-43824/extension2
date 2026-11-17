@@ -479,10 +479,14 @@
   не трогает. Сайт, сменивший сочетание, сначала добавляется в новую регистрацию, потом уходит из старой; второй page.js
   на странице уступает первому. Store.Add и штамп XAdES-T — только сайтам, где включён КриптоПро. Настройка
   `ifcPinWindow` — в настройках; странице её передаст мост (действие 45).
-- [ ] **45. Плагин Госуслуг (IFCPlugin).** Метки `#ifcplugin-extension-is-installed` и `#ifc-plugin-is-installed`,
+- [x] **45. Плагин Госуслуг (IFCPlugin).** Метки `#ifcplugin-extension-is-installed` и `#ifc-plugin-is-installed`,
   сообщения `TO_IFC_EXT`/`FROM_IFC_EXT`, функции: `version`, `create`, `get_list_info`, `get_list_certs`(`_by_cryptoid_array`),
   `get_list_keys`, `load_x509_from_container`/`_from_data`, `get_x509_info`, `free_x509`, `set_x509`, `hash`, `sign`,
   `verify`, `sign_xml`, `verify_xml`, `key_gen`, `req_gen`, `get_guid`; ответы и коды ошибок — как у эталона.
+  Сделано: `src/page/ifc/` — протокол и функции (`ifc-plugin.ts`), печать сертификата как у OpenSSL ядра
+  (`openssl-text.ts`, сверка с `tests/fixtures/ifc-x509-info.json`), шаблон WS-Security (`ws-security.ts`), запрос
+  PKCS#10 (`request.ts`); общий для всех плагинов сеанс страницы (`page-session.ts`), вход по PIN сайта без окна
+  (`withGivenPin`), настройка PIN — через мост (`settings.ts`). Где сделано не как у ядра — `JOURNAL.md`, 2026-11-17.
 - [ ] **46. Госплагин.** Метка `meta[property=gosuslugi.plugin.extension.content]`, сообщения `gosuslugi.plugin` (в том
   числе `registered`, `loadScripts`, `chunkSize`, `cancelChunks`), свои `system.js`/`crypto.js` с тем же программным
   интерфейсом (без копирования кода Госплагина), методы `system.*` и `crypto.*` (`providers`, `tokens`, `certificates`,

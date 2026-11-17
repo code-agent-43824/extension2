@@ -58,13 +58,19 @@ export interface XmlVerifyReport {
   signatures: { signature_method: string; references: { uri: string; digest_method: string; digest: boolean }[]; checks: Record<string, boolean> }[];
 }
 
-// Runs tests/tools/verify_xmldsig.py on a signed XML document; caPem as for verifyCms.
-export function verifyXml(xml: string, caPem = join(caDir, "ca.pem")): XmlVerifyReport {
+// Runs tests/tools/verify_xmldsig.py on a signed XML document; caPem as for verifyCms; `signerPem` for a signature
+// without the certificate in KeyInfo (WS-Security's points at the BinarySecurityToken).
+export function verifyXml(xml: string, caPem = join(caDir, "ca.pem"), signerPem?: string): XmlVerifyReport {
   const dir = mkdtempSync(join(tmpdir(), "verify-xml-"));
   try {
     const xmlPath = join(dir, "signed.xml");
     writeFileSync(xmlPath, xml);
-    const run = spawnSync(venvPython, [join(repoRoot, "tests", "tools", "verify_xmldsig.py"), xmlPath, caPem], { encoding: "utf8" });
+    const args = [join(repoRoot, "tests", "tools", "verify_xmldsig.py"), xmlPath, caPem];
+    if (signerPem) {
+      writeFileSync(join(dir, "signer.pem"), signerPem);
+      args.push(join(dir, "signer.pem"));
+    }
+    const run = spawnSync(venvPython, args, { encoding: "utf8" });
     if (!run.stdout.trim()) throw new Error(`verify_xmldsig.py failed: ${run.stderr}`);
     return JSON.parse(run.stdout) as XmlVerifyReport;
   } finally {
