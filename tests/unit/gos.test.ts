@@ -119,16 +119,6 @@ describe("Gosplugin's core", () => {
     await expect(call("crypto", "signature", { files, certificate, type: "attached" })).rejects.toMatchObject({ code: 20003 });
   });
 
-  it("names containers by the keys' ids once a login has told them, by thumbprints before", async () => {
-    const { call, plugin } = setup({ getKeyByCertificate: async () => "72:74:31" }, [userPin]);
-    plugin.enumerateKeys = async () => ["72:74:31", "41:42"];
-    const container = async () => JSON.parse(await call("crypto", "certificates", "{}"))[0].container;
-    expect(await container()).toBe(user.thumbprint);
-    await call("crypto", "signature", { files: [{ content: "YQ==", contentEncoding: "base64" }], certificate, type: "attached" });
-    expect(await container()).toBe("rt1");
-    expect(JSON.parse(await call("crypto", "tokens", "{}"))[0].containers).toEqual(["rt1", "AB"]);
-  });
-
   it("makes the key rt1-<uuid> and the request with the token's signing tool", async () => {
     const spki = children(children(read(user.der))[0]!)[6]!.der;
     const csr = signedRequest(requestInfo(encodeSubject([{ oid: "2.5.4.3", type: 12, value: "x" }]), spki, [KEY_USAGE]), "1.2.643.7.1.1.3.2", new Uint8Array(64));

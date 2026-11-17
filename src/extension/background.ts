@@ -20,6 +20,9 @@ const repair = () => {
 };
 
 chrome.runtime.onInstalled.addListener(repair);
+// The keys' ids page.js kept in 1.16.1; the plug-ins name certificates by their thumbprints since (docs/JOURNAL.md,
+// 2026-11-17).
+chrome.runtime.onInstalled.addListener(() => void chrome.storage.local.remove("keyIds"));
 chrome.runtime.onStartup.addListener(repair);
 chrome.permissions.onAdded.addListener(() => {
   schedule(() => finishPendingSite());

@@ -12,7 +12,6 @@ import { pkcs11Serial, userCertificates, type TokenCertificate } from "../token.
 import { SCARD_W_CANCELLED_BY_USER, withLogin } from "../token-login.ts";
 import { parseCertificate, pemToDer, type X509 } from "../x509.ts";
 import { GosError, SUCCESS_MESSAGE } from "./messages.ts";
-import { keyIdBytes } from "../key-ids.ts";
 import { BUILT_IN_IDENTITIES, ipConfig, type FakeIdentity } from "../identity.ts";
 import { smevTransform, SMEV_TRANSFORM } from "./smev-transform.ts";
 import { signXml } from "./xmldsig.ts";
@@ -20,8 +19,6 @@ import { CORE_CONFIG } from "./config.ts";
 
 interface Token {
   deviceId: number;
-  // The Rutoken Plugin's, which the keys' ids are kept by (src/page/key-ids.ts).
-  rawSerial: string;
   serial: string;
   label: string;
   model: string;
@@ -52,9 +49,8 @@ async function tokens(session: Session): Promise<Token[]> {
   const [serialInfo, labelInfo, modelInfo] = await Promise.all([plugin.TOKEN_INFO_SERIAL, plugin.TOKEN_INFO_LABEL, plugin.TOKEN_INFO_MODEL]);
   const result: Token[] = [];
   for (const deviceId of await plugin.enumerateDevices()) {
-    const rawSerial = String(await plugin.getDeviceInfo(deviceId, serialInfo));
-    const serial = pkcs11Serial(rawSerial);
-    result.push({ deviceId, rawSerial, serial, label: String(await plugin.getDeviceInfo(deviceId, labelInfo)), model: String(await plugin.getDeviceInfo(deviceId, modelInfo)), name: `Rutoken ECP ${serial}` });
+    const serial = pkcs11Serial(String(await plugin.getDeviceInfo(deviceId, serialInfo)));
+    result.push({ deviceId, serial, label: String(await plugin.getDeviceInfo(deviceId, labelInfo)), model: String(await plugin.getDeviceInfo(deviceId, modelInfo)), name: `Rutoken ECP ${serial}` });
   }
   return result;
 }
@@ -82,18 +78,8 @@ function extensionValue(x509: X509, oid: string): Uint8Array | undefined {
   return x509.extensions.find((extension) => extension.oid === oid)?.value;
 }
 
-// The core's name of a key container: the key's CKA_ID, its bytes as text (the core writes them into its JSON as they
-// are, and the browser reads them as UTF-8).
-const containerName = (keyId: string) => new TextDecoder().decode(keyIdBytes(keyId));
-
-// The certificate's container once a login has told its key's id (src/page/key-ids.ts); until then, its thumbprint.
-async function containerOf(session: Session, token: Token, x509: X509): Promise<string> {
-  const keyId = (await session.keyIds())[token.rawSerial]?.certificates[x509.thumbprint];
-  return keyId ? containerName(keyId) : x509.thumbprint;
-}
-
 // The core's fields of a certificate; `onToken` adds where its key is.
-export function certificateFields(x509: X509, onToken?: { token: Token; container: string }): Record<string, string> {
+export function certificateFields(x509: X509, onToken?: { token: Token }): Record<string, string> {
   const ku = extensionValue(x509, "2.5.29.15");
   const bits = ku ? read(ku).value : new Uint8Array();
   const usage = KEY_USAGE_NAMES.filter((_, bit) => ((bits[1 + (bit >> 3)] ?? 0) & (0x80 >> (bit & 7))) !== 0).sort();
@@ -116,7 +102,9 @@ export function certificateFields(x509: X509, onToken?: { token: Token; containe
     privateKeyNotBefore: seconds(x509.privateKeyNotBefore),
     privateKeyNotAfter: seconds(x509.privateKeyNotAfter),
     provider: onToken ? onToken.token.name : "",
-    container: onToken ? onToken.container : "",
+    // The core's container is the key's CKA_ID, which the Rutoken Plugin gives only after a login: the certificate's
+    // thumbprint names it here, before a login and after, as for IFCPlugin (docs/JOURNAL.md, 2026-11-17).
+    container: onToken ? x509.thumbprint : "",
   };
 }
 
@@ -236,7 +224,7 @@ async function signature(session: Session, data: unknown, v2: boolean, files: (r
     contentEncoding: "base64",
     contentFormat: "",
   }));
-  return JSON.stringify(v2 ? { certificate: certificateFields(x509, { token, container: await containerOf(session, token, x509) }), signatures: items } : items);
+  return JSON.stringify(v2 ? { certificate: certificateFields(x509, { token }), signatures: items } : items);
 }
 
 // certificateRequest's key and request: the key "rt1-<uuid>" on the token, the request built in the page as the core
@@ -341,27 +329,22 @@ export async function callCore(context: CoreContext, module: string, method: str
       return JSON.stringify((await tokens(session)).map((token) => ({ name: token.name, type: "0", version: "hardware version: 67.4 firmware version: 34.2", token: "true" })));
     case "tokens": {
       const all = await tokenCertificates(session);
-      const known = await session.keyIds();
-      const result = [];
-      for (const token of await tokens(session)) {
-        const own = all.filter((entry) => entry.token.deviceId === token.deviceId);
-        const certificates = [];
-        for (const { certificate } of own) certificates.push(certificateFields(certificate.x509, { token, container: await containerOf(session, token, certificate.x509) }));
-        // Every key's container, once a login has listed them; until then, the certificates'.
-        const keys = known[token.rawSerial]?.keys;
-        const containers = keys?.length ? keys.map(containerName) : certificates.map((fields) => fields.container!);
-        result.push({ store: token.name, provider: token.name, label: token.label, serial: token.serial, model: "Rutoken ECP", containers, certificates });
-      }
-      return JSON.stringify(result);
+      return JSON.stringify(
+        (await tokens(session)).map((token) => {
+          const own = all.filter((entry) => entry.token.deviceId === token.deviceId);
+          return { store: token.name, provider: token.name, label: token.label, serial: token.serial, model: "Rutoken ECP", containers: own.map(({ certificate }) => certificate.x509.thumbprint), certificates: own.map(({ certificate }) => certificateFields(certificate.x509, { token })) };
+        }),
+      );
     }
     case "certificates": {
       const request = data === "" || data === undefined ? {} : parseRequest(data);
       const wanted = (request.fields && typeof request.fields === "object" ? request.fields : {}) as Record<string, unknown>;
-      const list = [];
-      for (const { token, certificate } of await tokenCertificates(session)) {
-        if (!request.store || request.store === token.name) list.push(certificateFields(certificate.x509, { token, container: await containerOf(session, token, certificate.x509) }));
-      }
-      return JSON.stringify(list.filter((fields) => Object.entries(wanted).every(([name, value]) => String(fields[name] ?? "").toUpperCase() === String(value).toUpperCase())));
+      return JSON.stringify(
+        (await tokenCertificates(session))
+          .filter(({ token }) => !request.store || request.store === token.name)
+          .map(({ token, certificate }) => certificateFields(certificate.x509, { token }))
+          .filter((fields) => Object.entries(wanted).every(([name, value]) => String(fields[name] ?? "").toUpperCase() === String(value).toUpperCase())),
+      );
     }
     case "certificateFields": {
       const request = parseRequest(data);

@@ -93,16 +93,9 @@ test.describe("on the stand token", () => {
     expect(await ifc(page, "get_list_certs", { cryptoID: "ruTokenECP/0" })).toEqual({ cert_list: [entry], error_code: 0 });
     expect(await ifc(page, "get_list_certs", { cryptoID: "ruTokenECP/5" })).toEqual({ error_code: 25 });
     expect(await ifc(page, "get_list_keys", { cryptoID: "ruTokenECP/0", userPin: "1111" })).toEqual({ error_code: 160 });
-    // After the PIN the key goes by its CKA_ID in Windows-1251, as the core names it, and from then on the certificate
-    // too, without a PIN (src/page/key-ids.ts).
-    const keys = (await ifc(page, "get_list_keys", { cryptoID: "ruTokenECP/0", userPin })) as { keys_list: Record<string, string>[] };
-    const keyName = keys.keys_list[0]!.id!;
-    expect(keyName).not.toBe(user.thumbprint);
-    expect(keys).toEqual({ error_code: 0, keys_list: [{ ...entry, id: keyName }] });
-    expect(await ifc(page, "get_list_certs", { cryptoID: "ruTokenECP/0" })).toEqual({ cert_list: [{ ...entry, id: keyName }], error_code: 0 });
-    expect(await ifc(page, "load_x509_from_container", { containerId: `ruTokenECP/0/${keyName}` })).toMatchObject({ error_code: 0 });
-    const { x509Handle } = (await ifc(page, "load_x509_from_container", { containerId: container })) as { x509Handle: number };
-    const info = (await ifc(page, "get_x509_info", { x509Handle })) as { cert_info: Record<string, string> };
+    expect(await ifc(page, "get_list_keys", { cryptoID: "ruTokenECP/0", userPin })).toEqual({ error_code: 0, keys_list: [entry] });
+    expect(await ifc(page, "load_x509_from_container", { containerId: container })).toEqual({ error_code: 0, x509Handle: 2 });
+    const info = (await ifc(page, "get_x509_info", { x509Handle: 2 })) as { cert_info: Record<string, string> };
     expect(info.cert_info).toMatchObject({ base64: b64(user.der), extensions: opensslExtensions(user), version: "3" });
     const data = Buffer.from("Привет, мир!");
     expect(await ifc(page, "hash", { containerId: container, inDataType: 2, outDataType: 1, data: b64(data) })).toEqual({ error_code: 0, hashValue: b64(digest("streebog256", data)) });
@@ -214,9 +207,8 @@ test.describe("on a copy of the token", () => {
     expect(await ifc(page, "set_x509", { containerId, userPin, x509Handle })).toEqual({ error_code: 0 });
     expect(await ifc(page, "set_x509", { containerId, userPin, x509Handle })).toEqual({ error_code: 1 });
     const thumbprint = parseCertificate(pemToDer(issued)).thumbprint;
-    // set_x509's login told the extension the key's id: the certificate goes by the key's name, as with the core.
     const list = (await ifc(page, "get_list_certs", { cryptoID: "ruTokenECP/0" })).cert_list as { id: string }[];
-    expect(list.map((entry) => entry.id)).toContain("ifc-key-1");
+    expect(list.map((entry) => entry.id)).toContain(thumbprint);
     const signature = (await ifc(page, "sign", { containerId: `ruTokenECP/0/${thumbprint}`, userPin, signType: 5, inDataType: 1, outDataType: 1, data: "Подпись новым ключом" })).sign_value as string;
     expect(verifyCms(signature).valid).toBe(true);
     // The name still works on this page.

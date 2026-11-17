@@ -83,10 +83,6 @@ test.describe("IFCPlugin", () => {
     const theirCerts = certs(await real("get_list_certs", { cryptoID: "ruTokenECP/0" }));
     const myCerts = certs(await ours("get_list_certs", { cryptoID: "ruTokenECP/0" }));
     expect(myCerts).toEqual(expect.arrayContaining(theirCerts));
-    // After a login the extension knows the keys' ids: then the ids are the core's too.
-    expect((await ours("get_list_keys", { cryptoID: "ruTokenECP/0", userPin })).error_code).toBe(0);
-    const sorted = (answer: Answer) => [...(answer.cert_list as Answer[])].sort((a, b) => String(a.cert_sn).localeCompare(String(b.cert_sn)));
-    expect(sorted(await ours("get_list_certs", { cryptoID: "ruTokenECP/0" }))).toEqual(expect.arrayContaining(sorted(await real("get_list_certs", { cryptoID: "ruTokenECP/0" }))));
     for (const params of [{ cryptoID: "ruTokenECP" }, { cryptoID: "ruTokenECP/5" }, { cryptoID: "ruTokenECP/0", userPin: "1111" }]) {
       const name = "userPin" in params ? "get_list_keys" : "get_list_certs";
       expect(await ours(name, params), JSON.stringify(params)).toEqual(await real(name, params));

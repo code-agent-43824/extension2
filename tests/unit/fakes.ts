@@ -1,7 +1,6 @@
 // Test doubles shared by the unit tests: a Rutoken Plugin with one token holding the stand's
 // user certificate, and a PIN window that answers from a script.
 import { readFileSync } from "node:fs";
-import type { KeyIds } from "../../src/page/key-ids.ts";
 import { join } from "node:path";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import type { Session } from "../../src/page/objects/session.ts";
@@ -238,8 +237,6 @@ export interface FakeStores {
   tsaAccess?: string[];
   refuseTsa?: Error;
   tsa?: (url: string, request: Uint8Array) => Promise<Uint8Array>;
-  // The keys' ids the extension keeps (src/page/key-ids.ts), changed as logins learn them.
-  keyIds?: KeyIds;
 }
 
 export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]), roots: X509[] = [], intermediates: X509[] = [], stores: FakeStores = {}): Session {
@@ -261,10 +258,6 @@ export function fakeSession(plugin: RutokenPlugin, dialog = new FakePinDialog([]
     timestamp: async (url, request) => {
       if (!stores.tsa) throw new Error("no timestamp service in this test");
       return stores.tsa(url, request);
-    },
-    keyIds: async () => (stores.keyIds ??= {}),
-    rememberKeyIds: (serial, ids) => {
-      (stores.keyIds ??= {})[serial] = ids;
     },
   };
 }

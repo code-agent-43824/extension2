@@ -92,9 +92,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `request.ts` req_gen's PKCS#10; `cp1251.ts` the container names), `gos/` (Gosplugin: `gos-plugin.ts` the page's
   messages, `messages.ts` the extension's and the core's answers, `api.ts` the objects `loadScripts` puts on the page,
   `core.ts` the core's methods, `config.ts` its catalog, `xmldsig.ts`, `smev-transform.ts` for normalize),
-  `settings.ts` (asks the bridge for IFCPlugin's PIN switch), `key-ids.ts` (the keys' CKA_IDs, which the Rutoken
-  Plugin gives only after a login: learnt at every login, kept by the bridge, for the Gosuslugi plug-ins' ids and
-  containers), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
+  `settings.ts` (asks the bridge for IFCPlugin's PIN switch), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up

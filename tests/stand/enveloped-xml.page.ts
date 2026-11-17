@@ -58,8 +58,6 @@ function session(token: FakeToken): Session {
     timestamp: async () => {
       throw new Error("no timestamp service on this page");
     },
-    keyIds: async () => ({}),
-    rememberKeyIds: () => undefined,
   };
 }
 
