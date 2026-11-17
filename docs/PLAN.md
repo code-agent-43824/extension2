@@ -487,12 +487,16 @@
   (`openssl-text.ts`, сверка с `tests/fixtures/ifc-x509-info.json`), шаблон WS-Security (`ws-security.ts`), запрос
   PKCS#10 (`request.ts`); общий для всех плагинов сеанс страницы (`page-session.ts`), вход по PIN сайта без окна
   (`withGivenPin`), настройка PIN — через мост (`settings.ts`). Где сделано не как у ядра — `JOURNAL.md`, 2026-11-17.
-- [ ] **46. Госплагин.** Метка `meta[property=gosuslugi.plugin.extension.content]`, сообщения `gosuslugi.plugin` (в том
+- [x] **46. Госплагин.** Метка `meta[property=gosuslugi.plugin.extension.content]`, сообщения `gosuslugi.plugin` (в том
   числе `registered`, `loadScripts`, `chunkSize`, `cancelChunks`), свои `system.js`/`crypto.js` с тем же программным
   интерфейсом (без копирования кода Госплагина), методы `system.*` и `crypto.*` (`providers`, `tokens`, `certificates`,
   `certificateFields`, `hash`, `signature`/`signatureV2` attached, detached и xmldsig, `normalize`, `certificateRequest`,
   `addCertificate`, `deleteCertificate`); окно PIN — наше. `system.ipConfig` — пустой список: сетевых интерфейсов
   расширению не видно.
+  Сделано: `src/page/gos/` — сообщения расширения и ядра (`messages.ts`), объекты страницы по `loadScripts` (`api.ts`),
+  методы ядра (`core.ts`, каталог `config.ts`), `xmldsig` (`xmldsig.ts`), трансформация СМЭВ для `normalize`
+  (`smev-transform.ts`); обработчик страницы (`gos-plugin.ts`). Эталон — ответы настоящего расширения и ядра на уровне
+  страницы; где не как у них — `JOURNAL.md`, 2026-11-17.
 - [ ] **47. Проверка и выпуск.** Модульные тесты, стенд (страницы, вызывающие оба плагина так, как их вызывают сайты),
   сверка с эталоном по флагу, независимые проверки подписей; раздел в `MANUAL-CHECK.md`; версия 1.16.0.
 

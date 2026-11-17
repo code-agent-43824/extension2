@@ -86,8 +86,10 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `page-session.ts` (the Rutoken Plugin and the PIN window, one per page for all the plug-ins played),
   `ifc/` (IFCPlugin: `ifc-plugin.ts` the TO_IFC_EXT/FROM_IFC_EXT protocol and the core's functions with its codes,
   `openssl-text.ts` a certificate printed as the core's OpenSSL prints it, `ws-security.ts` sign_xml's template,
-  `request.ts` req_gen's PKCS#10; `cp1251.ts` the container names), `settings.ts` (asks the bridge for IFCPlugin's PIN
-  switch), `cadesplugin.ts`
+  `request.ts` req_gen's PKCS#10; `cp1251.ts` the container names), `gos/` (Gosplugin: `gos-plugin.ts` the page's
+  messages, `messages.ts` the extension's and the core's answers, `api.ts` the objects `loadScripts` puts on the page,
+  `core.ts` the core's methods, `config.ts` its catalog, `xmldsig.ts`, `smev-transform.ts` for normalize),
+  `settings.ts` (asks the bridge for IFCPlugin's PIN switch), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
@@ -154,7 +156,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `verification.spec.ts` verifies ours and CryptoPro's signatures in the page; `roots.spec.ts` drives the root store
   on the options page; `validity.spec.ts` the extended validity check and the demo page adding its root; `enrollment.spec.ts` the
   certsrv calls offline on a copy of the token, with the question about the root; `ifc.spec.ts` IFCPlugin's protocol
-  and functions, its signatures checked independently, key and request on a copy of the token; `with-cryptopro-csp.spec.ts` (opt-in)
+  and functions, its signatures checked independently, key and request on a copy of the token; `gosplugin.spec.ts`
+  Gosplugin's messages, loaded objects and methods, likewise; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `webtools.spec.ts` runs CryptoPro's `webtools.html`
   (readers and containers, signing with CAdES-T and XAdES, encryption); `openssl-gost.spec.ts` (opt-in) checks encryption against OpenSSL's GOST
   engine; `enveloped-xml.spec.ts` runs XML encryption in Chromium without the extension or the token: esbuild bundles

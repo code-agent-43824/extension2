@@ -2,6 +2,7 @@
 // for the site (modes.ts). The site's own cadesplugin_api.js returns early when window.cadesplugin already exists, so
 // ours stays in place.
 import { createCadesplugin } from "./cadesplugin.ts";
+import { startGosplugin } from "./gos/gos-plugin.ts";
 import { startIfcPlugin } from "./ifc/ifc-plugin.ts";
 import { takePlugins } from "./modes.ts";
 
@@ -15,4 +16,5 @@ if (!page[RUNNING]) {
   const clock = { setTimeout: (callback: () => void, ms: number) => window.setTimeout(callback, ms), now: () => Date.now() };
   if (plugins.includes("cryptopro") && !page.cadesplugin) page.cadesplugin = createCadesplugin(page, clock);
   if (plugins.includes("ifc")) startIfcPlugin(page, clock);
+  if (plugins.includes("gos")) startGosplugin(page, clock);
 }

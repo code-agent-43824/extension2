@@ -15,7 +15,7 @@ import type { PinRequest } from "../pin-dialog.ts";
 import type { Clock } from "../rutoken.ts";
 import { pageSettings, type Settings } from "../settings.ts";
 import { certificateLines, sizeText } from "../signing.ts";
-import { userCertificates, type TokenCertificate } from "../token.ts";
+import { pkcs11Serial, userCertificates, type TokenCertificate } from "../token.ts";
 import { PinRejected, SCARD_W_CANCELLED_BY_USER, withGivenPin, withLogin } from "../token-login.ts";
 import { parseCertificate, pemToDer, type X509 } from "../x509.ts";
 import { opensslExtensions, opensslName, opensslSerial, opensslTime } from "./openssl-text.ts";
@@ -74,10 +74,7 @@ const libraryPath = () => {
   return "librtpkcs11ecp.so";
 };
 
-// The PKCS#11 serial number the core shows: the Rutoken Plugin's decimal serial in hex.
-function serialHex(serial: string): string {
-  return /^\d+$/.test(serial) ? Number(serial).toString(16).toUpperCase().padStart(8, "0") : serial;
-}
+const serialHex = pkcs11Serial;
 
 async function tokens(session: Session): Promise<Token[]> {
   const plugin = session.plugin;

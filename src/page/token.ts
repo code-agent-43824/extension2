@@ -11,6 +11,12 @@ export interface TokenCertificate {
   x509: X509;
 }
 
+// The token's PKCS#11 serial number, as the Gosuslugi plug-ins show it: the Rutoken Plugin's decimal serial in hex
+// (1076966400 is the fake token's 40313400, docs/JOURNAL.md 2026-11-17).
+export function pkcs11Serial(serial: string): string {
+  return /^\d+$/.test(serial) ? Number(serial).toString(16).toUpperCase().padStart(8, "0") : serial;
+}
+
 // The current deviceId of the token with this serial number: ids change when tokens are reconnected.
 export async function findDevice(plugin: RutokenPlugin, serial: string): Promise<number | undefined> {
   const serialInfo = await plugin.TOKEN_INFO_SERIAL;

@@ -95,8 +95,20 @@ export function requestInfo(subject: Uint8Array, publicKey: Uint8Array, extensio
   return seq(encode(0x02, Uint8Array.of(0)), subject, publicKey, encode(0xa0, extensionRequest));
 }
 
-// The request: the info, GOST R 34.10-2012 with GOST R 34.11-2012 of the key's size, with NULL parameters as the
-// core writes them, and the signature.
-export function signedRequest(info: Uint8Array, signatureAlgorithm: string, signature: Uint8Array): Uint8Array {
-  return seq(info, seq(oid(signatureAlgorithm), encode(0x05)), encode(0x03, Uint8Array.of(0), signature));
+// The request: the info, GOST R 34.10-2012 with GOST R 34.11-2012 of the key's size, with NULL parameters as
+// IFCPlugin's core writes them (Gosplugin's writes none), and the signature.
+export function signedRequest(info: Uint8Array, signatureAlgorithm: string, signature: Uint8Array, nullParameters = true): Uint8Array {
+  return seq(info, seq(oid(signatureAlgorithm), ...(nullParameters ? [encode(0x05)] : [])), encode(0x03, Uint8Array.of(0), signature));
+}
+
+export const identificationKind = (kind: number) => extension("1.2.643.100.114", encode(0x02, Uint8Array.of(kind)));
+
+// digitalSignature … decipherOnly, as a KeyUsage BIT STRING of the named bits.
+export function keyUsage(bits: number[]): Uint8Array {
+  const value = bits.reduce((sum, bit) => sum | (1 << (15 - bit)), 0);
+  const bytes = value & 0xff ? [value >> 8, value & 0xff] : [value >> 8];
+  const last = bytes[bytes.length - 1]!;
+  let unused = 0;
+  while (unused < 7 && !(last & (1 << unused))) unused++;
+  return extension("2.5.29.15", encode(0x03, Uint8Array.of(unused, ...bytes)));
 }
