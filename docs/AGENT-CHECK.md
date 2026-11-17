@@ -135,7 +135,8 @@ Not applicable here — report N/A: W11 (taking the token out), checklist item 1
 machine inside W4–W8, and «Сверка полей с КриптоПро»; all need a device or CryptoPro CSP.
 
 On the fake token the reader is `Aktiv Rutoken ECP 0`, the token label `stand`, and the containers
-`\\.\Aktiv Rutoken ECP 0\ID_…` are two keys. In W4, «Cannot find the original signer. (0x8009100E)» means the issuer's
+`\\.\Aktiv Rutoken ECP 0\ID_<thumbprint>` are the token's certificates, listed without a PIN (from 1.16.2 webtools.html
+asks no PIN at load). In W4, «Cannot find the original signer. (0x8009100E)» means the issuer's
 certificate is missing from the second tab: add it and verify again; that counts as a pass.
 
 ## 7. Report

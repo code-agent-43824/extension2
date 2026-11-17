@@ -81,7 +81,8 @@ export class PublicKey {
   }
 }
 
-function certificateKey(x509: X509): PublicKeyParts {
+// The certificate's public key; also its container key's (containers.ts).
+export function certificateKey(x509: X509): PublicKeyParts {
   const parameters = children(read(x509.publicKeyAlgorithmDer))[1];
   return { algorithm: x509.publicKeyAlgorithm, length: publicKeyBits(x509), key: x509.publicKey, parameters: parameters ? parameters.der : new Uint8Array() };
 }

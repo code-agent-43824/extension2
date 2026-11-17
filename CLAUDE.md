@@ -105,7 +105,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   plugin's `derive` makes on the token;
   `objects/certificate-extensions.ts` the CAPICOM objects of a certificate's extensions (KeyUsage, ExtendedKeyUsage,
   BasicConstraints, Extensions, EncodedData) on `certificate-info.ts` (GetInfo's names, EKUs, policies, template),
-  `certificate-dialog.ts` Display()'s window; `objects/csp-information.ts` the connected tokens as readers, `tokeninserted` by polling; `objects/containers.ts` their keys as CryptoPro's containers, read after each token's PIN once per page), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
+  `certificate-dialog.ts` Display()'s window; `objects/csp-information.ts` the connected tokens as readers, `tokeninserted` by polling; `objects/containers.ts` their certificates' keys as CryptoPro's containers, named by thumbprint, without a PIN), `compat.ts` (versions reported to sites), `errors.ts` (`getLastError` format),
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing, and `asn1.ts` writes DER too; `dn.ts` holds the CryptoPro name format
   sites match with regexes, and the RFC 4514 names of XAdES), `gost.ts` (hashes, HMAC, GOST R 34.10 signature checks and VKO, on `@li0ard/gost`) +
@@ -256,9 +256,13 @@ local names resolve): Playwright's routes reach the pages only, and a service wo
   software, and `lsb-cprocsp-ca-certs` downloads only after logging in to CryptoPro's site, so no pinned fetch can
   get them at build time. The package itself stays out of git.
 
-- **Containers are listed after the token's PIN.** Owner, 2026-10-08: "спрашивай пин". Reason: CryptoPro names a
-  key on a Rutoken `\\.\<reader>\ID_<CKA_ID>`, and the Rutoken Plugin gives key ids only after a login; the owner
-  prefers CryptoPro's names to a list without a PIN.
+- **Certificates and their keys are named by the certificate's thumbprint, without a PIN.** Owner, 2026-11-17, «да»
+  on the agent's proposal, reversing his 2026-10-08 "спрашивай пин" (containers listed after the PIN). Reason: the
+  Rutoken Plugin gives a key's CKA_ID only after a login, and the owner wants no login just to name keys. So
+  CryptoPro's containers are `\\.\<reader>\ID_<thumbprint>`, one per certificate, their key described from the
+  certificate, and IFCPlugin's and Gosplugin's ids and containers are thumbprints; after a login the key is found by
+  the certificate (`getKeyByCertificate`). The names differ from the real plug-ins', and keys without a certificate
+  are seen only where a login is asked anyway (IFCPlugin's `get_list_keys`).
 
 - **XAdES-T's timestamp is requested by the service worker, with access to each service granted by the user.** Agent,
   2026-10-08, on the owner's "xades делай". Reason: the Rutoken Plugin reaches a timestamp service only inside a CMS

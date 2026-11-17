@@ -1,14 +1,15 @@
-// CryptoPro's key containers for the keys on the connected Rutokens (docs/PLAN.md, action 25 (e)): every private
-// key the Rutoken Plugin sees is the container \\.\<reader>\ID_<CKA_ID>, as CryptoPro names it (the owner's
-// screenshot, 2026-10-08). Key ids come only after a login, so listing asks for each token's PIN (the owner's
-// decision, CLAUDE.md); what one login found is kept for the page until the extension itself changes the token's keys.
-import { encode } from "../asn1.ts";
+// CryptoPro's key containers for the keys on the connected Rutokens (docs/PLAN.md, actions 25 (e) and 51): each user
+// certificate on a token is the container of its key, \\.\<reader>\ID_<thumbprint>, in CryptoPro's form (the owner's
+// screenshot, 2026-10-08) with the certificate's thumbprint in place of the key's CKA_ID, which the Rutoken Plugin gives
+// only after a login. So listing needs no PIN (the owner, 2026-11-17, CLAUDE.md), and what the key is comes from its
+// certificate; a key without a certificate is not listed. Deleting finds the key by the certificate after the PIN.
+import { children, expectTag, read } from "../asn1.ts";
 import { constants } from "../constants.ts";
 import { CadesError } from "../errors.ts";
 import { certificateLines } from "../signing.ts";
 import { findDevice, userCertificates, type TokenCertificate } from "../token.ts";
 import { SCARD_E_NO_SMARTCARD, withLogin } from "../token-login.ts";
-import { Certificate, PublicKey } from "./certificate.ts";
+import { Certificate, certificateKey, PublicKey } from "./certificate.ts";
 import type { Session } from "./session.ts";
 
 const E_INVALIDARG = 0x80070057;
@@ -16,129 +17,51 @@ const CRYPT_E_NOT_FOUND = 0x80092004;
 // What CryptoAPI answers for a container that does not exist.
 export const NTE_BAD_KEYSET = 0x80090016;
 
-// CryptoPro's ALG_ID of each key kind (GostConstants.cs of CryptoPro's .NET; RSA from the table in Code.js).
-const algIds = {
-  gost2012_256: { signature: 0x2e49, exchange: 0xaa46, oid: "1.2.643.7.1.1.1.1" },
-  gost2012_512: { signature: 0x2e3d, exchange: 0xaa42, oid: "1.2.643.7.1.1.1.2" },
-  gost2001: { signature: 0x2e23, exchange: 0xaa24, oid: "1.2.643.2.2.19" },
-  rsa: { signature: 0x2400, exchange: 0xa400, oid: "1.2.840.113549.1.1.1" },
-} as const;
+// CryptoPro's ALG_ID of each key kind (GostConstants.cs of CryptoPro's .NET; RSA from the table in Code.js), by the
+// certificate's public key algorithm.
+const algIds: Record<string, { signature: number; exchange: number }> = {
+  "1.2.643.7.1.1.1.1": { signature: 0x2e49, exchange: 0xaa46 },
+  "1.2.643.7.1.1.1.2": { signature: 0x2e3d, exchange: 0xaa42 },
+  "1.2.643.2.2.19": { signature: 0x2e23, exchange: 0xaa24 },
+  "1.2.840.113549.1.1.1": { signature: 0x2400, exchange: 0xa400 },
+};
 
-type KeyKind = keyof typeof algIds;
+// CAPICOM's key usage flags that let a key encrypt: keyEncipherment and keyAgreement.
+const EXCHANGE_USAGE = 0x20 | 0x08;
 
-// What one login told about a key.
-interface KeyRecord {
-  keyId: string;
-  kind: KeyKind | undefined;
-  exchange: boolean;
-  publicKey: Uint8Array;
-  notAfter: Date | undefined;
-  certificate: TokenCertificate | undefined;
+// A key is an exchange key when its certificate lets it encrypt, or does not limit its usage.
+const isExchange = (certificate: TokenCertificate) => certificate.x509.keyUsage === null || (certificate.x509.keyUsage & EXCHANGE_USAGE) !== 0;
+
+// The key's value as the token keeps it: a GOST key's point (x||y), an RSA key's modulus.
+function keyValue(certificate: TokenCertificate): Uint8Array {
+  try {
+    const key = read(certificate.x509.publicKey);
+    if (key.tag === 0x04) return key.value;
+    const modulus = children(expectTag(key, 0x30, "RSAPublicKey"))[0]!.value;
+    return modulus[0] === 0 ? modulus.subarray(1) : modulus;
+  } catch {
+    return certificate.x509.publicKey;
+  }
 }
 
-interface TokenKeys {
+interface TokenInfo {
   serial: string;
   reader: string;
   media: string;
-  keys: KeyRecord[];
-}
-
-// By token serial number: what a login found, or the login still under way, which a second caller waits for rather
-// than opening a second PIN window.
-const remembered = new WeakMap<Session, Map<string, Promise<TokenKeys>>>();
-
-// After the extension creates or deletes a key, or writes a certificate, the next listing asks again.
-export function forgetContainers(session: Session): void {
-  remembered.delete(session);
-}
-
-function fromHex(hex: string): Uint8Array {
-  return Uint8Array.from(hex.replace(/[^0-9a-f]/gi, "").match(/../g) ?? [], (byte) => parseInt(byte, 16));
-}
-
-const sameKeyId = (a: string, b: string) => a.replace(/:/g, "").toLowerCase() === b.replace(/:/g, "").toLowerCase();
-
-async function readKeys(session: Session, deviceId: number, certificates: TokenCertificate[]): Promise<KeyRecord[]> {
-  const plugin = session.plugin;
-  const [algorithmInfo, specInfo, periodInfo] = await Promise.all([plugin.KEY_INFO_ALGORITHM, plugin.KEY_INFO_SPEC, plugin.KEY_INFO_USAGE_PERIOD]);
-  const kinds = new Map<number, KeyKind>([
-    [await plugin.PUBLIC_KEY_ALGORITHM_GOST3410_2012_256, "gost2012_256"],
-    [await plugin.PUBLIC_KEY_ALGORITHM_GOST3410_2012_512, "gost2012_512"],
-    [await plugin.PUBLIC_KEY_ALGORITHM_GOST3410_2001, "gost2001"],
-    [await plugin.PUBLIC_KEY_ALGORITHM_RSA, "rsa"],
-  ]);
-  const exchangeSpec = await plugin.KEY_SPEC_SIGN_AND_EXCHANGE;
-  // A certificate without a key on the token belongs to no container.
-  const owners: { keyId: string; certificate: TokenCertificate }[] = [];
-  for (const certificate of certificates) {
-    try {
-      owners.push({ keyId: await plugin.getKeyByCertificate(deviceId, certificate.certId), certificate });
-    } catch {
-      // No key for it.
-    }
-  }
-  const keys: KeyRecord[] = [];
-  for (const keyId of await plugin.enumerateKeys(deviceId, "")) {
-    const period = (await plugin.getKeyInfo(deviceId, keyId, periodInfo)) as { notAfter?: number } | null;
-    keys.push({
-      keyId,
-      kind: kinds.get(Number(await plugin.getKeyInfo(deviceId, keyId, algorithmInfo))),
-      exchange: Number(await plugin.getKeyInfo(deviceId, keyId, specInfo)) === exchangeSpec,
-      publicKey: fromHex(await plugin.getPublicKeyValue(deviceId, keyId, {})),
-      notAfter: typeof period?.notAfter === "number" ? new Date(period.notAfter * 1000) : undefined,
-      certificate: owners.find((owner) => sameKeyId(owner.keyId, keyId))?.certificate,
-    });
-  }
-  return keys;
-}
-
-// The containers of every connected token, a PIN window for each token not read yet on this page.
-async function tokenKeys(session: Session): Promise<{ deviceId: number; token: TokenKeys }[]> {
-  const plugin = session.plugin;
-  const [serialInfo, readerInfo, modelInfo] = await Promise.all([plugin.TOKEN_INFO_SERIAL, plugin.TOKEN_INFO_READER, plugin.TOKEN_INFO_MODEL]);
-  const known = remembered.get(session) ?? new Map<string, Promise<TokenKeys>>();
-  remembered.set(session, known);
-  const result: { deviceId: number; token: TokenKeys }[] = [];
-  for (const deviceId of await plugin.enumerateDevices()) {
-    const serial = String(await plugin.getDeviceInfo(deviceId, serialInfo));
-    let pending = known.get(serial);
-    if (!pending) {
-      pending = (async () => {
-        const reader = String(await plugin.getDeviceInfo(deviceId, readerInfo));
-        const model = String(await plugin.getDeviceInfo(deviceId, modelInfo));
-        const own = (await userCertificates(plugin)).filter((certificate) => certificate.serial === serial);
-        const request = {
-          origin: session.origin,
-          action: "просит показать ключи на Рутокене.",
-          details: [`Рутокен ${model} ${serial}, считыватель «${reader}».`, "Сайт увидит ключи как контейнеры КриптоПро: их идентификаторы и открытые ключи."],
-          confirm: "Показать",
-        };
-        const keys = await withLogin(session, deviceId, request, () => readKeys(session, deviceId, own));
-        return { serial, reader, media: `${model} ${serial}`, keys };
-      })();
-      known.set(serial, pending);
-      // A refused PIN or a failure is not kept: the next listing asks again.
-      pending.catch(() => {
-        if (known.get(serial) === pending) known.delete(serial);
-      });
-    }
-    result.push({ deviceId, token: await pending });
-  }
-  return result;
 }
 
 // CPContainerKey: the key itself, never exportable from a Rutoken.
 export class ContainerKey {
   readonly #session: Session;
-  readonly #key: KeyRecord;
+  readonly #certificate: TokenCertificate;
 
-  constructor(session: Session, key: KeyRecord) {
+  constructor(session: Session, certificate: TokenCertificate) {
     this.#session = session;
-    this.#key = key;
+    this.#certificate = certificate;
   }
 
   get Type(): Promise<number> {
-    return Promise.resolve(this.#key.exchange ? constants.AT_KEYEXCHANGE : constants.AT_SIGNATURE);
+    return Promise.resolve(isExchange(this.#certificate) ? constants.AT_KEYEXCHANGE : constants.AT_SIGNATURE);
   }
 
   get IsExportable(): Promise<boolean> {
@@ -146,36 +69,34 @@ export class ContainerKey {
   }
 
   get HasCertificate(): Promise<boolean> {
-    return Promise.resolve(this.#key.certificate !== undefined);
+    return Promise.resolve(true);
   }
 
   get Certificate(): Promise<Certificate> {
-    const certificate = this.#key.certificate;
-    if (!certificate) return Promise.reject(new CadesError("В контейнере нет сертификата", CRYPT_E_NOT_FOUND));
-    return Promise.resolve(new Certificate(this.#session, certificate));
+    return Promise.resolve(new Certificate(this.#session, this.#certificate));
   }
 
-  // The private key's usage period on the token; a key without one has no date (webtools.html then shows "-").
+  // The private key's usage period in its certificate; a certificate without one gives no date (webtools.html then
+  // shows "-").
   get ExpirationTime(): Promise<string> {
-    const date = this.#key.notAfter;
+    const date = this.#certificate.x509.privateKeyNotAfter;
     if (!date) return Promise.reject(new CadesError("Срок действия ключа не задан", CRYPT_E_NOT_FOUND));
     return Promise.resolve(date.toISOString());
   }
 
   // The first 8 bytes of the public key, as hex without spaces.
   get KP_FP(): Promise<string> {
-    return Promise.resolve(Array.from(this.#key.publicKey.subarray(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase());
+    return Promise.resolve(Array.from(keyValue(this.#certificate).subarray(0, 8), (byte) => byte.toString(16).padStart(2, "0")).join("").toUpperCase());
   }
 
   get KP_ALGID(): Promise<number> {
-    const ids = this.#key.kind && algIds[this.#key.kind];
-    return Promise.resolve(ids ? (this.#key.exchange ? ids.exchange : ids.signature) : 0);
+    const ids = algIds[this.#certificate.x509.publicKeyAlgorithm];
+    return Promise.resolve(ids ? (isExchange(this.#certificate) ? ids.exchange : ids.signature) : 0);
   }
 
+  // The certificate's public key.
   get PublicKey(): Promise<PublicKey> {
-    const ids = this.#key.kind && algIds[this.#key.kind];
-    // The key as a certificate carries it: an OCTET STRING of x||y.
-    return Promise.resolve(new PublicKey({ algorithm: ids ? ids.oid : "", length: this.#key.publicKey.length * 8, key: encode(0x04, this.#key.publicKey), parameters: new Uint8Array() }));
+    return Promise.resolve(new PublicKey(certificateKey(this.#certificate.x509)));
   }
 }
 
@@ -202,14 +123,14 @@ class ContainerKeys {
 // the token's model and serial number, as the reader's.
 export class Container {
   readonly #session: Session;
-  readonly #token: TokenKeys;
-  readonly #key: KeyRecord;
+  readonly #token: TokenInfo;
+  readonly #certificate: TokenCertificate;
   #silent = false;
 
-  constructor(session: Session, token: TokenKeys, key: KeyRecord) {
+  constructor(session: Session, token: TokenInfo, certificate: TokenCertificate) {
     this.#session = session;
     this.#token = token;
-    this.#key = key;
+    this.#certificate = certificate;
   }
 
   get Name(): Promise<string> {
@@ -243,30 +164,35 @@ export class Container {
   }
 
   get Keys(): Promise<ContainerKeys> {
-    return Promise.resolve(new ContainerKeys([new ContainerKey(this.#session, this.#key)]));
+    return Promise.resolve(new ContainerKeys([new ContainerKey(this.#session, this.#certificate)]));
   }
 
-  // Deletes the key pair and the certificate that goes with it, after the PIN.
+  // Deletes the certificate's key pair, found by the certificate after the PIN, and the certificate.
   async Delete(): Promise<void> {
     const plugin = this.#session.plugin;
     const deviceId = await findDevice(plugin, this.#token.serial);
     if (deviceId === undefined) throw new CadesError("Рутокен с этим контейнером не подключён.", SCARD_E_NO_SMARTCARD);
-    const certificate = this.#key.certificate;
+    const certificate = this.#certificate;
     const request = {
       origin: this.#session.origin,
       action: "просит удалить ключ с Рутокена.",
-      details: [`Контейнер ${this.fqcn()}.`, ...(certificate ? certificateLines(certificate.x509) : []), `Ключ${certificate ? " и сертификат удаляются" : " удаляется"} безвозвратно.`],
+      details: [`Контейнер ${this.fqcn()}.`, ...certificateLines(certificate.x509), "Ключ и сертификат удаляются безвозвратно."],
       confirm: "Удалить",
     };
     await withLogin(this.#session, deviceId, request, async () => {
-      await plugin.deleteKeyPair(deviceId, this.#key.keyId);
-      if (certificate) await plugin.deleteCertificate(deviceId, certificate.certId);
+      let keyId: string | undefined;
+      try {
+        keyId = await plugin.getKeyByCertificate(deviceId, certificate.certId);
+      } catch {
+        // A certificate whose key is gone: only the certificate is left to delete.
+      }
+      if (keyId !== undefined) await plugin.deleteKeyPair(deviceId, keyId);
+      await plugin.deleteCertificate(deviceId, certificate.certId);
     });
-    forgetContainers(this.#session);
   }
 
   name(): string {
-    return `ID_${this.#key.keyId.replace(/:/g, "").toLowerCase()}`;
+    return `ID_${this.#certificate.x509.thumbprint.toLowerCase()}`;
   }
 
   fqcn(): string {
@@ -293,6 +219,16 @@ export class Containers {
   }
 }
 
+// Every user certificate on the connected tokens, read anew each time, without a login.
 export async function containers(session: Session): Promise<Container[]> {
-  return (await tokenKeys(session)).flatMap(({ token }) => token.keys.map((key) => new Container(session, token, key)));
+  const plugin = session.plugin;
+  const [serialInfo, readerInfo, modelInfo] = await Promise.all([plugin.TOKEN_INFO_SERIAL, plugin.TOKEN_INFO_READER, plugin.TOKEN_INFO_MODEL]);
+  const all = await userCertificates(plugin);
+  const result: Container[] = [];
+  for (const deviceId of await plugin.enumerateDevices()) {
+    const serial = String(await plugin.getDeviceInfo(deviceId, serialInfo));
+    const token = { serial, reader: String(await plugin.getDeviceInfo(deviceId, readerInfo)), media: `${String(await plugin.getDeviceInfo(deviceId, modelInfo))} ${serial}` };
+    for (const certificate of all.filter((candidate) => candidate.serial === serial)) result.push(new Container(session, token, certificate));
+  }
+  return result;
 }

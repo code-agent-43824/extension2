@@ -1,4 +1,7 @@
-// The keys on a Rutoken as CryptoPro's containers, listed after the token's PIN (docs/PLAN.md, action 25 (e)).
+// The keys on a Rutoken as CryptoPro's containers, named and described by their certificates without a PIN
+// (docs/PLAN.md, actions 25 (e) and 51).
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { constants } from "../../src/page/constants.ts";
 import { getLastError } from "../../src/page/errors.ts";
@@ -6,11 +9,8 @@ import type { Certificate } from "../../src/page/objects/certificate.ts";
 import type { Container, ContainerKey, Containers } from "../../src/page/objects/containers.ts";
 import type { CspInformation } from "../../src/page/objects/csp-information.ts";
 import { createObject } from "../../src/page/objects/index.ts";
-import type { CadesSignedData } from "../../src/page/objects/signed-data.ts";
-import type { CPSigner } from "../../src/page/objects/signer.ts";
-import type { Store } from "../../src/page/objects/store.ts";
-import type { Certificates } from "../../src/page/objects/certificate.ts";
-import { certId, fakePlugin, FakePinDialog, fakeSession, tokenModel, tokenReader, tokenSerial, userPin, type FakePlugin } from "./fakes.ts";
+import { repoRoot } from "../../scripts/fetch-vendor.ts";
+import { certId, fakePlugin, FakePinDialog, fakeSession, pem, tokenModel, tokenReader, tokenSerial, userPin, type FakePlugin } from "./fakes.ts";
 
 function setup(answers: (string | null)[], plugin: FakePlugin = fakePlugin()) {
   const dialog = new FakePinDialog(answers);
@@ -25,119 +25,91 @@ async function keyOf(container: Container): Promise<ContainerKey> {
 }
 
 describe("containers of the keys on a Rutoken", () => {
-  it("names each key as CryptoPro does, after the token's PIN, and asks it once per page", async () => {
-    const { plugin, dialog, information } = setup([userPin]);
+  const name = "ID_cdea7eab5be6b167f22b713bf376e9b28adb14a3";
+
+  it("names each certificate's container as CryptoPro names a key, with the certificate's thumbprint, without a PIN", async () => {
+    const { plugin, dialog, information } = setup([]);
     const list: Containers = await information().EnumContainers();
-    expect(await list.Count).toBe(2);
-    const [first, second] = [await list.ItemByIndex(0), await list.ItemByIndex(1)];
-    expect(await first.Name).toBe("ID_key1");
-    expect(await first.FQCN).toBe(`\\\\.\\${tokenReader}\\ID_key1`);
+    expect(await list.Count).toBe(1);
+    const first = await list.ItemByIndex(0);
+    expect(await first.Name).toBe(name);
+    expect(await first.FQCN).toBe(`\\\\.\\${tokenReader}\\${name}`);
     expect(await first.UniqueName).toBe(await first.FQCN);
     expect([await first.Reader, await first.Media]).toEqual([tokenReader, `${tokenModel} ${tokenSerial}`]);
-    expect(await second.FQCN).toBe(`\\\\.\\${tokenReader}\\ID_0abc`);
-    expect(dialog.requests).toEqual([expect.objectContaining({ action: "просит показать ключи на Рутокене.", confirm: "Показать" })]);
-    expect(plugin.calls.logout).toBe(1);
-
-    expect(await (await information().EnumContainers()).Count).toBe(2);
-    expect(plugin.calls.login).toEqual([userPin]);
+    expect(dialog.requests).toHaveLength(0);
+    expect(plugin.calls.login).toEqual([]);
   });
 
-  it("opens one PIN window for listings that come at the same time, and asks again after a cancel", async () => {
-    const { dialog, information } = setup([userPin]);
-    const [a, b] = await Promise.all([information().EnumContainers(), information().EnumContainers()]);
-    expect([await a.Count, await b.Count]).toEqual([2, 2]);
-    expect(dialog.requests).toHaveLength(1);
-
-    const cancelled = setup([null, userPin]);
-    await cancelled.information().EnumContainers().catch(() => undefined);
-    expect(await (await cancelled.information().EnumContainers()).Count).toBe(2);
-    expect(cancelled.dialog.requests).toHaveLength(2);
-  });
-
-  it("describes each container's key: type, algorithm, fingerprint, certificate and validity", async () => {
-    const { information } = setup([userPin]);
+  it("describes each container's key from its certificate: type, algorithm, fingerprint, certificate and validity", async () => {
+    const noKeyUsage = readFileSync(join(repoRoot, "tests", "fixtures", "no-key-usage.pem"), "utf8");
+    const { information } = setup([], fakePlugin([pem, noKeyUsage]));
     const list = await information().EnumContainers();
-    const withCertificate = await keyOf(await list.ItemByIndex(0));
-    expect(await withCertificate.Type).toBe(constants.AT_KEYEXCHANGE);
-    expect(await withCertificate.KP_ALGID).toBe(0xaa46);
-    expect(await withCertificate.KP_FP).toBe("0102030405060708");
-    expect(await withCertificate.IsExportable).toBe(false);
-    expect(await withCertificate.HasCertificate).toBe(true);
-    const certificate: Certificate = await withCertificate.Certificate;
+    // keyEncipherment and keyAgreement in the certificate: an exchange key.
+    const gost = await keyOf(await list.ItemByIndex(0));
+    expect(await gost.Type).toBe(constants.AT_KEYEXCHANGE);
+    expect(await gost.KP_ALGID).toBe(0xaa46);
+    // The first 8 bytes of the point.
+    expect(await gost.KP_FP).toBe("ACA34CDC77B88174");
+    expect(await gost.IsExportable).toBe(false);
+    expect(await gost.HasCertificate).toBe(true);
+    const certificate: Certificate = await gost.Certificate;
     expect(await certificate.SubjectName).toContain("CN=Stand User");
-    expect(getLastError(await withCertificate.ExpirationTime.catch((e: unknown) => e))).toContain("0x80092004");
-    const key = await withCertificate.PublicKey;
+    expect(await gost.ExpirationTime).toBe("2027-09-23T14:10:24.000Z");
+    const key = await gost.PublicKey;
     expect([await (await key.Algorithm).Value, await key.Length]).toEqual(["1.2.643.7.1.1.1.1", 512]);
 
-    const alone = await keyOf(await list.ItemByIndex(1));
-    expect([await alone.Type, await alone.KP_ALGID, await alone.HasCertificate]).toEqual([constants.AT_SIGNATURE, 0x2e3d, false]);
-    expect(await alone.ExpirationTime).toBe("2030-01-01T00:00:00.000Z");
-    expect(getLastError(await alone.Certificate.catch((e: unknown) => e))).toContain("0x80092004");
-    expect(await (await alone.PublicKey).Length).toBe(1024);
+    // No key usage extension: nothing forbids exchange; no private key usage period: no date.
+    const rsa = await keyOf(await list.ItemByIndex(1));
+    expect([await rsa.Type, await rsa.KP_ALGID, await (await rsa.PublicKey).Length]).toEqual([constants.AT_KEYEXCHANGE, 0xa400, 2048]);
+    expect(await rsa.KP_FP).toBe("DE9DD7EA571849A1");
+    expect(getLastError(await rsa.ExpirationTime.catch((e: unknown) => e))).toContain("0x80092004");
+  });
+
+  it("calls a key a signature key when its certificate does not let it encrypt", async () => {
+    // The stand CA's: keyCertSign and cRLSign only.
+    const signingOnly = readFileSync(join(repoRoot, "tests", "fixtures", "stand-ca.pem"), "utf8");
+    const { information } = setup([], fakePlugin([signingOnly]));
+    const key = await keyOf(await (await information().EnumContainers()).ItemByIndex(0));
+    expect([await key.Type, await key.KP_ALGID]).toEqual([constants.AT_SIGNATURE, 0x2e49]);
   });
 
   it("finds a container by its FQCN or its name, in any case", async () => {
-    const { information } = setup([userPin]);
+    const { information } = setup([]);
     const info = information();
-    expect(await (await info.ContainerByName(`\\\\.\\${tokenReader}\\ID_key1`)).Name).toBe("ID_key1");
-    expect(await (await info.ContainerByName("id_0ABC")).Name).toBe("ID_0abc");
+    expect(await (await info.ContainerByName(`\\\\.\\${tokenReader}\\${name}`)).Name).toBe(name);
+    expect(await (await info.ContainerByName(name.toUpperCase())).Name).toBe(name);
     expect(getLastError(await info.ContainerByName("ID_ffff").catch((e: unknown) => e))).toContain("0x80090016");
   });
 
-  it("refuses the certificate's own key link at once, without the PIN, as the demo page looks it up for the card", async () => {
+  it("refuses the certificate's own key link at once, as the demo page looks it up for the card", async () => {
     const { dialog, information } = setup([]);
     const link = `\\\\.\\Rutoken ${tokenSerial}\\${certId}`;
     expect(getLastError(await information().ContainerByName(link).catch((e: unknown) => e))).toContain("0x80090016");
     expect(dialog.requests).toHaveLength(0);
   });
 
-  it("deletes a container's key and its certificate after the PIN, and lists anew afterwards", async () => {
-    const { plugin, dialog, information } = setup([userPin, userPin, userPin]);
+  it("deletes a container's key, found by its certificate after the PIN, and the certificate", async () => {
+    const { plugin, dialog, information } = setup([userPin]);
     const container = await (await information().EnumContainers()).ItemByIndex(0);
     await container.Delete();
-    expect(dialog.requests[1]).toMatchObject({ action: "просит удалить ключ с Рутокена.", confirm: "Удалить" });
-    expect(dialog.requests[1]!.details.at(-1)).toBe("Ключ и сертификат удаляются безвозвратно.");
+    expect(dialog.requests).toEqual([expect.objectContaining({ action: "просит удалить ключ с Рутокена.", confirm: "Удалить" })]);
+    expect(dialog.requests[0]!.details[0]).toBe(`Контейнер \\\\.\\${tokenReader}\\${name}.`);
+    expect(dialog.requests[0]!.details.at(-1)).toBe("Ключ и сертификат удаляются безвозвратно.");
     expect(plugin.calls.deleteKeyPair).toEqual(["ke:y1"]);
     expect(plugin.calls.deleteCertificate).toEqual([certId]);
-    await information().EnumContainers();
-    expect(dialog.requests).toHaveLength(3);
+    expect([plugin.calls.login, plugin.calls.logout]).toEqual([[userPin], 1]);
   });
 
-  it("signs after a listing that is still reading the keys, instead of losing the login to its logout", async () => {
-    // A token as slow as a real one: reading keys and signing take a while, during which the other operation goes on.
-    const plugin = fakePlugin();
-    const pause = () => new Promise((resolve) => setTimeout(resolve, 20));
-    const enumerateKeys = plugin.enumerateKeys;
-    plugin.enumerateKeys = async (...args) => (await pause(), enumerateKeys(...args));
-    const sign = plugin.sign;
-    plugin.sign = async (...args) => (await pause(), await pause(), sign(...args));
-    const { dialog, session, information } = setup([userPin, userPin], plugin);
-    const listing = information().EnumContainers();
-    // What webtools.html allows: "Подписать" while the containers it lists at load are still being read.
-    const store = createObject("CAdESCOM.Store", session) as Store;
-    await store.Open();
-    const signer = createObject("CAdESCOM.CPSigner", session) as CPSigner;
-    await signer.propset_Certificate(await (await (store.Certificates as Promise<Certificates>)).Item(1));
-    const data = createObject("CAdESCOM.CadesSignedData", session) as CadesSignedData;
-    await data.propset_ContentEncoding(constants.CADESCOM_BASE64_TO_BINARY);
-    await data.propset_Content("SGVsbG8=");
-    const signing = data.SignCades(signer, constants.CADESCOM_CADES_BES, false);
-    expect(await (await listing).Count).toBe(2);
-    expect(await signing).toBe("MIIsignature");
-    // One PIN window after the other, each operation with a login of its own.
-    expect(dialog.requests.map((request) => request.action)).toEqual(["просит показать ключи на Рутокене.", "просит подписать данные."]);
-    expect([plugin.calls.login, plugin.calls.logout]).toEqual([[userPin, userPin], 2]);
+  it("deletes the certificate alone when its key is gone", async () => {
+    const { plugin, information } = setup([userPin], fakePlugin(undefined, { getKeyByCertificate: async () => Promise.reject(new Error("23")) }));
+    await (await (await information().EnumContainers()).ItemByIndex(0)).Delete();
+    expect(plugin.calls.deleteKeyPair).toEqual([]);
+    expect(plugin.calls.deleteCertificate).toEqual([certId]);
   });
 
-  it("answers CryptoPro's code for no containers, and the user's cancel as such", async () => {
+  it("answers CryptoPro's code for no containers", async () => {
     const noToken = setup([], fakePlugin(undefined, { enumerateDevices: async () => [] }));
     expect(getLastError(await noToken.information().EnumContainers().catch((e: unknown) => e))).toContain("0x80070103");
-    expect(noToken.dialog.requests).toHaveLength(0);
-
-    const empty = fakePlugin(undefined, { enumerateKeys: async () => [] });
-    expect(getLastError(await setup([userPin], empty).information().EnumContainers().catch((e: unknown) => e))).toContain("0x80070103");
-
-    const cancelled = setup([null]);
-    expect(getLastError(await cancelled.information().EnumContainers().catch((e: unknown) => e))).toContain("0x8010006E");
+    expect(getLastError(await setup([], fakePlugin([])).information().EnumContainers().catch((e: unknown) => e))).toContain("0x80070103");
   });
 });

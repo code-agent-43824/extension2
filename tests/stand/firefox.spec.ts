@@ -140,16 +140,15 @@ test("signs XAdES-T: the extension's window asks for the timestamp service, the 
   await tab.close();
 });
 
-test("webtools.html lists the token as a reader and, after the PIN it asks for at load, its key as a container", async () => {
+test("webtools.html lists the token as a reader and its certificate's key as a container, without a PIN", async () => {
   const tab = await plainPage(`${server.url}/sites/default/files/products/cades/demopage/webtools.html`);
   await tab.waitFor(`${text("CspEnabledTxt")} === "Криптопровайдер загружен"`);
-  expect(await tab.waitFor<string>(`${pinDialog}?.textContent`)).toContain("просит показать ключи на Рутокене.");
-  await enterPin(tab, userPin);
   await tab.click(`document.getElementById("navbtnreaders")`);
   const reader = await tab.waitFor<string>(`document.querySelector("#UlReaders li")?.textContent`);
   expect(reader.trim()).toMatch(new RegExp(`^Aktiv Rutoken ECP \\d+/${tokenLabel}/Rutoken ECP [\\d.]+ \\d+$`));
   await tab.click(`document.getElementById("navbtnconts")`);
   const container = await tab.waitFor<string>(`document.querySelector("#UlContainer li")?.textContent`);
-  expect(container.trim()).toMatch(/^\\\\\.\\Aktiv Rutoken ECP \d+\\ID_[0-9a-f]+$/);
+  expect(container.trim()).toMatch(/^\\\\\.\\Aktiv Rutoken ECP \d+\\ID_[0-9a-f]{40}$/);
+  expect(await tab.evaluate<boolean>(`!${pinDialog}`)).toBe(true);
   await tab.close();
 });
