@@ -179,16 +179,21 @@ export function newPage(context: BrowserContext, prefix: string, timeoutMs = 30_
   })();
 }
 
+// Once in 60 CI runs (2026-11-17) the worker was not there after 15 s, on a docs-only commit; the wait is 30 s now, and a
+// failure names the workers seen, to find out why if it comes back.
 export async function extensionOrigin(context: BrowserContext): Promise<string> {
-  const deadline = Date.now() + 15000;
+  const deadline = Date.now() + 30000;
+  const seen = new Map<string, string>();
   for (;;) {
     for (const worker of context.serviceWorkers()) {
-      const name = await worker
-        .evaluate(() => chrome.runtime.getManifest().name)
-        .catch(() => undefined);
+      const name = await worker.evaluate(() => chrome.runtime.getManifest().name).catch((error: unknown) => {
+        seen.set(worker.url(), `error: ${String(error).slice(0, 200)}`);
+        return undefined;
+      });
       if (name === "КриптоПро через Рутокен") return `chrome-extension://${new URL(worker.url()).host}`;
+      if (name !== undefined) seen.set(worker.url(), name);
     }
-    if (Date.now() > deadline) throw new Error("the extension's service worker did not start");
+    if (Date.now() > deadline) throw new Error(`the extension's service worker did not start; workers seen: ${JSON.stringify(Object.fromEntries(seen))}`);
     await context.waitForEvent("serviceworker", { timeout: 1000 }).catch(() => {});
   }
 }
