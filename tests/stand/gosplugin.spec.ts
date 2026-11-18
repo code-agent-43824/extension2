@@ -151,10 +151,11 @@ test.describe("on the stand token", () => {
     expect((handshake.meta.routes as { node: string }[]).map((route) => route.node)).toEqual(["gosuslugi.plugin.extension.system", "plugin", "gosuslugi.plugin.extension.content"]);
     expect((await api(page, "gosuslugiPluginSystem", "echo", "привет")).method.result).toBe("привет");
     expect((await api(page, "gosuslugiPluginSystem", "lastError")).method.result).toBe("0 Application 'Успешное выполнение операции'");
-    // Made up: offline the generator does not answer, and the first built-in identity is taken.
+    // Made up: offline the generator does not answer, and the first built-in identity is taken, its computer named as
+    // on Linux.
     const interfaces = JSON.parse((await api(page, "gosuslugiPluginSystem", "ipConfig")).method.result);
     expect(interfaces.map((entry: { name: string; hardwareAddress: string }) => [entry.name, entry.hardwareAddress])).toEqual([["enp3s0", "3C:52:82:A1:6E:08"], ["lo", "00:00:00:00:00:00"]]);
-    expect(JSON.parse(handshake.meta.userAgent as string)).toEqual({ user: "a.smirnov", pc: "DESKTOP-4K7QF2M", process: "gosuslugi_plugin" });
+    expect(JSON.parse(handshake.meta.userAgent as string)).toEqual({ user: "a.smirnov", pc: "asmirnov-pc", process: "gosuslugi_plugin" });
     expect(JSON.parse((await api(page, "gosuslugiPluginSystem", "config")).method.result)[1].format.type).toBe("crypto");
     // The token's serial in hex, as the core names it (each stand build has its own).
     const providers = JSON.parse((await api(page, "gosuslugiPluginCrypto", "providers", {})).method.result);

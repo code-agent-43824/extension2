@@ -2,7 +2,7 @@
 // The made-up user, computer and network of Gosplugin's answers (src/extension/identity.ts, src/page/identity.ts).
 import { describe, expect, it } from "vitest";
 import { GENERATOR_URL, identity, IDENTITY_KEY, newIdentity, storedIdentity } from "../../src/extension/identity.ts";
-import { BUILT_IN_IDENTITIES, ipConfig } from "../../src/page/identity.ts";
+import { BUILT_IN_IDENTITIES, builtInIdentity, ipConfig } from "../../src/page/identity.ts";
 
 function fakeStorage() {
   const store: Record<string, unknown> = {};
@@ -48,6 +48,17 @@ describe("the made-up identity", () => {
     expect(sources).toEqual(["built-in 1", "built-in 2", "built-in 3", "built-in 1"]);
     expect((await newIdentity(api, generator({ data: [] }).fetcher)).source).toBe("built-in 2");
     expect((await newIdentity(api, generator({}, 500).fetcher)).user).toBe(BUILT_IN_IDENTITIES[2]!.user);
+  });
+
+  it("names a built-in identity's computer as a generated one's: DESKTOP-… only on Windows", async () => {
+    const computer = async (platform: string) => {
+      const { api } = fakeStorage();
+      return (await newIdentity(api, generator({}, 500).fetcher, platform)).computer;
+    };
+    expect(await computer("Win32")).toBe("DESKTOP-4K7QF2M");
+    expect(await computer("Linux x86_64")).toBe("asmirnov-pc");
+    expect(await computer("MacIntel")).toBe("asmirnov-pc");
+    expect([builtInIdentity(1, "Linux x86_64").computer, builtInIdentity(2, "Win32").computer]).toEqual(["ekaterina-pc", "DESKTOP-R61TN0C"]);
   });
 
   it("is made once and kept", async () => {

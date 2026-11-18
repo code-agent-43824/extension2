@@ -6,7 +6,7 @@
 
 export const CATEGORY = "gosuslugi.plugin";
 export const CONTENT_NODE = "gosuslugi.plugin.extension.content";
-export const CORE_VERSION = "1.3.42.0";
+export const CORE_VERSION = "1.3.43.1";
 
 export interface PageRoute {
   node?: unknown;

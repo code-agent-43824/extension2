@@ -15,12 +15,26 @@ export interface FakeIdentity {
   mac: string;
 }
 
-// The built-in ones, taken in turn when the generator does not answer.
+// The built-in ones, taken in turn when the generator does not answer, with the computer's name as on Windows;
+// builtInIdentity names it for the system the browser runs on.
 export const BUILT_IN_IDENTITIES: readonly FakeIdentity[] = [
   { user: "a.smirnov", computer: "DESKTOP-4K7QF2M", ip: "192.168.1.37", mac: "3C:52:82:A1:6E:08" },
   { user: "ekaterina", computer: "DESKTOP-9H2LX8D", ip: "192.168.0.104", mac: "F4:6D:04:3B:C2:7A" },
   { user: "ivanovpa", computer: "DESKTOP-R61TN0C", ip: "10.0.0.23", mac: "D8:BB:C1:52:0F:E4" },
 ];
+
+export const isWindows = (platform: string) => /^Win/i.test(platform);
+
+// A computer's name on a system other than Windows, made of the user's (docs/JOURNAL.md, 2026-11-17).
+export function otherComputerName(user: string): string {
+  return `${user.replace(/[^a-z0-9-]/gi, "").toLowerCase() || "user"}-pc`;
+}
+
+// The built-in identity of this number for the platform: "DESKTOP-…" only on Windows, as a generated one.
+export function builtInIdentity(index: number, platform: string): FakeIdentity {
+  const identity = BUILT_IN_IDENTITIES[index % BUILT_IN_IDENTITIES.length]!;
+  return isWindows(platform) ? identity : { ...identity, computer: otherComputerName(identity.user) };
+}
 
 export interface IdentityRequest {
   type: typeof IDENTITY_REQUEST;
@@ -58,10 +72,10 @@ export function pageIdentity(win: Window, clock: Clock, waitMs = WAIT_MS): Promi
     const listener = (event: MessageEvent) => {
       const data = event.data as Partial<IdentityResponse> | null;
       if (event.source !== win || data?.type !== IDENTITY_RESPONSE || data.id !== id) return;
-      finish(validIdentity(data.identity) ?? BUILT_IN_IDENTITIES[0]!);
+      finish(validIdentity(data.identity) ?? builtInIdentity(0, win.navigator.platform));
     };
     win.addEventListener("message", listener);
-    clock.setTimeout(() => finish(BUILT_IN_IDENTITIES[0]!), waitMs);
+    clock.setTimeout(() => finish(builtInIdentity(0, win.navigator.platform)), waitMs);
     win.postMessage({ type: IDENTITY_REQUEST, id } satisfies IdentityRequest, "*");
   });
 }

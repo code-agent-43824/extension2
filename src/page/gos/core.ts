@@ -1,4 +1,4 @@
-// The methods of Gosplugin's core (1.3.42) over the Rutoken Plugin, answering as the core answered on the stand
+// The methods of Gosplugin's core (1.3.43.1) over the Rutoken Plugin, answering as the core answered on the stand
 // (docs/JOURNAL.md, 2026-11-17). The PIN is asked in the extension's window, as the core asks it in its own.
 import { children, decodeOid, read } from "../asn1.ts";
 import { encodeCp1251 } from "../cp1251.ts";
@@ -12,7 +12,7 @@ import { pkcs11Serial, userCertificates, type TokenCertificate } from "../token.
 import { SCARD_W_CANCELLED_BY_USER, withLogin } from "../token-login.ts";
 import { parseCertificate, pemToDer, type X509 } from "../x509.ts";
 import { GosError, SUCCESS_MESSAGE } from "./messages.ts";
-import { BUILT_IN_IDENTITIES, ipConfig, type FakeIdentity } from "../identity.ts";
+import { builtInIdentity, ipConfig, type FakeIdentity } from "../identity.ts";
 import { smevTransform, SMEV_TRANSFORM } from "./smev-transform.ts";
 import { signXml } from "./xmldsig.ts";
 import { CORE_CONFIG } from "./config.ts";
@@ -412,6 +412,7 @@ export async function callCore(context: CoreContext, module: string, method: str
   throw new GosError(20005, method);
 }
 
-export function newCoreContext(session: Session, identity: Promise<FakeIdentity> = Promise.resolve(BUILT_IN_IDENTITIES[0]!), platform = ""): CoreContext {
+export function newCoreContext(session: Session, identity?: Promise<FakeIdentity>, platform = ""): CoreContext {
+  identity ??= Promise.resolve(builtInIdentity(0, platform));
   return { session, lastError: SUCCESS_MESSAGE, identity, platform };
 }

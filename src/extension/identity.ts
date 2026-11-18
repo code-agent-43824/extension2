@@ -2,7 +2,7 @@
 // fakerapi.it generator (a Russian user name, a local IPv4 address, a MAC address, and a UUID the computer's name is
 // made of), asked once and kept in chrome.storage.local; when it does not answer, the next of three built-in ones. The
 // options page shows them and makes new ones.
-import { BUILT_IN_IDENTITIES, validIdentity, type FakeIdentity } from "../page/identity.ts";
+import { BUILT_IN_IDENTITIES, builtInIdentity, isWindows, otherComputerName, validIdentity, type FakeIdentity } from "../page/identity.ts";
 
 type Api = typeof chrome;
 type Fetch = (input: string, init?: RequestInit) => Promise<Response>;
@@ -19,9 +19,9 @@ export interface StoredIdentity extends FakeIdentity {
   source: string;
 }
 
-// A computer's name as Windows makes it, from the generator's UUID.
+// A computer's name as Windows makes it, from the generator's UUID; on other systems, made of the user's.
 function computerName(uuid: string, user: string, platform: string): string {
-  if (!/^Win/i.test(platform)) return `${user.replace(/[^a-z0-9-]/gi, "").toLowerCase() || "user"}-pc`;
+  if (!isWindows(platform)) return otherComputerName(user);
   const letters = uuid.replace(/[^0-9a-z]/gi, "").toUpperCase();
   return `DESKTOP-${letters.slice(0, 7).padEnd(7, "0")}`;
 }
@@ -57,7 +57,7 @@ export async function newIdentity(api: Api = chrome, fetcher: Fetch = (input, in
     identity = { ...generated, source: "fakerapi.it" };
   } else {
     const index = Number((await api.storage.local.get(IDENTITY_FALLBACK_KEY))[IDENTITY_FALLBACK_KEY] ?? 0) % BUILT_IN_IDENTITIES.length;
-    identity = { ...BUILT_IN_IDENTITIES[index]!, source: `built-in ${index + 1}` };
+    identity = { ...builtInIdentity(index, platform), source: `built-in ${index + 1}` };
     await api.storage.local.set({ [IDENTITY_FALLBACK_KEY]: (index + 1) % BUILT_IN_IDENTITIES.length });
   }
   await api.storage.local.set({ [IDENTITY_KEY]: identity });

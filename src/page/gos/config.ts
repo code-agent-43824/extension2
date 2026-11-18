@@ -1,10 +1,10 @@
 // What Gosplugin's core answers to system.config: its modules, their methods with the data and result templates,
-// as the core 1.3.42 listed them on the stand (docs/JOURNAL.md, 2026-11-17). Sites can read the templates from it.
+// as the core 1.3.43.1 listed them on the stand (docs/JOURNAL.md, 2026-11-17 and 2026-11-18). Sites can read the templates from it.
 export const CORE_CONFIG: unknown = [
   {
     "format": {
       "type": "core",
-      "version": "1.3.42.0",
+      "version": "1.3.43.1",
       "category": "gosuslugi.plugin",
       "description": "provides core functionality for plugin"
     },
@@ -113,7 +113,7 @@ export const CORE_CONFIG: unknown = [
   {
     "format": {
       "type": "crypto",
-      "version": "1.3.42.0",
+      "version": "1.3.43.1",
       "category": "plugin",
       "description": "provides crypto operations for plugin"
     },
@@ -191,7 +191,7 @@ export const CORE_CONFIG: unknown = [
   {
     "format": {
       "type": "esmart",
-      "version": "1.3.42.0",
+      "version": "1.3.43.1",
       "category": "plugin",
       "description": "provides communication with esmart api"
     },
@@ -209,7 +209,7 @@ export const CORE_CONFIG: unknown = [
   {
     "format": {
       "type": "jacarta",
-      "version": "1.3.42.0",
+      "version": "1.3.43.1",
       "category": "plugin",
       "description": "provides communication with jacarta api"
     },
@@ -227,7 +227,7 @@ export const CORE_CONFIG: unknown = [
   {
     "format": {
       "type": "nmh",
-      "version": "1.3.42.0",
+      "version": "1.3.43.1",
       "category": "plugin",
       "description": "provides communication plugin-plugin.extension via google native messaging protocol"
     },
@@ -238,7 +238,7 @@ export const CORE_CONFIG: unknown = [
   {
     "format": {
       "type": "rutoken",
-      "version": "1.3.42.0",
+      "version": "1.3.43.1",
       "category": "plugin",
       "description": "provides communication with rutoken api"
     },
@@ -256,7 +256,7 @@ export const CORE_CONFIG: unknown = [
   {
     "format": {
       "type": "system",
-      "version": "1.3.42.0",
+      "version": "1.3.43.1",
       "category": "plugin",
       "description": "provides system operations for plugin"
     },
@@ -310,7 +310,7 @@ export const CORE_CONFIG: unknown = [
   {
     "format": {
       "type": "ws",
-      "version": "1.3.42.0",
+      "version": "1.3.43.1",
       "category": "plugin",
       "description": "provides communication plugin-plugin.extension via websockets"
     },
