@@ -65,7 +65,9 @@ describe("IFCPlugin's functions", () => {
       ifc_list: [{ alg: "gost2001", alias: "ruTokenECP", description: "Aktiv Rutoken ECP 0", model: "Rutoken ECP", name: "Актив Рутокен ЭЦП", num: "0", path: "librtpkcs11ecp.so", serial_number: Number(tokenSerial).toString(16).toUpperCase().padStart(8, "0"), skip_pkcs11_list: "", type: "pkcs11" }],
       ifc_list_length: 1,
     });
-    expect(await ask("get_list_info", { cryptoType: 0 })).toEqual({ error_code: 0, ifc_list: [], ifc_list_length: 0 });
+    // Only a cryptoType the core reads as an empty string lists the token: ESIA sends null (docs/JOURNAL.md, 2026-11-18).
+    for (const cryptoType of [null, ""]) expect(await ask("get_list_info", { cryptoType })).toEqual(info);
+    for (const cryptoType of [0, 1, "0", false]) expect(await ask("get_list_info", { cryptoType })).toEqual({ error_code: 0, ifc_list: [], ifc_list_length: 0 });
   });
 
   it("lists certificates by token with the core's codes for a wrong token", async () => {
@@ -88,6 +90,17 @@ describe("IFCPlugin's functions", () => {
     expect(result).toMatchObject({ error_code: 0, intermediate: 0, result_array: [{ crypto_id: "ruTokenECP/0" }] });
     expect(await ask("get_list_certs_by_cryptoid_array", { cryptoID_array: ["ruTokenECP/0", "ruTokenECP/1"] })).toEqual({ error_code: 25 });
     expect(await ask("get_list_certs_by_cryptoid_array", {})).toEqual({ error_code: 0, result_array: [] });
+  });
+
+  it("reads show_progress as the core does, as an integer: 1 a frame per certificate, other non-zero values one", async () => {
+    const framesFor = async (show_progress: unknown) => {
+      const { ask, frames } = setup();
+      const result = await ask("get_list_certs_by_cryptoid_array", { cryptoID_array: ["ruTokenECP/0"], show_progress });
+      return { counters: frames.map((frame) => frame.progress_counter), intermediate: (result as { intermediate?: number }).intermediate };
+    };
+    for (const value of [true, 1, 1.5]) expect(await framesFor(value), String(value)).toEqual({ counters: [0, 1], intermediate: 0 });
+    for (const value of [2, -1]) expect(await framesFor(value), String(value)).toEqual({ counters: [0], intermediate: 0 });
+    for (const value of [false, 0, 0.5, null]) expect(await framesFor(value), String(value)).toEqual({ counters: [], intermediate: undefined });
   });
 
   it("lists keys after the site's PIN: a certificate's, and one without a certificate by its id in Windows-1251", async () => {
@@ -119,6 +132,13 @@ describe("IFCPlugin's functions", () => {
     expect(await ask("load_x509_from_data", { cert_data_type: 0, cert: pem })).toEqual({ error_code: 0, x509Handle: 3 });
     expect(await ask("load_x509_from_data", { cert_data_type: 0, cert: standInfo.base64 })).toEqual({ error_code: 0, x509Handle: 4 });
     expect(await ask("load_x509_from_data", { cert_data_type: 0, cert: "junk" })).toEqual({ error_code: 9 });
+    // The core's OpenSSL refuses a PEM line of 80 Base64 characters or more, not counting spaces; Base64 without the
+    // BEGIN and END lines passes in one line, as above (docs/JOURNAL.md, 2026-11-18).
+    const wrapped = (width: number, pad = "") => `-----BEGIN CERTIFICATE-----\n${standInfo.base64.match(new RegExp(`.{1,${width}}`, "g"))!.join(`${pad}\n`)}\n-----END CERTIFICATE-----\n`;
+    expect(await ask("load_x509_from_data", { cert_data_type: 0, cert: wrapped(79) })).toMatchObject({ error_code: 0 });
+    expect(await ask("load_x509_from_data", { cert_data_type: 0, cert: wrapped(64, " ".repeat(20)).replace(/\n/g, "\r\n") })).toMatchObject({ error_code: 0 });
+    expect(await ask("load_x509_from_data", { cert_data_type: 0, cert: wrapped(80) })).toEqual({ error_code: 9 });
+    expect(await ask("load_x509_from_data", { cert_data_type: 0, cert: wrapped(100_000) })).toEqual({ error_code: 9 });
     expect(await ask("load_x509_from_data", { cert_data_type: 1, cert: pem })).toEqual({ error_code: 17 });
     expect(await ask("load_x509_from_data", { cert: pem })).toEqual({ error_code: 5 });
     expect(await ask("load_x509_from_container", { containerId: "ruTokenECP/0/nope" })).toEqual({ error_code: 1 });

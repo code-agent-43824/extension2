@@ -113,6 +113,14 @@ const keySize = (x509: X509): 256 | 512 => (x509.publicKeyAlgorithm === GOST_201
 const keyDigest = (x509: X509): DigestName => (x509.publicKeyAlgorithm === GOST_2001 ? "gost94" : x509.publicKeyAlgorithm === GOST_2012_512 ? "streebog512" : "streebog256");
 const sizeDigest = (size: 256 | 512): DigestName => (size === 512 ? "streebog512" : "streebog256");
 
+// Whether a PEM certificate has a line of 80 or more Base64 characters, which the core's OpenSSL refuses (its
+// EVP_DecodeUpdate, before 1.1.0): checked on the core, 79 pass and 80 fail, spaces and CR not counted; Base64 without
+// the BEGIN and END lines passes in one line (docs/JOURNAL.md, 2026-11-18).
+function longPemLine(text: string): boolean {
+  const body = /-----BEGIN [^-]*-----([\s\S]*?)-----END /.exec(text)?.[1];
+  return body !== undefined && body.split("\n").some((line) => (line.match(/[A-Za-z0-9+/=]/g)?.length ?? 0) >= 80);
+}
+
 // A key's CKA_ID as the Rutoken Plugin writes it, from a container name: its bytes in Windows-1251.
 function keyIdOfName(name: string): string | undefined {
   const bytes = encodeCp1251(name);
@@ -274,8 +282,9 @@ const handlers: Record<string, Handler> = {
     return {};
   },
 
+  // Any cryptoType but none, null or "" lists nothing, as the core's (ESIA sends null; docs/JOURNAL.md, 2026-11-18).
   async get_list_info(context, params) {
-    if (params.cryptoType !== undefined) return { ifc_list: [], ifc_list_length: 0 };
+    if (params.cryptoType !== undefined && params.cryptoType !== null && params.cryptoType !== "") return { ifc_list: [], ifc_list_length: 0 };
     const list = (await tokens(context.session)).map((token) => ({
       alg: "gost2001",
       alias: ALIAS,
@@ -301,9 +310,12 @@ const handlers: Record<string, Handler> = {
     const lists: { tokenCertificates: TokenCertificate[]; id: string }[] = [];
     for (const id of ids) lists.push({ id: String(id), tokenCertificates: await tokenCertificates(context, await tokenOf(context, id)) });
     const result_array = lists.map(({ id, tokenCertificates }) => ({ cert_list: tokenCertificates.map((certificate) => certificateEntry(certificate.x509, certificate.x509.thumbprint)), crypto_id: id }));
-    if (params.show_progress === true) {
+    // The core reads show_progress as an integer: 1 (true, 1.5) posts a frame before the certificates and one after
+    // each, any other non-zero value only the first, 0 none (docs/JOURNAL.md, 2026-11-18).
+    const progress = typeof params.show_progress === "boolean" ? Number(params.show_progress) : typeof params.show_progress === "number" ? Math.trunc(params.show_progress) : 0;
+    if (progress !== 0) {
       const count = lists.reduce((sum, list) => sum + list.tokenCertificates.length, 0);
-      for (let counter = 0; counter <= count; counter++) context.progress({ certs_count: count, error_code: 0, intermediate: 1, progress_counter: counter });
+      for (let counter = 0; counter <= (progress === 1 ? count : 0); counter++) context.progress({ certs_count: count, error_code: 0, intermediate: 1, progress_counter: counter });
       return { intermediate: 0, result_array };
     }
     return { result_array };
@@ -355,6 +367,7 @@ const handlers: Record<string, Handler> = {
   async load_x509_from_data(context, params) {
     if (params.cert_data_type === 1) throw new IfcError(17);
     if (params.cert_data_type !== 0 || typeof params.cert !== "string") throw new IfcError(5);
+    if (longPemLine(params.cert)) throw new IfcError(9);
     let x509: X509;
     try {
       x509 = parseCertificate(pemToDer(params.cert));
