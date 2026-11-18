@@ -1,5 +1,5 @@
 // The real Gosuslugi plug-ins as the stand's reference for stage 8 (docs/PLAN.md, action 43): the cores of IFCPlugin 3.1.1
-// and of Gosplugin 1.3.42, unpacked under stand/gosplugins with the fork in place of their Rutoken library, beside a copy
+// and of Gosplugin 1.3.43.1, unpacked under stand/gosplugins with the fork in place of their Rutoken library, beside a copy
 // of the stand HOME with a 256-bit and a 512-bit key both can use. Not part of the stand and not in CI: the packages are
 // optional entries of vendor-lock.json, fetched here; tests/stand/gosplugins.ts talks to the cores over Native Messaging.
 // Needs a built stand; Gosplugin's core shows its PIN window on X (Xvfb, typed into with xdotool).
@@ -67,7 +67,7 @@ async function provisionHome(): Promise<void> {
   cpSync(stand.home, gosplugins.home, { recursive: true, verbatimSymlinks: true });
   for (const [bits, name] of [[256, gosplugins.keys.gost256], [512, gosplugins.keys.gost512]] as const) {
     mkdirSync(join(standDir, "gosplugins"), { recursive: true });
-    await provisionKey({ home: gosplugins.home, bits, name, idWithoutZero: true, subject: [{ rdn: "commonName", value: `Госплагин ${bits}` }, { rdn: "countryName", value: "RU" }] });
+    await provisionKey({ home: gosplugins.home, bits, name, ifcNameableId: true, subject: [{ rdn: "commonName", value: `Госплагин ${bits}` }, { rdn: "countryName", value: "RU" }] });
   }
 }
 

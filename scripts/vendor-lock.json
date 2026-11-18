@@ -128,7 +128,7 @@
   "gosplugin": {
     "file": "gosplugins/Gosplugin_Linux-Debian_Installer.deb.zip",
     "url": "https://gu-st.ru/content/Gosplugin/Gosplugin_Linux-Debian_Installer.deb.zip",
-    "sha256": "332b321e069c34eda5c22ded50696d5bd58df077408262c74fbe9894e7611ef8",
+    "sha256": "f7ab21f9ef21b2090a189ff7df2147074f4252e1255930df689d3f31acc258f2",
     "optional": true
   }
 }

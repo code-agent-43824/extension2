@@ -125,8 +125,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `vendor-lock.json` (pinned third-party files), `build.ts` (esbuild), `package.ts` (the ZIP), `gen-constants.ts`, `crx.ts` (CRX3 key extraction), `setup-stand.ts` (stand layout,
   PINs, paths), `provision-token.ts` (key + certificate on the fake token; `provisionKey` for a 512-bit key or a copy of the HOME), `setup-cryptopro-csp.ts` (the real
   CryptoPro CSP + plug-in, a key in a CryptoPro file container, a stand profile copy with CryptoPro's native host),
-  `setup-gosplugins.ts` (the Gosuslugi plug-ins' cores and their HOME; keys without a zero byte in `CKA_ID`, which
-  IFCPlugin's core reads as a C string).
+  `setup-gosplugins.ts` (the Gosuslugi plug-ins' cores and their HOME; keys without a zero byte or "/" in `CKA_ID`:
+  IFCPlugin's core reads it as a C string and splits its container ids on "/").
 - `tools/` — pasted by hand into the DevTools console on a cadesplugin page, with CryptoPro or with ours
   (`docs/MANUAL-CHECK.md`, the manual install and checklist): `dump-fields.js` dumps the plug-in and certificate
   fields and what `Find` picks as JSON, without a PIN, and `scripts/compare-fields.ts` diffs a real-CryptoPro dump

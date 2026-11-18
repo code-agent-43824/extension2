@@ -1,6 +1,6 @@
 /// <reference types="chrome" />
 // The opt-in comparison with the real Gosuslugi plug-ins (docs/PLAN.md, action 47): the same requests to the real cores
-// of IFCPlugin 3.1.1 and Gosplugin 1.3.42 and to the extension playing them, on the same copy of the token
+// of IFCPlugin 3.1.1 and Gosplugin 1.3.43.1 and to the extension playing them, on the same copy of the token
 // (scripts/setup-gosplugins.ts), and the answers compared where they must agree; the signatures of each are checked by
 // the other. Run after `npm run build` and `node scripts/setup-gosplugins.ts`:
 // STAND_GOSPLUGINS=1 npx playwright test tests/stand/gosplugins-reference.spec.ts
@@ -137,6 +137,10 @@ test.describe("Gosplugin", () => {
     for (const [module, method, data] of [["system", "handshake", ""], ["system", "echo", "привет"], ["system", "nosuch", ""]] as const) {
       expect(outcome(await mine(module, method, data)), method).toEqual(outcome(await theirs(module, method, data)));
     }
+    // The core's version in its answers and its catalog: a newer core shows here first.
+    const version = (answer: Answer) => ((answer.meta as Answer).protocol as Answer).version;
+    expect(version(await mine("system", "handshake"))).toBe(version(await theirs("system", "handshake")));
+    expect(JSON.parse(String(((await mine("system", "config")).method as Answer).result))).toEqual(JSON.parse(String(((await theirs("system", "config")).method as Answer).result)));
     expect(outcome(await mine("crypto", "providers", "{}"))).toEqual(outcome(await theirs("crypto", "providers", "{}")));
     const certificates = async (answer: Answer) => (comparable((answer.method as Answer).result) as Answer[]).sort((a, b) => String(a.thumbprint).localeCompare(String(b.thumbprint)));
     const theirCertificates = await certificates(await theirs("crypto", "certificates", { store: "", fields: {} }));
