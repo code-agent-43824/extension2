@@ -130,5 +130,11 @@
     "url": "https://gu-st.ru/content/Gosplugin/Gosplugin_Linux-Debian_Installer.deb.zip",
     "sha256": "f7ab21f9ef21b2090a189ff7df2147074f4252e1255930df689d3f31acc258f2",
     "optional": true
+  },
+  "kontur-plugin": {
+    "file": "kontur/kontur.plugin.003212.deb",
+    "url": "https://help.kontur.ru/files/kontur.plugin.003212.deb",
+    "sha256": "2375f779afd7c1ec64c6b84a78aacf89cb7d68a7ba7a921933e44d1c2b2062f5",
+    "optional": true
   }
 }
