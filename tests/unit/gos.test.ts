@@ -84,6 +84,9 @@ describe("Gosplugin's core", () => {
     expect(fields).toMatchObject({ version: "v3", hasPrivateKey: "true", keyUsage: "dataencipherment;digitalsignature;keyagreement;keyencipherment;nonrepudiation", provider: store, container: user.thumbprint });
     expect(JSON.parse(await call("crypto", "certificates", JSON.stringify({ store: "", fields: { thumbprint: user.thumbprint.toLowerCase() } })))).toHaveLength(1);
     expect(JSON.parse(await call("crypto", "certificates", JSON.stringify({ store: "other", fields: {} })))).toEqual([]);
+    // ESIA's request: the personal store holds the tokens' certificates (the owner, 2026-11-19); Root stays empty.
+    for (const my of ["My", "my"]) expect(JSON.parse(await call("crypto", "certificates", JSON.stringify({ store: my, fields: { hasPrivateKey: "true" } })))).toEqual([fields]);
+    expect(JSON.parse(await call("crypto", "certificates", JSON.stringify({ store: "Root", fields: {} })))).toEqual([]);
     expect(JSON.parse(await call("crypto", "certificateFields", { certificate, fields: ["subject", "container"] }))).toEqual({ subject: fields.subject, container: "" });
     await expect(call("crypto", "certificateFields", { certificate: { content: "junk", contentEncoding: "base64" }, fields: [] })).rejects.toMatchObject({ code: 30045 });
   });

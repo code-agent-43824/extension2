@@ -290,6 +290,11 @@ function pem(der: Uint8Array): string {
   return `-----BEGIN CERTIFICATE-----\n${(base64Of(der).match(/.{1,64}/g) ?? []).join("\n")}\n-----END CERTIFICATE-----\n`;
 }
 
+// The user's personal store, the only one ESIA asks for: the tokens' certificates are in it, as the owner decided
+// (2026-11-19, CLAUDE.md). The real core under Linux without CryptoPro answers [] for it, with CryptoPro the
+// certificates of CryptoPro's uMy. Windows' store names are not case-sensitive, nor is this one.
+const isMyStore = (store: unknown) => typeof store === "string" && store.toLowerCase() === "my";
+
 async function storeToken(session: Session, store: unknown): Promise<Token> {
   if (!store) throw new GosError(30013);
   const token = (await tokens(session)).find((candidate) => candidate.name === store);
@@ -341,7 +346,7 @@ export async function callCore(context: CoreContext, module: string, method: str
       const wanted = (request.fields && typeof request.fields === "object" ? request.fields : {}) as Record<string, unknown>;
       return JSON.stringify(
         (await tokenCertificates(session))
-          .filter(({ token }) => !request.store || request.store === token.name)
+          .filter(({ token }) => !request.store || request.store === token.name || isMyStore(request.store))
           .map(({ token, certificate }) => certificateFields(certificate.x509, { token }))
           .filter((fields) => Object.entries(wanted).every(([name, value]) => String(fields[name] ?? "").toUpperCase() === String(value).toUpperCase())),
       );

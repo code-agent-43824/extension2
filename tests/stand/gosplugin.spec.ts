@@ -179,6 +179,8 @@ test.describe("on the stand token", () => {
       container: user.thumbprint,
     });
     expect(JSON.parse((await api(page, "gosuslugiPluginCrypto", "certificates", { store: "", fields: { thumbprint: "00" } })).method.result)).toEqual([]);
+    // As ESIA asks: the personal store holds the token's certificates (the owner, 2026-11-19).
+    expect(JSON.parse((await api(page, "gosuslugiPluginCrypto", "certificates", { fields: { hasPrivateKey: "true" }, store: "My" })).method.result)).toEqual(certificates);
     const fields = JSON.parse((await api(page, "gosuslugiPluginCrypto", "certificateFields", JSON.stringify({ certificate, fields: [] }))).method.result);
     expect(fields).toMatchObject({ hasPrivateKey: "false", container: "", provider: "" });
     expect(JSON.parse((await api(page, "gosuslugiPluginCrypto", "certificateFields", { certificate, fields: ["thumbprint"] })).method.result)).toEqual({ thumbprint: user.thumbprint });
