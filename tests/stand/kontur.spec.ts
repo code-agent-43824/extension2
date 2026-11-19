@@ -8,7 +8,7 @@ import { stand, standDir, userPin } from "../../scripts/setup-stand.ts";
 import { digest } from "../../src/page/gost.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
 import { clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
-import { verifyCms, verifyRaw } from "./verify.ts";
+import { envelopedInfo, verifyCms, verifyRaw } from "./verify.ts";
 
 // A page as Kontur's client talks to the plug-in: one session, numbered commands, answers matched by commandId.
 const KONTUR_PAGE = `<!doctype html><html><head><meta charset="utf-8"><title>Kontur</title></head><body><script>
@@ -187,6 +187,28 @@ test.describe("on the stand token", () => {
     const parts = await ask(page, "crypto.signature.parse", { source: { type: "base64", data: cosigned.result.data }, properties: { content: { type: "base64" }, certs: { hash: true } } });
     expect(parts.result).toEqual({ certs: [{ hash: byHash.hash }, { hash: byHash.hash }], content: { data: b64(one), size: one.length, type: "base64" } });
     expect(await ask(page, "crypto.signature.parse", { source: { type: "base64", data: cosigned.result.data } })).toEqual({ commandId: expect.any(Number), sessionId: "s-test" });
+  });
+
+  test("encrypts with GOST 28147-89 for the token's certificate without a PIN, as the host, decrypts it back after the PIN; parses as the host", async () => {
+    // Over 1024 bytes, so that CryptoPro's key meshing changes the content key.
+    const data = Buffer.from("Секрет Контура. ".repeat(200));
+    const encrypted = await ask(page, "crypto.encrypt", { source: { type: "base64", data: b64(data) }, sink: { type: "base64" }, certs: [byHash] });
+    const info = envelopedInfo(encrypted.result.data);
+    expect(info.content_encryption).toBe("1.2.643.2.2.21");
+    expect(info.content_param_set).toBe("1.2.643.2.2.31.1");
+    expect(info.recipients).toEqual([expect.objectContaining({ kind: "ktri", serial: user.serialNumber.replace(/^0+/, "") })]);
+    const message = { type: "base64", data: encrypted.result.data };
+    const parsed = await ask(page, "crypto.encryption.parse", { source: message, properties: { recipient: { issuer: true, serialNumber: { type: "hex" } }, encryptedContentInfo: { contentEncryptionAlgorithm: true } } });
+    expect(parsed.result).toEqual({
+      encryptedContentInfo: { contentEncryptionAlgorithm: { algorithm: "1.2.643.2.2.21" } },
+      recipients: [{ issuer: [{ C: "RU" }, { O: "Стенд" }, { CN: "Stand Test CA" }], serialNumber: { data: user.serialNumber.toLowerCase(), size: user.serialNumber.length / 2, type: "hex" } }],
+    });
+    expect(await ask(page, "crypto.encryption.parse", { source: message, properties: {} })).toEqual({ commandId: expect.any(Number), sessionId: "s-test" });
+    const decrypted = await withPin(page, ask(page, "crypto.decrypt", { source: message, sink: { type: "base64" } }));
+    expect(Buffer.from(decrypted.result.data, "base64").equals(data)).toBe(true);
+    expect((await ask(page, "crypto.decrypt", { source: { type: "base64", data: "AAAA" }, sink: { type: "base64" } })).result).toEqual({ data: "", size: 0, type: "base64" });
+    expect((await ask(page, "crypto.encrypt", { source: message, sink: { type: "base64" }, certs: [byHash], encryptionAlgorithm: "1.2.643.7.1.1.5.2.1" })).error).toMatchObject({ type: "crypto", code: 10 });
+    expect((await ask(page, "crypto.encrypt", { source: message, sink: { type: "base64" }, certs: [byHash], encryptionAlgorithm: "GOST28147" })).error).toMatchObject({ type: "crypto", code: 24 });
   });
 
   test("answers a cancelled PIN window as the host's cancelled one", async () => {

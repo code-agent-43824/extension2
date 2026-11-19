@@ -7,6 +7,7 @@ import { pkcs11Serial, userCertificates, type TokenCertificate } from "../token.
 
 import { certificateFields, wanted, type TokenPlace } from "./certificate.ts";
 import { cryptoError, invalidStructure, KonturError, pluginError, unknownCommand } from "./errors.ts";
+import { checkAlgorithm, decrypt, encrypt, parseEnveloped } from "./encryption.ts";
 import { addSigner, anyCertificate, pemText, rawSign, rawVerify, signatureParts, signContents, signFlags, signHash, verifySignature } from "./signing.ts";
 import { checkSink, readStream, writeStream, type Cache } from "./streams.ts";
 
@@ -237,7 +238,8 @@ async function parseSignature(context: KonturContext, request: Request): Promise
   const result: Record<string, unknown> = {};
   if (isObject(properties.certs)) result.certs = signed.certificates.map((x509) => certificateFields(x509, wanted(properties.certs)));
   if (isObject(properties.content) && signed.content) result.content = writeStream(cache, properties.content, signed.content);
-  return result;
+  // Nothing asked, no result, as the host answers.
+  return Object.keys(result).length ? result : undefined;
 }
 
 async function addSignerTo(context: KonturContext, request: Request): Promise<unknown> {
@@ -247,6 +249,22 @@ async function addSignerTo(context: KonturContext, request: Request): Promise<un
   const source = contentOf(request, cache);
   const cms = request.signature === undefined ? await addSigner(context, request.certs[0], source, undefined) : await addSigner(context, request.certs[0], readStream(cache, request.signature), source);
   return writeStream(cache, request.sink, request.textualEncoding === true ? pemText(cms) : cms);
+}
+
+async function encryptCommand(context: KonturContext, request: Request): Promise<unknown> {
+  const cache = cacheOf(context, request);
+  if (!Array.isArray(request.certs) || !request.certs.length) throw invalidStructure();
+  checkSink(request.sink);
+  checkAlgorithm(request.encryptionAlgorithm);
+  const content = contentOf(request, cache);
+  const message = await encrypt(context, request.certs, content);
+  return writeStream(cache, request.sink, request.textualEncoding === true ? pemText(message) : message);
+}
+
+async function decryptCommand(context: KonturContext, request: Request): Promise<unknown> {
+  const cache = cacheOf(context, request);
+  checkSink(request.sink);
+  return writeStream(cache, request.sink, await decrypt(context, contentOf(request, cache)));
 }
 
 export async function answerCommand(context: KonturContext, request: Request): Promise<unknown> {
@@ -287,6 +305,14 @@ export async function answerCommand(context: KonturContext, request: Request): P
       return sortKeys(await parseSignature(context, request));
     case "crypto.signature.addSigner":
       return addSignerTo(context, request);
+    case "crypto.encrypt":
+      return encryptCommand(context, request);
+    case "crypto.decrypt":
+      return decryptCommand(context, request);
+    case "crypto.encryption.parse": {
+      const cache = cacheOf(context, request);
+      return sortKeys(parseEnveloped(cache, contentOf(request, cache), request.properties));
+    }
     // The host answers a cancel with nothing, and progress of a command that is not running as unknown.
     case "cancel":
       return undefined;

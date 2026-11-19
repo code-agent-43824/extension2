@@ -99,7 +99,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `core.ts` the core's methods, `config.ts` its catalog, `xmldsig.ts`, `smev-transform.ts` for normalize), `kontur/`
   (Kontur.Plugin: `kontur-plugin.ts` the page's kontur-toolbox messages, the mark on Kontur's domains and the
   extension's own commands, `commands.ts` the host's commands, `errors.ts` its error answers, `streams.ts` its data
-  sources and sinks, `certificate.ts` a certificate's fields as it names them, `signing.ts` its signatures and checks),
+  sources and sinks, `certificate.ts` a certificate's fields as it names them, `signing.ts` its signatures and checks,
+  `encryption.ts` its CMS encryption, made and opened in the page as the host does it on the stand's token),
   `settings.ts` (asks the bridge for IFCPlugin's PIN switch and Kontur.Plugin's client id), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
@@ -117,7 +118,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `constants.ts` (generated, do not edit), `token.ts` (certificates on the tokens), `asn1.ts` + `x509.ts` +
   `dn.ts` + `sha1.ts` (certificate parsing, and `asn1.ts` writes DER too; `dn.ts` holds the CryptoPro name format
   sites match with regexes, and the RFC 4514 names of XAdES), `gost.ts` (hashes, HMAC, GOST R 34.10 signature checks and VKO, on `@li0ard/gost`) +
-  `gost28147.ts` (GOST 28147-89 CBC and the key transport of XML encryption) + `cms.ts` (SignedData parsing and signer
+  `gost28147.ts` (GOST 28147-89 CBC and the key transport of XML encryption, CFB with key meshing for Kontur.Plugin) + `cms.ts` (SignedData parsing and signer
   checks, BER included; the recipients of an EnvelopedData) + `chain.ts` (chains to the root store; `validationChain` for `IsValid()` in the extended mode) — verification never touches the plugin,
   `signing.ts` (the plugin's `sign`, data or a hash; CAdES-T through its `tspOptions`; with the site's signed
   attributes the CMS of `cms-sign.ts` around `rawSign`, its CAdES-T timestamp through the extension, as XAdES-T's) + `token-login.ts` (PIN window, login, logout, the single connected token; the PINs a page knows: the

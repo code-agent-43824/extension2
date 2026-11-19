@@ -1,13 +1,16 @@
 // GOST 28147-89 encryption for XML (src/page/gost28147.ts) and VKO (src/page/gost.ts): the parts that need no browser
 // DOM. Interoperability with OpenSSL's GOST engine is the opt-in tests/stand/openssl-gost.spec.ts.
 import { gost256B } from "@li0ard/gost/gost3410.js";
+import { magmaSboxes } from "@li0ard/gost/magma.js";
+import { kwp } from "@li0ard/gost/modes.js";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { repoRoot } from "../../scripts/fetch-vendor.ts";
 import { children, read } from "../../src/page/asn1.ts";
 import { vko256 } from "../../src/page/gost.ts";
-import { decryptContent, encryptContent, newContentKey, parseKeyTransport, PARAM_SET_Z, unwrapContentKey, wrapContentKey } from "../../src/page/gost28147.ts";
+import { decryptCfb, decryptContent, encryptCfb, encryptContent, newContentKey, PARAM_SET_A, parseKeyTransport, PARAM_SET_Z, unwrapContentKey, wrapContentKey } from "../../src/page/gost28147.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
 
 const bytes = (hex: string) => Uint8Array.from(hex.replace(/\s+/g, "").match(/../g) ?? [], (byte) => parseInt(byte, 16));
@@ -64,6 +67,23 @@ describe("the content key for a recipient (GostR3410-KeyTransport)", () => {
     expect(() => unwrapContentKey(transport, newContentKey())).toThrow();
   });
 
+  it("is wrapped as Kontur.Plugin's host wraps it on the stand when asked: on Z, the key diversified on A", () => {
+    const { secretKey } = gost256B.keygen();
+    const point = gost256B.getPublicKey(secretKey, false);
+    const recipient = { ...ca, publicKey: Uint8Array.of(0x04, 0x40, ...reversed(point.subarray(1, 33)), ...reversed(point.subarray(33))) };
+    const cek = newContentKey();
+    const wrappedOf = (transport: ReturnType<typeof parseKeyTransport>) => Uint8Array.from([...transport.ukm, ...transport.encryptedKey, ...transport.mac]);
+    const kekOf = (transport: ReturnType<typeof parseKeyTransport>) => vko256(ca.publicKeyParameters!, reversed(secretKey), transport.ephemeralKey, transport.ukm);
+    // CryptoPro's key wrap as the library has it, on Z throughout, for the usual one.
+    const usual = parseKeyTransport(wrapContentKey(recipient, cek));
+    expect(hex(kwp(kekOf(usual), true, magmaSboxes.ID_TC26_GOST_28147_PARAM_Z).unwrap(wrappedOf(usual)))).toBe(hex(cek));
+    const host = parseKeyTransport(wrapContentKey(recipient, cek, PARAM_SET_Z, PARAM_SET_A));
+    expect(host.paramSet).toBe(PARAM_SET_Z);
+    expect(() => kwp(kekOf(host), true, magmaSboxes.ID_TC26_GOST_28147_PARAM_Z).unwrap(wrappedOf(host))).toThrow();
+    expect(hex(unwrapContentKey(host, kekOf(host)))).toBe(hex(cek));
+    expect(() => unwrapContentKey(host, newContentKey())).toThrow();
+  });
+
   it("reads the Rutoken Plugin's", () => {
     const transport = parseKeyTransport(rutokenTransport);
     expect(transport).toMatchObject({ paramSet: PARAM_SET_Z });
@@ -103,5 +123,32 @@ describe("GOST 28147-89 in CBC mode for XML", () => {
     }
     expect(hex(encryptContent(cek, Uint8Array.of(1)).subarray(0, 8))).not.toBe(hex(encryptContent(cek, Uint8Array.of(1)).subarray(0, 8)));
     expect(() => decryptContent(cek, new Uint8Array(12))).toThrow();
+  });
+});
+
+describe("GOST 28147-89 in CFB mode with CryptoPro's key meshing, for Kontur.Plugin's CMS", () => {
+  // Made with OpenSSL's GOST engine 3.0.2: openssl enc -gost89 -K 0102…20 -iv 0102030405060708, CRYPT_PARAMS
+  // id-Gost28147-89-CryptoPro-A-ParamSet and its default TC26 Z; 2100 bytes, so the key is meshed twice.
+  const key = Uint8Array.from({ length: 32 }, (_, i) => i + 1);
+  const iv = Uint8Array.of(1, 2, 3, 4, 5, 6, 7, 8);
+  const plain = Uint8Array.from({ length: 2100 }, (_, i) => (i * 7) % 251);
+  const sha256 = (value: Uint8Array) => createHash("sha256").update(value).digest("hex");
+  const openssl = {
+    "1.2.643.2.2.31.1": { start: "68f54d7787bc3fe2863d2b228357764a", meshed: "a28a601ab0eaaf0a5329144fa4c8aa39", sha256: "5ac9c8bea953e4103e1a81c30660eda95d4a958e66b6bd8952792188b46ae64b" },
+    [PARAM_SET_Z]: { start: "90013a0f716217f5dfcc0976825dc995", meshed: "31b13ac2d803f067586970c9bb4d8725", sha256: "e709590e5f6aa096e3cc8eba972da91bf36db44de96b20967306d5d85e9e79d3" },
+  };
+
+  for (const [paramSet, expected] of Object.entries(openssl)) {
+    it(`encrypts and decrypts as OpenSSL with ${paramSet}`, () => {
+      const encrypted = encryptCfb(key, iv, plain, paramSet);
+      expect(hex(encrypted.subarray(0, 16))).toBe(expected.start);
+      expect(hex(encrypted.subarray(1024, 1040))).toBe(expected.meshed);
+      expect(sha256(encrypted)).toBe(expected.sha256);
+      expect(hex(decryptCfb(key, iv, encrypted, paramSet))).toBe(hex(plain));
+    });
+  }
+
+  it("keeps the data's length, without padding", () => {
+    for (const length of [0, 1, 7, 8, 9, 1023, 1024, 1025]) expect(encryptCfb(key, iv, plain.subarray(0, length), PARAM_SET_Z).length).toBe(length);
   });
 });

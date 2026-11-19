@@ -121,7 +121,25 @@ test("each side verifies the other's signatures, and both refuse the same mistak
   expect((await theirs("crypto.verify", { source: { type: "base64", data: cosigned } })).result).toEqual([{ hash: certificate.hash }, { hash: certificate.hash }]);
   const parse = { source: { type: "base64", data: cosigned }, properties: { content: { type: "base64" }, certs: { hash: true, subject: true } } };
   expect(outcome(await ours("crypto.signature.parse", parse))).toEqual(outcome(await theirs("crypto.signature.parse", parse)));
+  // Encryption: each side opens the other's message, both parse alike; over 1024 bytes, so that CryptoPro's key
+  // meshing changes the content key. Neither asks for a PIN to encrypt.
+  const long = { type: "base64", data: Buffer.from("Сверка шифрования с эталоном. ".repeat(100)).toString("base64") };
+  const myMessage = (await ours("crypto.encrypt", { source: long, sink: { type: "base64" }, certs: [cert] })).result.data;
+  const theirMessage = (await theirs("crypto.encrypt", { source: long, sink: { type: "base64" }, certs: [cert] })).result.data;
+  const openedMine = await theirs("crypto.decrypt", { source: { type: "base64", data: myMessage }, sink: { type: "base64" } });
+  expect(openedMine.error, "the host on our message").toBeUndefined();
+  expect(openedMine.result.data).toBe(long.data);
+  const openedTheirs = await ours("crypto.decrypt", { source: { type: "base64", data: theirMessage }, sink: { type: "base64" } }, true);
+  expect(openedTheirs.error, "ours on the host's message").toBeUndefined();
+  expect(openedTheirs.result.data).toBe(long.data);
+  const encParse = { properties: { recipient: { issuer: true, serialNumber: { type: "hex" } }, encryptedContentInfo: { contentEncryptionAlgorithm: true } } };
+  expect(outcome(await ours("crypto.encryption.parse", { source: { type: "base64", data: myMessage }, ...encParse }))).toEqual(outcome(await theirs("crypto.encryption.parse", { source: { type: "base64", data: theirMessage }, ...encParse })));
   for (const [type, request] of [
+    ["crypto.encrypt", { source: data, sink: { type: "base64" }, certs: [cert], encryptionAlgorithm: "1.2.643.7.1.1.5.2.1" }],
+    ["crypto.encrypt", { source: data, sink: { type: "base64" }, certs: [cert], encryptionAlgorithm: "GOST28147" }],
+    ["crypto.encrypt", { source: data, sink: { type: "base64" } }],
+    ["crypto.decrypt", { source: { type: "base64", data: "AAAA" }, sink: { type: "base64" } }],
+    ["crypto.encryption.parse", { source: { type: "base64", data: "AAAA" }, properties: { encryptedContentInfo: { contentEncryptionAlgorithm: true } } }],
     ["no.such", {}],
     ["crypto.sign", { source: data, sink: { type: "base64" } }],
     ["crypto.sign", { source: data, sink: { type: "text" }, certs: [cert] }],

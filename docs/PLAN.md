@@ -584,7 +584,10 @@
   Сделано: `streams.ts`, `certificate.ts`, `signing.ts`; подписи — `sign()` Рутокен Плагина, без атрибутов и второй
   подписант — своя CMS вокруг `rawSign`; файлы — «access denied», пока нет окон файлов (61); `qualified` — `false`,
   правила — при `cert.verify` (61). Сверка с хостом (`kontur-reference.spec.ts`) — 3 из 3, правила — `JOURNAL.md`.
-- [ ] **59. Шифрование.** `crypto.encrypt`, `crypto.decrypt`, `crypto.encryption.parse`.
+- [x] **59. Шифрование.** `crypto.encrypt`, `crypto.decrypt`, `crypto.encryption.parse`.
+  Сделано: `encryption.ts` — CMS собирается и открывается в странице, `cmsEncrypt`/`cmsDecrypt` с хостом несовместимы
+  (`JOURNAL.md`, 2026-11-19); шифрование без PIN, расшифровка — после PIN; режим CFB с перемешиванием в
+  `gost28147.ts`, сверен с OpenSSL. Сверка с хостом — оба направления.
 - [ ] **60. Выпуск сертификата.** `crypto.createCertRequest`, `crypto.installCert`, `cert.store.install`,
   `cert.store.remove`.
 - [ ] **61. Прочее.** `cert.verify`, `cert.display`, `io.decode`, `io.encode`, `http.request`, `ui.openFile`,

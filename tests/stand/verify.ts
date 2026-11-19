@@ -80,6 +80,7 @@ export function verifyXml(xml: string, caPem = join(caDir, "ca.pem"), signerPem?
 
 export interface EnvelopedInfo {
   content_encryption: string;
+  content_param_set?: string;
   recipients: { kind: string; key_encryption?: string; serial?: string; key_id?: string }[];
 }
 
