@@ -588,8 +588,11 @@
   Сделано: `encryption.ts` — CMS собирается и открывается в странице, `cmsEncrypt`/`cmsDecrypt` с хостом несовместимы
   (`JOURNAL.md`, 2026-11-19); шифрование без PIN, расшифровка — после PIN; режим CFB с перемешиванием в
   `gost28147.ts`, сверен с OpenSSL. Сверка с хостом — оба направления.
-- [ ] **60. Выпуск сертификата.** `crypto.createCertRequest`, `crypto.installCert`, `cert.store.install`,
+- [~] **60. Выпуск сертификата.** `crypto.createCertRequest`, `crypto.installCert`, `cert.store.install`,
   `cert.store.remove`.
+  Как: ключ — `generateKeyPair` Рутокен Плагина с CKA_ID — именем контейнера (UUID, как у хоста, или имя сайта),
+  запрос — свой PKCS#10 вокруг `rawSign`: `subject` и `extensions` сайта как есть, его `attributes`; сертификат — на
+  токен к своему ключу (`importCertificate`); `cryptoApi` и хранилища — ответы хоста под Linux без КриптоПро.
 - [ ] **61. Прочее.** `cert.verify`, `cert.display`, `io.decode`, `io.encode`, `http.request`, `ui.openFile`,
   `ui.saveFile`, `ui.selectFolder`, `extension.close`, `extension.uninstall` — что из этого возможно в браузере и как,
   решить по эталону; где нельзя — ответ, как у хоста при отказе.
