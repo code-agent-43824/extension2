@@ -284,6 +284,11 @@ local names resolve): Playwright's routes reach the pages only, and a service wo
   Linux without CryptoPro answers `[]` there (with CryptoPro, CryptoPro's `uMy`), so a sign-in found no signature. A
   departure from the real core on purpose (`isMyStore` in `src/page/gos/core.ts`); other stores stay empty as there.
 
+- **Kontur.Plugin's CryptoAPI store `My` holds the tokens' certificates.** Owner, 2026-11-19, «да так же как для
+  госплагина». Reason: the real host under Linux without CryptoPro answers `[]` for every CryptoAPI store, and Kontur's
+  client looks for certificates there as well as on PKCS#11 tokens. A departure from the real host on purpose
+  (`isMyStore` in `src/page/kontur/commands.ts`); the other stores stay empty as there.
+
 - **XAdES-T's timestamp is requested by the service worker, with access to each service granted by the user.** Agent,
   2026-10-08, on the owner's "xades делай". Reason: the Rutoken Plugin reaches a timestamp service only inside a CMS
   signature, and page.js meets the services' lack of CORS and, on https: sites, mixed content; access stays an
