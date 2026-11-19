@@ -2,6 +2,46 @@
 
 Новые записи сверху.
 
+## 2026-11-19 — Контур.Плагин: запрос и установка сертификата у хоста
+
+**Вопрос.** Какие поля у `crypto.createCertRequest`, `crypto.installCert`, `cert.store.install`/`remove` и что хост
+делает с токеном (действие 60).
+
+**Что сделали.** Имена полей — из `CertificateRequestCommand::initialize` и соседних (строки и вызовы разборщиков
+JSON в дизассемблере хоста), значения подобраны запросами к хосту стенда, каждый в своём процессе; вызовы к токену —
+`pkcs11-spy`; сертификаты на запросы хоста выпускал тестовый УЦ стенда. Пробы шли на копии токена хоста
+(`stand/kontur/home`), её после пересоздали (`node scripts/setup-kontur.ts`).
+
+**Что показала проверка.**
+- `crypto.createCertRequest {cryptoProvider, sink, signatureAlgorithm, subject, extensions, attributes?,
+  publicKey?}`: `subject` — поток с DER имени, `extensions` — поток, который хост кладёт в extensionRequest как есть
+  (проверки нет: «AAAA» тоже лёг), `attributes` — массив потоков с DER атрибутов, после extensionRequest;
+  `signatureAlgorithm` — OID подписи. Без `subject`, `extensions` или алгоритма, `attributes` объектом — код 3;
+  `publicKey` (объект) на ответ не влиял. Ответ — `{path: "<слот>\<контейнер>", request}`.
+- Ключ: хост входит со своим PIN по умолчанию без окна, `C_GenerateKeyPair` с CKA_ID — имя контейнера: ASCII
+  случайного «8-4-4-4-12» из шестнадцатеричных цифр или `cryptoProvider.containerName`; 256 бит — набор CryptoPro
+  XchA (1.2.643.2.2.36.0), 512 — TC26 A; подпись запроса — без NULL после OID.
+- Ошибки: неизвестный слот — `crypto` 53; неизвестный OID — `crypto` 23 «unknown signature algorithm»; ГОСТ Р
+  34.10-2001 — `cryptoki` 0x13 `C_GenerateKeyPair` (токен стенда такой ключ не делает); RSA (1.2.840.113549.1.1.11)
+  хост сделал на токене; негодное имя — `asn1` 17; провайдер `cryptoApi` с `id` и `containerName` — `system`
+  0x20002000 «CryptAcquireContext CryptoPro module not loaded».
+- `crypto.installCert {cryptoProvider, cert: поток, force?}` (так зовёт клиент Контура): хост входит, находит ключ по
+  сертификату и пишет его с CKA_ID ключа, категория «пользователь»; уже записанный — без изменений; ответ — без
+  результата. Сертификат без ключа на токене — `plugin` 203 «can not find container corresponding to the
+  certificate»; «AAAA» — `crypto` 1, DER не сертификата — `asn1` 4; `cryptoApi` — «CryptAcquireContext CryptoPro
+  module not loaded».
+- `cert.store.install`/`remove {cert: {content} или {hash}, store: {type, name?, location?}}`: `store` не `cryptoApi`
+  — `plugin` 250 «cryptoprovider type unsupported»; по `hash` — `plugin` 200; по содержимому — «CryptoPro module not
+  loaded» с контекстом `CertCreateCertificateContext` (install) или `CertOpenStore` (remove); без `store` — 3.
+- Хост на копии токена и браузер со стендовым адаптером на другой копии одновременно работают, а два браузера с
+  адаптером — нет: второй не отвечает, пока открыт первый.
+
+**Вывод.** Повторено в `src/page/kontur/issuance.ts`: ключ — `generateKeyPair` Рутокен Плагина с тем же CKA_ID и
+параметрами, запрос — свой PKCS#10 вокруг `rawSign`, установка — `importCertificate`; окно PIN — всегда, PIN из
+`cryptoProvider.pin` — с согласия пользователя в нём. RSA не делается (`crypto` 23, выбор агента: УЦ Контура выдают
+ГОСТ). Сверка `kontur-reference.spec.ts` сравнивает разметку запросов и ошибки и устанавливает каждому сертификат
+на ключ другого.
+
 ## 2026-11-19 — Контур.Плагин: шифрование хоста и Рутокен Плагина несовместимы — сообщение собирается в странице
 
 **Вопрос.** Можно ли шифровать и расшифровывать для Контур.Плагина `cmsEncrypt`/`cmsDecrypt` Рутокен Плагина

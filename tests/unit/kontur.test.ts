@@ -4,6 +4,7 @@ import { describe, expect, it } from "vitest";
 import { encode } from "../../src/page/asn1.ts";
 import { answerCommand, newKonturContext, sortKeys } from "../../src/page/kontur/commands.ts";
 import { isoTime, keyUsages, names } from "../../src/page/kontur/certificate.ts";
+import { storeCommand } from "../../src/page/kontur/issuance.ts";
 import { pemText } from "../../src/page/kontur/signing.ts";
 import { fromBase64, readStream, writeStream } from "../../src/page/kontur/streams.ts";
 import { KonturError } from "../../src/page/kontur/errors.ts";
@@ -74,5 +75,24 @@ describe("Kontur.Plugin", () => {
     expect(() => readStream(cache, { type: "file", path: "/etc/passwd" })).toThrow(expect.objectContaining({ answer: expect.objectContaining({ code: 16 }) }));
     expect(() => writeStream(cache, { type: "text" }, new Uint8Array())).toThrow(expect.objectContaining({ answer: expect.objectContaining({ code: 3 }) }));
     expect(new TextDecoder().decode(pemText(Uint8Array.of(1, 2, 3)))).toBe("-----BEGIN PKCS7-----\r\nAQID\r\n-----END PKCS7-----");
+  });
+
+  it("answers CryptoAPI's stores as the host without CryptoPro, a bad certificate before that", () => {
+    const cache = new Map<string, Uint8Array>();
+    const answer = (request: Record<string, unknown>, install = true) => {
+      try {
+        storeCommand(request, cache, install);
+      } catch (error) {
+        return (error as KonturError).answer;
+      }
+      throw new Error("no answer");
+    };
+    const name = { type: "base64", data: "MBAxDjAMBgNVBAMMBVByb2Jl" };
+    expect(answer({ cert: { content: name } })).toMatchObject({ code: 3 });
+    expect(answer({ cert: name, store: { type: "cryptoApi" } })).toMatchObject({ code: 3 });
+    expect(answer({ cert: { content: name }, store: { type: "pkcs11" } })).toEqual({ type: "plugin", code: 250, message: "PLUGIN[0x000000FA] cryptoprovider type unsupported" });
+    expect(answer({ cert: { hash: { type: "hex", data: "00" } }, store: { type: "cryptoApi" } }, false)).toEqual({ type: "plugin", code: 200, message: "PLUGIN[0x000000C8] certificate not found" });
+    expect(answer({ cert: { content: { type: "base64", data: "AAAA" } }, store: { type: "cryptoApi" } })).toEqual({ type: "crypto", code: 1, context: "", message: "CRYPTO[0x00000001] wrong ASN1 value structure" });
+    expect(answer({ cert: { content: name }, store: { type: "cryptoApi" } })).toEqual({ type: "asn1", code: 4, context: "", message: "ASN1[0x00000004] required collection element not found" });
   });
 });

@@ -8,6 +8,7 @@ import { pkcs11Serial, userCertificates, type TokenCertificate } from "../token.
 import { certificateFields, wanted, type TokenPlace } from "./certificate.ts";
 import { cryptoError, invalidStructure, KonturError, pluginError, unknownCommand } from "./errors.ts";
 import { checkAlgorithm, decrypt, encrypt, parseEnveloped } from "./encryption.ts";
+import { createCertRequest, installCert, storeCommand } from "./issuance.ts";
 import { addSigner, anyCertificate, pemText, rawSign, rawVerify, signatureParts, signContents, signFlags, signHash, verifySignature } from "./signing.ts";
 import { checkSink, readStream, writeStream, type Cache } from "./streams.ts";
 
@@ -313,6 +314,13 @@ export async function answerCommand(context: KonturContext, request: Request): P
       const cache = cacheOf(context, request);
       return sortKeys(parseEnveloped(cache, contentOf(request, cache), request.properties));
     }
+    case "crypto.createCertRequest":
+      return sortKeys(await createCertRequest(context, request, cacheOf(context, request), await tokens(context)));
+    case "crypto.installCert":
+      return installCert(context, request, cacheOf(context, request), await tokens(context));
+    case "cert.store.install":
+    case "cert.store.remove":
+      return storeCommand(request, cacheOf(context, request), request.type === "cert.store.install");
     // The host answers a cancel with nothing, and progress of a command that is not running as unknown.
     case "cancel":
       return undefined;

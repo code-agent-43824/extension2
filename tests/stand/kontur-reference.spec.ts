@@ -3,10 +3,14 @@
 // they must agree; each side checks the other's signatures. Run after `npm run build` and `node scripts/setup-kontur.ts`:
 // STAND_KONTUR=1 npx playwright test tests/stand/kontur-reference.spec.ts
 import { expect, test, type BrowserContext, type Page } from "@playwright/test";
-import { existsSync, readFileSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { repoRoot } from "../../scripts/fetch-vendor.ts";
+import { caDir } from "../../scripts/provision-token.ts";
 import { kontur } from "../../scripts/setup-kontur.ts";
-import { stand, userPin } from "../../scripts/setup-stand.ts";
+import { stand, standDir, userPin, venvPython } from "../../scripts/setup-stand.ts";
+import { children, read } from "../../src/page/asn1.ts";
 import { BUILTIN_ROOTS } from "../../src/extension/builtin-roots.ts";
 import { clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { konturHost, type KonturAnswer, type KonturHost } from "./kontur.ts";
@@ -48,18 +52,20 @@ test.afterAll(async () => {
   await server?.close();
 });
 
-const pinDialog = () => page.locator("#rutoken-cades-bridge-pin [role=dialog]");
+const pinDialog = (on: Page) => on.locator("#rutoken-cades-bridge-pin [role=dialog]");
 
-// The extension's answer; `pin` when the call opens the PIN window (the host signs in with the stand's PIN, which is
-// its default, without a window).
-async function ours(type: string, fields: Record<string, unknown> = {}, pin = false): Promise<KonturAnswer> {
-  const call = page.evaluate(([t, f]) => (window as unknown as { kontur: (...a: unknown[]) => Promise<KonturAnswer> }).kontur(t, f), [type, fields] as const);
+// The extension's answer in the page `on`; `pin` when the call opens the PIN window (the host signs in with the
+// stand's PIN, which is its default, without a window).
+async function ask(on: Page, type: string, fields: Record<string, unknown> = {}, pin = false): Promise<KonturAnswer> {
+  const call = on.evaluate(([t, f]) => (window as unknown as { kontur: (...a: unknown[]) => Promise<KonturAnswer> }).kontur(t, f), [type, fields] as const);
   if (pin) {
-    await pinDialog().locator("input[name=pin]").fill(userPin);
-    await pinDialog().locator("button[name=confirm]").click();
+    await pinDialog(on).locator("input[name=pin]").fill(userPin);
+    await pinDialog(on).locator("button[name=confirm]").click();
   }
   return call;
 }
+
+const ours = (type: string, fields: Record<string, unknown> = {}, pin = false) => ask(page, type, fields, pin);
 
 const theirs = (type: string, fields: Record<string, unknown> = {}) => host.ask(type, fields);
 // What must agree: the result or the error, without the envelope.
@@ -159,4 +165,97 @@ test("each side verifies the other's signatures, and both refuse the same mistak
       fresh.close();
     }
   }
+});
+
+// Keys and certificates are made on another copy of the token, removed afterwards, so the one above keeps its single
+// certificate. The browser above is closed first: the Rutoken adapter of a second one meanwhile does not answer.
+test.describe("on another copy of the token", () => {
+  const outDir = join(standDir, "kontur-reference");
+  const home = join(outDir, "home");
+  let copy: BrowserContext;
+  let copyPage: Page;
+  let copyHost: KonturHost;
+
+  test.beforeAll(async () => {
+    await context.close();
+    rmSync(outDir, { recursive: true, force: true });
+    mkdirSync(outDir, { recursive: true });
+    cpSync(kontur.home, home, { recursive: true, verbatimSymlinks: true });
+    copy = await launchStand({ home, extensions: [stand.adapter, standExtension()] });
+    await clearSites(copy);
+    await enableSite(copy, server.url, ["kontur"]);
+    copyPage = await openStandPage(copy, `${server.url}/ref.html`);
+    copyHost = konturHost("s-stand", home);
+  });
+
+  test.afterAll(async () => {
+    copyHost?.close();
+    await copy?.close();
+    rmSync(outDir, { recursive: true, force: true });
+  });
+
+  const mineOn = (type: string, fields: Record<string, unknown> = {}, pin = false) => ask(copyPage, type, fields, pin);
+  const theirsOn = (type: string, fields: Record<string, unknown> = {}) => copyHost.ask(type, fields);
+
+  test("makes requests laid out as the host's, and each side installs a certificate for the other's key", async () => {
+    const [provider] = (await theirsOn("crypto.provider.search", { cryptoProviderType: "pkcs11" })).result;
+    const stream = (data: string) => ({ type: "base64", data });
+    // CN=Сверка, keyUsage digitalSignature, challengePassword "test".
+    const fields = {
+      cryptoProvider: provider,
+      sink: { type: "base64" },
+      signatureAlgorithm: "1.2.643.7.1.1.3.2",
+      subject: stream("MBcxFTATBgNVBAMMDNCh0LLQtdGA0LrQsA=="),
+      extensions: stream("MBAwDgYDVR0PAQH/BAQDAgeA"),
+      attributes: [stream("MBMGCSqGSIb3DQEJBzEGDAR0ZXN0")],
+    };
+    const mine = (await mineOn("crypto.createCertRequest", fields, true)).result;
+    const their = (await theirsOn("crypto.createCertRequest", fields)).result;
+    // All but the key and the signature, which differ by nature, and the container's random name.
+    const layout = (made: { path: string; request: { data: string } }) => {
+      const [info, algorithm] = children(read(Buffer.from(made.request.data, "base64")));
+      const [version, subject, publicKey, attributes] = children(info!);
+      return { path: made.path.replace(/[^\\]+$/, ""), parts: [version, subject, children(publicKey!)[0], attributes, algorithm].map((node) => Buffer.from(node!.der).toString("hex")) };
+    };
+    expect(layout(mine)).toEqual(layout(their));
+    const dir = mkdtempSync(join(standDir, "kontur-ref-"));
+    try {
+      const issue = (made: { request: { data: string } }, name: string) => {
+        writeFileSync(join(dir, `${name}.csr.pem`), `-----BEGIN CERTIFICATE REQUEST-----\n${made.request.data}\n-----END CERTIFICATE REQUEST-----\n`);
+        // The test CA checks the request's signature before it issues.
+        execFileSync(venvPython, [join(repoRoot, "tests", "tools", "gost_ca.py"), "issue", caDir, join(dir, `${name}.csr.pem`), join(dir, `${name}.pem`)]);
+        return stream(readFileSync(join(dir, `${name}.pem`), "utf8").replace(/-----[^-]+-----|\s/g, ""));
+      };
+      expect(outcome(await theirsOn("crypto.installCert", { cryptoProvider: provider, cert: issue(mine, "ours") }))).toEqual({ result: undefined });
+      expect(outcome(await mineOn("crypto.installCert", { cryptoProvider: provider, cert: issue(their, "theirs") }, true))).toEqual({ result: undefined });
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+    const caCert = stream(readFileSync(join(caDir, "ca.pem"), "utf8").replace(/-----[^-]+-----|\s/g, ""));
+    expect(outcome(await mineOn("crypto.installCert", { cryptoProvider: provider, cert: caCert }, true))).toEqual(outcome(await theirsOn("crypto.installCert", { cryptoProvider: provider, cert: caCert })));
+    const userCert = { content: stream(readFileSync(join(standDir, "user.pem"), "utf8").replace(/-----[^-]+-----|\s/g, "")) };
+    for (const [type, request] of [
+      ["crypto.createCertRequest", { ...fields, cryptoProvider: { ...provider, slot: "nope" } }],
+      ["crypto.createCertRequest", { ...fields, signatureAlgorithm: "1.2.3" }],
+      ["crypto.createCertRequest", { ...fields, subject: stream("AAAA") }],
+      ["crypto.createCertRequest", { ...fields, extensions: undefined }],
+      ["crypto.createCertRequest", { ...fields, cryptoProvider: { type: "cryptoApi", name: "Crypto-Pro GOST R 34.10-2012 Cryptographic Service Provider", id: 80, containerName: "x" } }],
+      ["crypto.installCert", { cryptoProvider: provider, cert: stream("AAAA") }],
+      ["crypto.installCert", { cryptoProvider: { ...provider, slot: "nope" }, cert: caCert }],
+      ["crypto.installCert", { cryptoProvider: { type: "cryptoApi", name: "Crypto-Pro GOST R 34.10-2012 Cryptographic Service Provider", id: 80 }, cert: caCert }],
+      ["cert.store.install", { cert: userCert, store: { type: "cryptoApi", name: "My" } }],
+      ["cert.store.remove", { cert: userCert, store: { type: "cryptoApi", name: "My" } }],
+      ["cert.store.install", { cert: userCert, store: { type: "pkcs11" } }],
+      ["cert.store.install", { cert: { content: stream("AAAA") }, store: { type: "cryptoApi" } }],
+      ["cert.store.remove", { cert: { hash: { type: "hex", data: "00" } }, store: { type: "cryptoApi" } }],
+      ["cert.store.install", { cert: userCert }],
+    ] as const) {
+      const fresh = konturHost("s-stand", home);
+      try {
+        expect(outcome(await mineOn(type, request)), `${type} ${JSON.stringify(request).slice(0, 200)}`).toEqual(outcome(await fresh.ask(type, request)));
+      } finally {
+        fresh.close();
+      }
+    }
+  });
 });

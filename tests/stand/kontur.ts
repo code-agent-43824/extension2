@@ -21,10 +21,11 @@ export interface KonturHost {
   close(): void;
 }
 
-export function konturHost(sessionId = "s-stand"): KonturHost {
+// `home` is a copy of the stand HOME with its token: the one setup-kontur.ts made, or another one.
+export function konturHost(sessionId = "s-stand", home = kontur.home): KonturHost {
   startDisplay();
   const child: ChildProcess = spawn(kontur.host, [kontur.origin], {
-    env: { ...process.env, HOME: kontur.home, DISPLAY: display, LANG: "C.UTF-8" },
+    env: { ...process.env, HOME: home, DISPLAY: display, LANG: "C.UTF-8" },
     stdio: ["pipe", "pipe", "ignore"],
   });
   let buffer = Buffer.alloc(0);
