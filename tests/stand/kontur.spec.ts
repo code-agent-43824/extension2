@@ -11,7 +11,7 @@ import { stand, standDir, userPin, venvPython } from "../../scripts/setup-stand.
 import { children, encode, read } from "../../src/page/asn1.ts";
 import { digest } from "../../src/page/gost.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
-import { clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { clearSites, enableSite, launchStand, openStandPage, servePages, setExtendedValidity, standExtension, type PageServer } from "./harness.ts";
 import { echoServer } from "./kontur.ts";
 import { envelopedInfo, verifyCms, verifyRaw } from "./verify.ts";
 
@@ -280,6 +280,23 @@ test.describe("on the stand token", () => {
       expect((await ask(page, "http.request", { uri: `${echo.url}/x`, method: "get" })).error).toMatchObject({ code: 3 });
     } finally {
       await echo.close();
+    }
+  });
+
+  test("checks trust as Kontur's client asks, by the extension's root store and its extended validity switch", async () => {
+    const cert = { content: { type: "base64", data: Buffer.from(user.der).toString("base64") } };
+    const client = { cert, trustStatus: 487, qualified: { log: true } };
+    // Off, the default: the dates alone; the stand certificate is no qualified one, which the rules say.
+    const off = (await ask(page, "cert.verify", client)).result;
+    expect(off).toMatchObject({ ok: false, trustStatus: 0 });
+    expect(off.errors.map((failure: { rule: string }) => failure.rule)).toContain("extensions.policies.exist");
+    await setExtendedValidity(context, true);
+    try {
+      // On: the stand's CA is not in the store, so the chain ends at the certificate.
+      expect((await ask(page, "cert.verify", { cert, trustStatus: 0x10000 })).result).toEqual({ ok: false, trustStatus: 0x10000 });
+      expect((await ask(page, "cert.verify", { cert, trustStatus: 487 })).result).toEqual({ ok: true, trustStatus: 0x10000 });
+    } finally {
+      await setExtendedValidity(context, false);
     }
   });
 

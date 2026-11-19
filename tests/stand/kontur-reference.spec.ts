@@ -190,7 +190,6 @@ test("applies the qualified rules as the host, with its messages, and converts t
   for (const [type, request] of [
     ["cert.verify", { cert: user, qualified: true }],
     ["cert.verify", { cert: user, qualified: { log: false } }],
-    ["cert.verify", { cert: user, trustStatus: 487, qualified: { log: true } }],
     ["cert.verify", { cert: user, qualified: { log: "yes" } }],
     ["cert.verify", { cert: user, qualified: { log: true, rules: [] } }],
     ["cert.verify", { cert: user, qualified: { log: true, rules: {} } }],

@@ -6,6 +6,8 @@
 import { children, decodeOid, read } from "../asn1.ts";
 import type { X509 } from "../x509.ts";
 import { keyUsages } from "./certificate.ts";
+import { CERT_TRUST_IS_NOT_TIME_VALID, validationChain } from "../chain.ts";
+import type { StoreCertificates } from "../roots.ts";
 import { cryptoError, invalidStructure, KonturError } from "./errors.ts";
 
 export interface RuleFailure {
@@ -224,16 +226,45 @@ function ruleSwitches(rules: unknown): RuleSwitches {
   return rules as RuleSwitches;
 }
 
-// cert.verify for a certificate in hand. Its trust status is CryptoAPI's, which the host under Linux cannot open
-// without CryptoPro (Kontur's client always asks for it, trustStatus 487): its "CryptoPro module not loaded". Without
-// the qualification asked for, the host did not answer at all (three minutes on the stand); here that is the same
-// refusal (the agent's choice: an answer without result would read as success to the client).
-export function verifyCertificate(request: Record<string, unknown>, x509: X509): unknown {
+// The CERT_TRUST_* error status CryptoAPI gives a chain, here from the chain to the extension's root store as
+// Certificate.IsValid() of the CryptoPro emulation builds it (the owner, 2026-11-19): with the options page's
+// "extended validity" switch off, the certificate's dates alone; on, the chain to the enabled roots through the
+// enabled intermediates, an end without an issuer CERT_TRUST_IS_PARTIAL_CHAIN. Revocation is not checked (the owner,
+// 2026-09-24), so none of its bits is ever set.
+export const CERT_TRUST_IS_PARTIAL_CHAIN = 0x10000;
+
+export function trustStatus(x509: X509, store: StoreCertificates, at = Date.now()): number {
+  if (!store.extendedValidity) return x509.notBefore.getTime() <= at && at <= x509.notAfter.getTime() ? 0 : CERT_TRUST_IS_NOT_TIME_VALID;
+  const chain = validationChain(x509, store.intermediates, store.roots, at);
+  const status = chain.statuses.reduce((all, one) => all | one, 0);
+  const last = chain.certificates.at(-1)!;
+  const ended = store.roots.some((root) => root.thumbprint === last.thumbprint) || last.subjectDer.length === last.issuerDer.length && last.subjectDer.every((byte, i) => byte === last.issuerDer[i]);
+  return status | (ended ? 0 : CERT_TRUST_IS_PARTIAL_CHAIN);
+}
+
+// cert.verify for a certificate in hand: {trustStatus: <the site's mask>, qualified: true | {log, rules}}, as Kontur's
+// client asks ({trustStatus: 487, qualified: {log: true}}). The answer: ok when no bit of the mask is in the chain's
+// status and no qualified rule fails, the chain's status as trustStatus, the failures when asked to log them. The
+// host under Linux cannot check trust without CryptoPro and answers "CryptoPro module not loaded"; here the owner
+// chose the CryptoPro emulation's chain instead (2026-11-19). Without either option the host did not answer at all;
+// here that is the trust check alone, every bit counting (the agent's choice).
+export async function verifyCertificate(request: Record<string, unknown>, x509: X509, store: () => Promise<StoreCertificates>): Promise<unknown> {
   const qualified = request.qualified;
-  const asked = qualified === true || (isObject(qualified) && qualified.log !== undefined);
-  if (request.trustStatus !== undefined || !asked) {
-    throw new KonturError({ type: "system", code: 0x20002000, context: "CertCreateCertificateContext", message: "WIN32[0x20002000]CertCreateCertificateContext CryptoPro module not loaded" });
+  const qualifiedAsked = qualified === true || (isObject(qualified) && qualified.log !== undefined);
+  const trustAsked = request.trustStatus !== undefined || !qualifiedAsked;
+  const answer: Record<string, unknown> = {};
+  let ok = true;
+  if (trustAsked) {
+    const status = trustStatus(x509, await store());
+    const mask = typeof request.trustStatus === "number" ? request.trustStatus : 0xffffffff;
+    answer.trustStatus = status;
+    if ((status & mask) !== 0) ok = false;
   }
-  const failures = qualificationFailures(x509, isObject(qualified) ? ruleSwitches(qualified.rules) : {});
-  return isObject(qualified) && qualified.log === true ? { errors: failures, ok: failures.length === 0 } : { ok: failures.length === 0 };
+  if (qualifiedAsked) {
+    const failures = qualificationFailures(x509, isObject(qualified) ? ruleSwitches(qualified.rules) : {});
+    if (failures.length) ok = false;
+    if (isObject(qualified) && qualified.log === true) answer.errors = failures;
+  }
+  answer.ok = ok;
+  return answer;
 }

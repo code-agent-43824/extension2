@@ -5,7 +5,11 @@ import { encode } from "../../src/page/asn1.ts";
 import { answerCommand, newKonturContext, sortKeys } from "../../src/page/kontur/commands.ts";
 import { isoTime, keyUsages, names } from "../../src/page/kontur/certificate.ts";
 import { storeCommand } from "../../src/page/kontur/issuance.ts";
-import { qualificationFailures } from "../../src/page/kontur/qualified.ts";
+import { CERT_TRUST_IS_PARTIAL_CHAIN, qualificationFailures, trustStatus, verifyCertificate } from "../../src/page/kontur/qualified.ts";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { repoRoot } from "../../scripts/fetch-vendor.ts";
+import { pemToDer } from "../../src/page/x509.ts";
 import { decodeText, encodeText } from "../../src/page/kontur/text.ts";
 import { parseCertificate } from "../../src/page/x509.ts";
 import { QUALIFIED_CASES, SWITCH_CASES } from "./kontur-certificates.ts";
@@ -199,5 +203,28 @@ describe("Kontur.Plugin", () => {
     expect(await ask("ui.saveFile", {})).toBe("");
     expect(await ask("ui.selectFolder", {})).toBe("");
     expect(await setup().ask("ui.openFile", { resultFormat: "array" })).toBe("");
+  });
+
+  it("checks trust as the CryptoPro emulation's IsValid(): by dates, or the chain to the enabled roots", async () => {
+    const fixture = (name: string) => parseCertificate(pemToDer(readFileSync(join(repoRoot, "tests", "fixtures", name), "utf8")));
+    const user = fixture("stand-user.pem");
+    const ca = fixture("stand-ca.pem");
+    const store = (extendedValidity: boolean, roots = [ca], intermediates: typeof roots = []) => ({ roots, intermediates, extendedValidity, offerRoot: false });
+    const now = user.notBefore.getTime() + 1000;
+    expect(trustStatus(user, store(false, []), now)).toBe(0);
+    expect(trustStatus(user, store(false, []), user.notAfter.getTime() + 1000)).toBe(0x1);
+    expect(trustStatus(user, store(true), now)).toBe(0);
+    expect(trustStatus(user, store(true, []), now)).toBe(CERT_TRUST_IS_PARTIAL_CHAIN);
+    expect(trustStatus(user, store(true, [], [ca]), now)).toBe(0x20);
+    // Kontur's client: trustStatus 487 and the qualified rules, which the stand user's certificate does not pass.
+    const verify = (request: Record<string, unknown>, extendedValidity: boolean) => verifyCertificate(request, user, async () => store(extendedValidity, []));
+    expect(await verify({ trustStatus: 487 }, false)).toEqual({ ok: true, trustStatus: 0 });
+    expect(await verify({ trustStatus: 487 }, true)).toEqual({ ok: true, trustStatus: CERT_TRUST_IS_PARTIAL_CHAIN });
+    expect(await verify({ trustStatus: 0x10000 }, true)).toEqual({ ok: false, trustStatus: CERT_TRUST_IS_PARTIAL_CHAIN });
+    expect(await verify({}, true)).toEqual({ ok: false, trustStatus: CERT_TRUST_IS_PARTIAL_CHAIN });
+    const logged = (await verify({ trustStatus: 487, qualified: { log: true } }, false)) as { ok: boolean; trustStatus: number; errors: { rule: string }[] };
+    expect(logged).toMatchObject({ ok: false, trustStatus: 0 });
+    expect(logged.errors.map((failure) => failure.rule)).toContain("extensions.policies.exist");
+    expect(await verify({ qualified: true }, false)).toEqual({ ok: false });
   });
 });

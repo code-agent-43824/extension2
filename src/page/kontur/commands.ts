@@ -334,7 +334,7 @@ export async function answerCommand(context: KonturContext, request: Request): P
     case "cert.verify": {
       checkVerifyOptions(request);
       if (request.cert === undefined) throw invalidStructure();
-      return sortKeys(verifyCertificate(request, await anyCertificate(context, request.cert)));
+      return sortKeys(await verifyCertificate(request, await anyCertificate(context, request.cert), () => context.session.storeCertificates()));
     }
     case "io.decode":
       return decodeText(request, cacheOf(context, request));
