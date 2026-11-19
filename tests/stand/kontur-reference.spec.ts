@@ -298,6 +298,45 @@ test("hashes, moves and deletes streams as the host, one command after another i
   }
 });
 
+test("makes and reads gzip and zip as the host, each side reading the other's", async () => {
+  const data = { type: "base64", data: "aGVsbG8=" };
+  const world = { type: "base64", data: Buffer.from("мир ".repeat(50)).toString("base64") };
+  const cache = (name: string) => ({ type: "cache", name });
+  const steps = [
+    ["archive.zip.addEntry", { source: data, sink: cache("z"), name: "a.txt" }],
+    ["archive.zip.addEntry", { source: world, sink: cache("z"), name: "папка/b.txt", compressionLevel: "best" }],
+    ["archive.zip.addEntry", { source: data, sink: cache("z"), name: "a.txt" }],
+    ["archive.zip.getEntries", { source: cache("z") }],
+    ["archive.zip.getEntry", { source: cache("z"), sink: { type: "base64" }, name: "папка/b.txt" }],
+    ["archive.zip.getEntry", { source: cache("z"), sink: { type: "base64" }, index: 0 }],
+    ["archive.zip.getEntry", { source: cache("z"), sink: { type: "base64" }, name: "нет" }],
+    ["archive.zip.getEntry", { source: cache("z"), sink: { type: "base64" }, index: 5 }],
+    ["archive.unzip", { source: cache("z"), sink: { type: "base64" } }],
+    ["archive.zip.getEntries", { source: data }],
+    ["archive.zip", { source: data, sink: cache("one") }],
+    ["archive.zip.getEntries", { source: cache("one") }],
+    ["archive.ungzip", { source: data, sink: { type: "base64" } }],
+    ["archive.gzip", { source: data, sink: { type: "base64" }, compressionLevel: "fastest" }],
+  ] as const;
+  // Compressed sizes are the deflaters' own: the browser's and the host's zlib need not agree.
+  const plain = (answer: KonturAnswer) => {
+    const result = outcome(answer);
+    return Array.isArray(result.result) ? { result: result.result.map(({ compressionSize: _, ...rest }: Record<string, unknown>) => rest) } : result;
+  };
+  for (const [type, request] of steps) expect(plain(await ours(type, request)), `${type} ${JSON.stringify(request)}`).toEqual(plain(await theirs(type, request)));
+  const exported = async (ask: typeof ours) => (await ask("io.transfer", { source: cache("z"), sink: { type: "base64" } })).result.data as string;
+  const mine = await exported(ours);
+  const their = await exported(theirs);
+  for (const [archive, reader] of [[mine, theirs], [their, ours]] as const) {
+    const source = { type: "base64", data: archive };
+    expect(plain(await reader("archive.zip.getEntries", { source }))).toEqual({ result: [{ index: 0, isDirectory: false, name: "a.txt", size: 5 }, { index: 1, isDirectory: false, name: "папка/b.txt", size: 350 }] });
+    expect((await reader("archive.zip.getEntry", { source, sink: { type: "base64" }, index: 1 })).result.data).toBe(world.data);
+  }
+  const zipped = async (ask: typeof ours) => (await ask("archive.gzip", { source: world, sink: { type: "base64" } })).result.data as string;
+  expect((await theirs("archive.ungzip", { source: { type: "base64", data: await zipped(ours) }, sink: { type: "base64" } })).result.data).toBe(world.data);
+  expect((await ours("archive.ungzip", { source: { type: "base64", data: await zipped(theirs) }, sink: { type: "base64" } })).result.data).toBe(world.data);
+});
+
 // Keys and certificates are made on another copy of the token, removed afterwards, so the one above keeps its single
 // certificate. The browser above is closed first: the Rutoken adapter of a second one meanwhile does not answer.
 test.describe("on another copy of the token", () => {

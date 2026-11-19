@@ -627,8 +627,10 @@ rawencrypt и decrypt пока нет (отложи, запиши в план) �
   Сделано: `system.ts`; идентификатор — SHA-256 вымышленных пользователя, компьютера и MAC (меняется с новой личностью
   в настройках), переменные — набор сеанса этого пользователя под систему браузера, прочие — ответ хоста 13.
 - [x] **66. Хеши.** `hash.md5`, `hash.sha256`, `hash.crc32`. Сделано: `io.ts`, сверено с хостом.
-- [ ] **67. Архивы.** `archive.gzip`, `archive.ungzip`, `archive.zip`, `archive.unzip`, `archive.zip.addEntry`,
+- [x] **67. Архивы.** `archive.gzip`, `archive.ungzip`, `archive.zip`, `archive.unzip`, `archive.zip.addEntry`,
   `archive.zip.extract`, `archive.zip.getEntries`, `archive.zip.getEntry` — в странице, без новых зависимостей.
+  Сделано: `archives.ts` на потоках сжатия браузера; хост читает наши архивы, мы — его; `extract` — в папку из
+  `ui.selectFolder`, то есть в загрузки.
 - [x] **68. Потоки.** `io.getInfo`, `io.transfer`, `io.delete`. Сделано: `io.ts`, сверено с хостом одной
   последовательностью; файл из окна — забывается страницей, загрузка остаётся в загрузках браузера.
 - [ ] **69. КриптоПро в Контуре.** Лицензии — вымышленные действующие; носители (`crypto.provider.getCarriers`,

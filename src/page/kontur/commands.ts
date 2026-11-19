@@ -16,6 +16,7 @@ import { FileStore, openFile, saveFile, selectFolder } from "./files.ts";
 import { httpRequest } from "./http.ts";
 import { environmentVariable, machineId, osInfo } from "./system.ts";
 import { deleteStream, hashCommand, streamInfo, transfer } from "./io.ts";
+import { gzip, zipAdd, zipEntries, zipEntry, zipExtract } from "./archives.ts";
 import type { FakeIdentity } from "../identity.ts";
 import { addSigner, anyCertificate, pemText, rawSign, rawVerify, signatureParts, signContents, signFlags, signHash, verifySignature } from "./signing.ts";
 import { checkSink, readStream, writeStream, type Cache } from "./streams.ts";
@@ -363,6 +364,19 @@ export async function answerCommand(context: KonturContext, request: Request): P
       return decodeText(request, cacheOf(context, request));
     case "io.encode":
       return encodeText(request, cacheOf(context, request));
+    case "archive.gzip":
+    case "archive.ungzip":
+      return gzip(request, cacheOf(context, request), request.type === "archive.ungzip");
+    case "archive.zip":
+    case "archive.zip.addEntry":
+      return zipAdd(request, cacheOf(context, request), request.type === "archive.zip");
+    case "archive.unzip":
+    case "archive.zip.getEntry":
+      return zipEntry(request, cacheOf(context, request), request.type === "archive.unzip");
+    case "archive.zip.getEntries":
+      return sortKeys(zipEntries(request, cacheOf(context, request)));
+    case "archive.zip.extract":
+      return zipExtract(request, cacheOf(context, request));
     case "hash.md5":
     case "hash.sha256":
     case "hash.crc32":

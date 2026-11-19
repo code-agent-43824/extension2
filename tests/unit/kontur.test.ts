@@ -263,4 +263,21 @@ describe("Kontur.Plugin", () => {
     expect(await ask("io.delete", { source: { type: "cache", name: "c" } })).toBe(false);
     await expect(ask("io.transfer", { source: data, sink: { type: "hex" }, sourceOffset: 6 })).rejects.toMatchObject({ answer: { type: "iostreams", code: 6 } });
   });
+
+  it("extracts a zip into a folder the user chose, that is into the downloads", async () => {
+    const { ask, downloads } = setup("Linux x86_64", fakeDialogs({ folder: true }));
+    const cache = { type: "cache", name: "z" };
+    await ask("archive.zip.addEntry", { source: { type: "base64", data: "aGVsbG8=" }, sink: cache, name: "a.txt" });
+    await ask("archive.zip.addEntry", { source: { type: "hex", data: "d0bcd0b8d180" }, sink: cache, name: "папка/b.txt", compressionLevel: "best" });
+    expect(await ask("archive.zip.getEntries", { source: cache })).toEqual([
+      { compressionSize: expect.any(Number), index: 0, isDirectory: false, name: "a.txt", size: 5 },
+      { compressionSize: expect.any(Number), index: 1, isDirectory: false, name: "папка/b.txt", size: 6 },
+    ]);
+    const folder = await ask("ui.selectFolder");
+    expect(await ask("archive.zip.extract", { source: cache, destination: folder })).toBeUndefined();
+    expect(downloads).toEqual([["a.txt", "hello"], ["b.txt", "мир"]]);
+    await expect(ask("archive.zip.extract", { source: cache, destination: "/tmp" })).rejects.toMatchObject({ answer: { code: 16 } });
+    const gz = await ask("archive.gzip", { source: { type: "base64", data: "aGVsbG8=" }, sink: { type: "base64" } });
+    expect(await ask("archive.ungzip", { source: { type: "base64", data: (gz as { data: string }).data }, sink: { type: "base64" } })).toEqual({ data: "aGVsbG8=", size: 5, type: "base64" });
+  });
 });
