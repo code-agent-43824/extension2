@@ -81,7 +81,11 @@ test("lists the token, the provider, containers and certificates as the host doe
   expect(tokens(await ours("crypto.getTokens"))).toEqual(tokens(await theirs("crypto.getTokens")));
   const providers = (answer: KonturAnswer) => answer.result.map(({ versionInfo: _, ...rest }: Record<string, unknown>) => rest);
   expect(providers(await ours("crypto.provider.search", { cryptoProviderType: "pkcs11" }))).toEqual(providers(await theirs("crypto.provider.search", { cryptoProviderType: "pkcs11" })));
-  expect(outcome(await ours("crypto.provider.search", { cryptoProviderType: "cryptoApi" }))).toEqual(outcome(await theirs("crypto.provider.search", { cryptoProviderType: "cryptoApi" })));
+  // CryptoAPI's providers are the CryptoPro emulation's on purpose (CLAUDE.md); the host has none.
+  const tokenCarriers = (answer: KonturAnswer) => answer.result.map(({ freeMemory: _, totalMemory: __, ...rest }: Record<string, unknown>) => rest);
+  const slotProvider = { slot: "Aktiv Rutoken ECP 0", token: "Rutoken ECP", type: "pkcs11" };
+  expect(tokenCarriers(await ours("crypto.provider.getCarriers", { provider: slotProvider }))).toEqual(tokenCarriers(await theirs("crypto.provider.getCarriers", { provider: slotProvider })));
+  expect(outcome(await ours("crypto.provider.getCarriers", { provider: { ...slotProvider, slot: "nope" } }))).toEqual(outcome(await theirs("crypto.provider.getCarriers", { provider: { ...slotProvider, slot: "nope" } })));
   const [provider] = (await theirs("crypto.provider.search")).result;
   const containers = (answer: KonturAnswer) => answer.result.map(({ name: _, ...rest }: Record<string, unknown>) => rest);
   const request = { provider, properties: { cert: all } };

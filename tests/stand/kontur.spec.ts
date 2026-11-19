@@ -115,8 +115,28 @@ test.describe("on the stand token", () => {
     expect(Object.keys(token)).toEqual(["firmwareVersion", "freeMemory", "hardwareVersion", "hasFlashDrive", "manufacturer", "model", "serialNumber", "slot", "supportsNfc", "totalMemory", "type"]);
     const provider = { slot: "Aktiv Rutoken ECP 0", token: "Rutoken ECP", type: "pkcs11", versionInfo: { major: 2, minor: 14 } };
     expect((await ask(page, "crypto.provider.search", { cryptoProviderType: "pkcs11" })).result).toEqual([provider]);
-    expect((await ask(page, "crypto.getCryptoProviders")).result).toEqual([provider]);
-    expect((await ask(page, "crypto.provider.search", { cryptoProviderType: "cryptoApi" })).result).toEqual([]);
+    // CryptoAPI's providers: the CryptoPro emulation's (the owner's choice), after the token's when no type is named.
+    const cryptoApi = (await ask(page, "crypto.provider.search", { cryptoProviderType: "cryptoApi" })).result;
+    expect(cryptoApi).toEqual([
+      { id: 80, name: expect.stringMatching(/^Rutoken Plugin /), type: "cryptoApi", version: "5.0.13000" },
+      { id: 81, name: expect.stringMatching(/^Rutoken Plugin .* \(ГОСТ Р 34\.10-2012 512 бит\)$/), type: "cryptoApi", version: "5.0.13000" },
+    ]);
+    expect((await ask(page, "crypto.getCryptoProviders")).result).toEqual([provider, ...cryptoApi]);
+    const fqcn = `\\\\.\\Aktiv Rutoken ECP 0\\ID_${thumbprint}`;
+    expect((await ask(page, "crypto.provider.getContainers", { provider: cryptoApi[0], properties: { cert: { hash: true }, keySpec: true } })).result).toEqual([
+      { cert: { hash: byHash.hash }, keySpec: 1, name: fqcn, type: "cryptoApi" },
+    ]);
+    expect((await ask(page, "crypto.provider.getContainers", { provider: cryptoApi[1], properties: {} })).result).toEqual([]);
+    const [reader] = (await ask(page, "crypto.provider.getCarriers", { provider: cryptoApi[0] })).result;
+    expect(reader).toEqual({ media: expect.stringMatching(/^Rutoken ECP /), name: "Aktiv Rutoken ECP 0", nickname: expect.any(String) });
+    expect((await ask(page, "cryptopro.carriers", { provider: cryptoApi[0], extended: true })).result).toEqual([{ ...reader, flags: 3, freeMemory: expect.any(Number) }]);
+    expect((await ask(page, "crypto.provider.getCarriers", { provider })).result).toEqual([expect.objectContaining({ slot: "Aktiv Rutoken ECP 0", type: "PCSC" })]);
+    expect((await ask(page, "crypto.provider.cryptopro.getLicense", { guid: "x" })).result).toBe("2099-12-31T00:00:00Z");
+    expect((await ask(page, "crypto.provider.cryptopro.licenseInfo")).result).toMatchObject({ client: true, demo: false });
+    const containerInfo = { containerName: fqcn, provider: cryptoApi[0] };
+    expect((await ask(page, "crypto.container.cryptopro.getExtension", { containerInfo, oid: "1.2.643.2.2.37.3.15", sink: { type: "base64" } })).error).toEqual({ code: 208, message: "PLUGIN[0x000000D0] key container extension not found", type: "plugin" });
+    const inMy = (await ask(page, "cert.search", { filter: { store: { storeType: "cryptoApi", name: "My", location: "user" } }, properties: { containerInfo: true } })).result;
+    expect(inMy).toEqual([{ containerInfo, hash: byHash.hash }]);
     expect((await ask(page, "crypto.provider.getContainers", { provider, properties: { cert: { hash: true } } })).result).toEqual([
       { cert: { hash: byHash.hash }, name: `_HEX__${thumbprint}`, type: "pkcs11" },
     ]);

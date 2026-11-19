@@ -17,6 +17,7 @@ import { httpRequest } from "./http.ts";
 import { environmentVariable, machineId, osInfo } from "./system.ts";
 import { deleteStream, hashCommand, streamInfo, transfer } from "./io.ts";
 import { gzip, zipAdd, zipEntries, zipEntry, zipExtract } from "./archives.ts";
+import { containerExtension, containerFqcn, containerKeySpec, cryptoApiProviders, cryptoProCarriers, holds, LICENSE_EXPIRES, licenseInfo, namedProviders, providerCarriers } from "./cryptopro.ts";
 import type { FakeIdentity } from "../identity.ts";
 import { addSigner, anyCertificate, pemText, rawSign, rawVerify, signatureParts, signContents, signFlags, signHash, verifySignature } from "./signing.ts";
 import { checkSink, readStream, writeStream, type Cache } from "./streams.ts";
@@ -143,9 +144,11 @@ const invalidEnumeration = () => new KonturError({ message: "invalid enumeration
 
 async function providers(context: KonturContext, request: Request): Promise<unknown[]> {
   const type = request.cryptoProviderType;
-  if (type === "cryptoApi") return [];
-  if (type !== undefined && type !== "pkcs11") throw invalidEnumeration();
-  return (await tokens(context)).map((token) => providerOf(token.slot));
+  if (type !== undefined && type !== "pkcs11" && type !== "cryptoApi") throw invalidEnumeration();
+  // CryptoAPI's: the CryptoPro emulation's providers (cryptopro.ts), as the owner chose; the host under Linux has none.
+  const cryptoApi = type === "pkcs11" ? [] : await cryptoApiProviders(context.session);
+  const pkcs11 = type === "cryptoApi" ? [] : (await tokens(context)).map((token) => providerOf(token.slot));
+  return [...pkcs11, ...cryptoApi];
 }
 
 async function tokenCertificates(context: KonturContext): Promise<{ certificate: TokenCertificate; slot: string }[]> {
@@ -153,12 +156,37 @@ async function tokenCertificates(context: KonturContext): Promise<{ certificate:
   return (await userCertificates(context.session.plugin)).map((certificate) => ({ certificate, slot: slots.get(certificate.serial) ?? "" }));
 }
 
+// crypto.provider.getCarriers {provider}: a PKCS#11 slot's token as the host tells it (getTokens' fields but the flash
+// drive and NFC), or the readers of a CryptoAPI provider (cryptopro.ts).
+async function carriers(context: KonturContext, request: Request): Promise<unknown[]> {
+  const provider = request.provider;
+  if (!isObject(provider)) throw invalidStructure();
+  if (provider.type === "cryptoApi") return (await namedProviders(context.session, provider)).length ? providerCarriers(context.session) : [];
+  if (provider.type !== "pkcs11") throw invalidStructure();
+  const all = (await tokenList(context)) as Record<string, unknown>[];
+  // Another slot: none, as the host answers.
+  const found = all.filter((token) => typeof provider.slot !== "string" || token.slot === provider.slot);
+  return found.map(({ hasFlashDrive: _, supportsNfc: __, ...rest }) => rest);
+}
+
 async function containers(context: KonturContext, request: Request): Promise<unknown[]> {
   const provider = request.provider;
-  if (!isObject(provider) || !isObject(request.properties)) throw invalidStructure();
+  const properties = request.properties;
+  if (!isObject(provider) || !isObject(properties)) throw invalidStructure();
+  const certProperties = properties.cert;
+  if (provider.type === "cryptoApi") {
+    const holders = await namedProviders(context.session, provider);
+    return (await tokenCertificates(context))
+      .filter(({ certificate }) => holders.some((holder) => holds(holder, certificate)))
+      .map(({ certificate, slot }) => ({
+        ...(isObject(certProperties) ? { cert: certificateFields(certificate.x509, wanted(certProperties)) } : {}),
+        ...(properties.keySpec === true ? { keySpec: containerKeySpec(certificate) } : {}),
+        name: containerFqcn(slot, certificate),
+        type: "cryptoApi",
+      }));
+  }
   const slots = (await tokens(context)).map((token) => token.slot);
   if (typeof provider.slot === "string" && !slots.includes(provider.slot)) throw cryptoError(53, "unable to find a token for the specified slot");
-  const certProperties = request.properties.cert;
   return (await tokenCertificates(context))
     .filter(({ slot }) => typeof provider.slot !== "string" || slot === provider.slot)
     .map(({ certificate }) => ({
@@ -206,6 +234,11 @@ async function searchCertificates(context: KonturContext, request: Request): Pro
     if (filter.qualified === true && !isQualified(x509)) continue;
     if (filter.gost === true && !x509.publicKeyAlgorithm.startsWith("1.2.643.")) continue;
     const place: TokenPlace = { slot, token: TOKEN_MODEL };
+    // From CryptoAPI's My: the emulated CryptoPro container and provider of the key.
+    if (!pkcs11Store) {
+      const provider = (await cryptoApiProviders(context.session)).find((each) => holds(each, certificate));
+      if (provider) place.cryptoApi = { provider: { ...provider }, containerName: containerFqcn(slot, certificate) };
+    }
     found.push(certificateFields(x509, asked, place));
     if (filter.firstOnly === true) break;
   }
@@ -401,6 +434,17 @@ export async function answerCommand(context: KonturContext, request: Request): P
       return saveFile({ files: context.files, dialogs: context.dialogs, origin: context.session.origin }, request);
     case "ui.selectFolder":
       return selectFolder({ files: context.files, dialogs: context.dialogs, origin: context.session.origin }, request);
+    case "crypto.provider.getCarriers":
+      return sortKeys(await carriers(context, request));
+    case "cryptopro.carriers":
+      return sortKeys(await cryptoProCarriers(context.session, request));
+    case "crypto.provider.cryptopro.licenseInfo":
+      return licenseInfo();
+    case "crypto.provider.cryptopro.getLicense":
+    case "cryptopro.getLicense":
+      return LICENSE_EXPIRES;
+    case "crypto.container.cryptopro.getExtension":
+      return containerExtension(request);
     case "crypto.createCertRequest":
       return sortKeys(await createCertRequest(context, request, cacheOf(context, request), await tokens(context)));
     case "crypto.installCert":

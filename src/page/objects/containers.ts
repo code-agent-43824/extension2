@@ -32,6 +32,9 @@ const EXCHANGE_USAGE = 0x20 | 0x08;
 // A key is an exchange key when its certificate lets it encrypt, or does not limit its usage.
 const isExchange = (certificate: TokenCertificate) => certificate.x509.keyUsage === null || (certificate.x509.keyUsage & EXCHANGE_USAGE) !== 0;
 
+// The KeySpec of a certificate's key as CPContainerKey tells it (Kontur.Plugin's containers too).
+export const keySpecOf = (certificate: TokenCertificate) => (isExchange(certificate) ? constants.AT_KEYEXCHANGE : constants.AT_SIGNATURE);
+
 // The key's value as the token keeps it: a GOST key's point (x||y), an RSA key's modulus.
 function keyValue(certificate: TokenCertificate): Uint8Array {
   try {

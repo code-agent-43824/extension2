@@ -2,6 +2,44 @@
 
 Новые записи сверху.
 
+## 2026-11-19 — Контур.Плагин: команды на выбор владельца — ответы хоста и решения
+
+**Вопрос.** Владелец выбрал из команд хоста (2026-11-19): цепочка в `cert.verify` — как в имитации КриптоПро;
+вымышленные идентификатор компьютера и переменные окружения; хеши, архивы, `io.*`; вымышленные лицензии КриптоПро;
+носители и контейнеры — как дала бы имитация КриптоПро; `crypto.rawEncrypt`/`rawDecrypt` — отложить.
+
+**Что сделали.** Поля — строки хоста (`…Command::initialize`, `parse_http`, `Zip*`); ответы — запросы к хосту стенда,
+состояние кэша — в одном процессе; вызовы клиента Контура — диагностика `install.kontur.ru`.
+
+**Что показала проверка.**
+- `hash.md5`/`hash.sha256 {source, sink}` — дайджест в приёмник (без приёмника — 3); `hash.crc32 {source}` — число.
+- `io.getInfo {source}` — `{size, type}`, у кэша и `name`, у файла `{access: "read", mode: "open", path}`;
+  `io.transfer {source, sink, sourceOffset?, count?, sinkOffset?}` — пишет поверх потока кэша, нули до смещения,
+  смещение источника больше размера — `iostreams` 6 «offset is larger than the data size», лишний `count` обрезается,
+  отрицательный — хост не отвечает; `io.delete {source}` — `true`, если было что удалить (кэш, файл), иначе `false`,
+  данные из запроса — `true`.
+- `archive.gzip {source, sink, compressionLevel?}` (`best`, `fast`, `normal`, иное слово — «invalid enumeration
+  value»), `archive.ungzip` (не gzip — `zlib` −3); zip: `addEntry {source, sink, name, compressionLevel?}` дописывает
+  в архив кэша или создаёт новый (то же имя — `plugin` 103), имена — UTF-8 без флага, `getEntries` —
+  `{compressionSize, index, isDirectory, name, size}` (не zip — `iostreams` 6), `getEntry {name | index}` (нет имени —
+  `zlib` −100 `unzLocateFile`, индекса — `unzGoToNextFile`), `archive.zip` — архив из одного «file», `archive.unzip` —
+  первый элемент, `extract {source, destination: папка, name | index?}` — файлы на диск, без ответа.
+- `os.getEnvironmentVariable {name}` — значение или `plugin` 13 «environment variable is not defined»;
+  `machine.uniqueId` — 64 hex; `os.info` — `{bitness, family, name, release}`.
+- `crypto.provider.getCarriers {provider}`: для слота PKCS#11 — поля `getTokens` без флешки и NFC, чужой слот — `[]`;
+  для CryptoAPI под Linux — «CryptoPro module not loaded». Поля ответов КриптоПро — из строк хоста: провайдер
+  `{type, name, id, version…}`, носитель `{nickname, name, media}` (`cryptopro.carriers` — ещё `flags`,
+  `freeMemory`), лицензия `{expireDate, type, demo, client, server}`; клиент читает дату `getLicense` через `new
+  Date()`, а отсутствие расширения контейнера (`crypto.container.cryptopro.getExtension`) ждёт кодом 208 — у хоста
+  это «key container extension not found». `crypto.container.getProperties` и `setExtension` на все пробованные
+  запросы — 3: формат не найден.
+
+**Вывод.** Сделано в `qualified.ts` (`trustStatus`), `system.ts`, `io.ts`, `archives.ts`, `cryptopro.ts`; где у хоста
+под Linux есть ответ, сверка сравнивает с ним (хеши, `io.*`, архивы — каждая сторона читает архивы другой, носители
+слота). Выдумано по решению владельца: идентификатор компьютера (SHA-256 вымышленной личности Госплагина),
+переменные окружения сеанса, лицензия до 2099-12-31 (`type: "client"` — значение подобрано), провайдеры, носители и
+контейнеры КриптоПро — из имитации. Отложено: `crypto.rawEncrypt`, `crypto.rawDecrypt` (действие 70).
+
 ## 2026-11-19 — Контур.Плагин: хранилище `My` CryptoAPI, места хранилищ и команды хоста под Linux
 
 **Вопрос.** Владелец: «да так же как для госплагина» — сертификаты токенов в хранилище `My` CryptoAPI. Заодно — какие

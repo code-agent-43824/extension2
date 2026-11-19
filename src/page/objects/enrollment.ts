@@ -79,6 +79,13 @@ async function providerName(session: Session, provider: Provider): Promise<strin
   return (await new About(session).CSPName()) + provider.suffix;
 }
 
+// The providers as CryptoPro's names and types show them to pages (Kontur.Plugin's CryptoAPI providers too).
+export async function emulatedProviders(session: Session): Promise<{ type: number; name: string; keySize: 256 | 512 }[]> {
+  const result = [];
+  for (const provider of providers) result.push({ type: provider.type, name: await providerName(session, provider), keySize: provider.type === 81 ? (512 as const) : (256 as const) });
+  return result;
+}
+
 async function providerByName(session: Session, name: string): Promise<Provider | undefined> {
   for (const provider of providers) if ((await providerName(session, provider)) === name) return provider;
   return undefined;

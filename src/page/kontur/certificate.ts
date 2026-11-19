@@ -109,6 +109,8 @@ export function extensions(x509: X509): Record<string, unknown> {
 export interface TokenPlace {
   slot: string;
   token: string;
+  // Seen through CryptoAPI instead (cryptopro.ts): the emulated CryptoPro provider and container.
+  cryptoApi?: { provider: Record<string, unknown>; containerName: string };
 }
 
 // The properties a request asks for: those set to true.
@@ -121,7 +123,7 @@ const hexOf = (text: string) => text.toLowerCase();
 
 export function certificateFields(x509: X509, asked: Set<string>, place?: TokenPlace): Record<string, unknown> {
   const fields: Record<string, unknown> = { hash: { data: hexOf(x509.thumbprint), size: 20, type: "hex" } };
-  const provider = place ? { slot: place.slot, token: place.token, type: "pkcs11" } : undefined;
+  const provider = place ? (place.cryptoApi?.provider ?? { slot: place.slot, token: place.token, type: "pkcs11" }) : undefined;
   for (const name of asked) {
     switch (name) {
       case "content":
@@ -155,7 +157,7 @@ export function certificateFields(x509: X509, asked: Set<string>, place?: TokenP
         fields.cryptoProvider = provider ?? {};
         break;
       case "containerInfo":
-        fields.containerInfo = provider ? { containerName: containerName(x509), provider } : {};
+        fields.containerInfo = provider ? { containerName: place?.cryptoApi?.containerName ?? containerName(x509), provider } : {};
         break;
       case "publicKeyLength":
         fields.publicKeyLength = certificateKey(x509).length;

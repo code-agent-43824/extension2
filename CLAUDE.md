@@ -102,8 +102,11 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   sources and sinks, `certificate.ts` a certificate's fields as it names them, `signing.ts` its signatures and checks,
   `encryption.ts` its CMS encryption, made and opened in the page as the host does it on the stand's token,
   `issuance.ts` the key and request, the certificate's install, CryptoAPI's stores' refusals, `qualified.ts` the
-  host's qualified certificate rules and cert.verify, `text.ts` io.decode and io.encode in code pages, `files.ts` the
-  files chosen in `file-dialog.ts`'s windows and saved to the downloads, `http.ts` http.request on the page's fetch),
+  host's qualified certificate rules and cert.verify with its trust status, `text.ts` io.decode and io.encode in code
+  pages, `files.ts` the files chosen in `file-dialog.ts`'s windows and saved to the downloads, `http.ts` http.request on
+  the page's fetch, `system.ts` the made-up machine id, environment and the OS, `io.ts` hashes and io.*,
+  `archives.ts` gzip and zip, `cryptopro.ts` CryptoAPI's providers, readers, containers and licence from the CryptoPro
+  emulation),
   `settings.ts` (asks the bridge for IFCPlugin's PIN switch and Kontur.Plugin's client id), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
@@ -288,6 +291,13 @@ local names resolve): Playwright's routes reach the pages only, and a service wo
   госплагина». Reason: the real host under Linux without CryptoPro answers `[]` for every CryptoAPI store, and Kontur's
   client looks for certificates there as well as on PKCS#11 tokens. A departure from the real host on purpose
   (`isMyStore` in `src/page/kontur/commands.ts`); the other stores stay empty as there.
+
+- **Kontur.Plugin answers for CryptoPro and the computer as the extension's emulation would, not as the host under
+  Linux.** Owner, 2026-11-19, on the list of the host's commands. Reason: the host without CryptoPro refuses them, and
+  the owner wants Kontur's sites to see a working CryptoPro: cert.verify's trust is the CryptoPro emulation's
+  IsValid() chain, the CryptoAPI providers, readers and containers are the emulation's, the CryptoPro licence and the
+  machine id and environment are made up (the machine from Gosplugin's identity). `crypto.rawEncrypt` and
+  `crypto.rawDecrypt` wait (the owner).
 
 - **XAdES-T's timestamp is requested by the service worker, with access to each service granted by the user.** Agent,
   2026-10-08, on the owner's "xades делай". Reason: the Rutoken Plugin reaches a timestamp service only inside a CMS
