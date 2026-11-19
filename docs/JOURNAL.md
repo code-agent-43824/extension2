@@ -2,6 +2,66 @@
 
 Новые записи сверху.
 
+## 2026-11-19 — Контур.Плагин 4.15.1 на fake Рутокене: транспорт и ответы хоста
+
+**Вопрос.** Как страницы Контура говорят с Контур.Плагином и что отвечает его хост — чтобы расширение повторило это
+поверх Рутокен Плагина (этап 9). Исходные данные — разбор API, присланный владельцем (в репозиторий не кладётся).
+
+**Что сделали.** Пакет `kontur.plugin.003212.deb` (4.15.1.6119) с `help.kontur.ru/files` (перенаправляет на
+`api.kontur.ru/drive/…`; SHA-256 совпал с разбором) развёрнут на стенде (`scripts/setup-kontur.ts`): хост
+`kontur.plugin.host` (GTK/FLTK, ищет библиотеки токенов в `pkcs11/` рядом с собой) с форком вместо
+`librtpkcs11ecp.so` и копией HOME стенда; разговор по Native Messaging — `tests/stand/kontur.ts`. Расширение 3.1.11 из
+Chrome Web Store и клиент `kontur.plugin` 3.10.8.312 из диагностической страницы `install.kontur.ru` прочитаны в рабочей
+папке. Имена полей запросов — из строк в `plugin::…Command::initialize` и `plugin::json::parse<…>` хоста (символы не
+вырезаны).
+
+**Транспорт (расширение).** Страница: `postMessage({type: "kontur-toolbox-request", request}, "*")`, ответ —
+`{type: "kontur-toolbox-response", response}`; запрос без `sessionId` не берётся, событие — только доверенное, от своего
+окна. Content script добавляет `request.hostUri` = origin страницы. Метка — `<meta kontur-toolbox-installed="true">` в
+`head` по `DOMContentLoaded`, только на доменах `.kontur.ru`, `.kontur-ca.ru`, `.kontur-extern.ru`, `.kontur`,
+`.testkontur.ru`. Сами отвечают: `extension.info` → `{id, type: "chrome", version}` (при `extensionId` — только своему),
+`extension.close`, `extension.uninstall` (не с домена Контура — `{type: "extension", message: "bad request"}`).
+Ответы хоста длиннее предела приходят частями `{isChunked, id, data, isFinalChunk}`. Клиент: первым шлёт
+`extension.info` и ждёт 10 с при метке, 2 с без неё («extension is not installed»); ошибки `plugin` с кодом 5 — отмена,
+с кодом 1 — запрет доступа.
+
+**Ответы хоста.** Конверт: `{sessionId, commandId, result}` или `{…, error: {type, code, message[, context]}}`;
+`unknown command` — `plugin` 2, «invalid command structure» — `plugin` 3, «certificate not found» — `plugin` 200,
+ошибки криптографии — `crypto` с кодом и `context` (`wrong ASN1 value structure` 1, `wrong pkcs7 message state` 32,
+`no suitable crypto provider` 10), отказ без типа и кода — `{"message": "invalid enumeration value"}` (хранилище
+`cryptoApi` под Linux). `plugin.info` — `{architecture, buildType: "stable", clientId, denied, platform: "linux",
+pluginVersion: "4.15.1.6119"}`, `denied` — `false` только доменам Контура; первая криптооперация с другого сайта
+открывает окно «Доступ к Контур.Плагин» и ждёт его. Токены — `crypto.getTokens` (модель, серийный номер, версии,
+память, `slot` — имя считывателя, `type: "PCSC"`), провайдеры — `{slot, token, type: "pkcs11", versionInfo}`,
+контейнеры — `{name: "_HEX__<CKA_ID>", type, cert}`. `cert.search {filter: {store: {storeType: "pkcs11"}, hash?,
+serialNumber?, hasPrivateKey?, qualified?, firstOnly?}, properties: {…: true}}` → сертификаты с запрошенными полями:
+`content`/`hash`/`serialNumber` как поток `{data, size, type}`, `subject`/`issuer` — массив `{<имя>: значение}` (C, S,
+L, STREET, O, SN, G, CN, E, ИНН, СНИЛС…), даты ISO 8601, `extensions` — разобранные `keyUsages`,
+`extendedKeyUsages`, `privateKeyUsagePeriod`, прочие — по OID в base64, `containerInfo` и `cryptoProvider` токена.
+`cert.parse {cert: {content}, properties}` — то же для любого сертификата.
+
+**Подпись.** `crypto.sign {source, sink, certs: [{hash}], attached?, includeAuthAttributes?, includeSignCertificates?,
+includeCertificateChain?, textualEncoding?, silent?}`: по умолчанию отсоединённая CAdES-BES, `attached: true` —
+присоединённая, `textualEncoding: true` — PEM-текст `-----BEGIN PKCS7-----` с CRLF, приёмники и источники `base64`,
+`hex`, `cache` (с `name`; кэш живёт в процессе хоста). `crypto.batch.sign` — массивы `source` и `sink`, ответ —
+массив. `crypto.signHash {hashes: {<OID хэша>: поток}, sink, certs}` — CMS по готовому хэшу. `crypto.rawSign {source,
+sink, cert}` — 64 байта, `crypto.rawVerify {source, signature, cert}` — `true`/`false`. `crypto.verify {source,
+signature?}` → отпечатки подписантов, при несовпадении — `[]`. `crypto.signature.parse {source, properties: {content:
+приёмник, certs: {поля}}}`, `crypto.signature.addSigner {source, sink, certs}` — вторая подпись. Шифрование —
+`crypto.encrypt {source, sink, certs}` (по умолчанию ГОСТ 28147-89), `crypto.decrypt {source, sink}`,
+`crypto.encryption.parse {source, properties: {encryptedContentInfo: {contentEncryptionAlgorithm: true}}}`.
+`io.decode {source, codePage}` → строка, `io.encode {value, codePage, sink}`.
+
+**PIN.** Хост сначала молча входит со стандартным PIN 12345678 и только при отказе открывает окно «Ввод PIN-кода»
+(«Введите PIN-код для доступа к токену.», «Запомнить PIN-код», «Неверный PIN-код» с остатком попыток). Отмена окна —
+`crypto` 51 «the pkcs11 session is not authorized» (и после неверного PIN); `silent: true` без подходящего PIN —
+`crypto` 47 «gui authentication requested in silent mode».
+
+**Вывод.** Данных для каркаса и для сертификатов, подписи, шифрования и `io` хватает; запрос сертификата, установка,
+`http.request`, окна файлов и `cert.display` снимаются при своих действиях. Отличия, решённые заранее: окно PIN
+расширения всегда (владелец), согласие сайта — его включение (владелец, `denied: false`), имя контейнера — отпечаток
+сертификата, как у других плагинов (`CLAUDE.md`).
+
 ## 2026-11-19 — Госплагин: хранилище `My` — сертификаты токена, решение владельца
 
 **Вопрос.** Проверка 1.16.2 (2026-11-17): ЕСИА спрашивает `crypto.certificates({fields: {hasPrivateKey: "true"},
