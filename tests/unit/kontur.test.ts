@@ -13,6 +13,7 @@ import { pemToDer } from "../../src/page/x509.ts";
 import { decodeText, encodeText } from "../../src/page/kontur/text.ts";
 import { parseCertificate } from "../../src/page/x509.ts";
 import { QUALIFIED_CASES, SWITCH_CASES } from "./kontur-certificates.ts";
+import { builtInIdentity } from "../../src/page/identity.ts";
 import { pemText } from "../../src/page/kontur/signing.ts";
 import { fromBase64, readStream, writeStream } from "../../src/page/kontur/streams.ts";
 import { KonturError } from "../../src/page/kontur/errors.ts";
@@ -37,9 +38,12 @@ function fakeDialogs(answers: { files?: ChosenFile[] | null; name?: string | nul
 
 function setup(platform = "Linux x86_64", dialogs: FileDialogs = fakeDialogs()) {
   const downloads: [string, string][] = [];
-  const context = newKonturContext(fakeSession(fakePlugin(), new FakePinDialog([])), Promise.resolve({ ifcPinWindow: false, konturClientId: clientId }), platform, dialogs, (name, bytes) =>
-    downloads.push([name, new TextDecoder().decode(bytes)]),
-  );
+  const context = newKonturContext(fakeSession(fakePlugin(), new FakePinDialog([])), Promise.resolve({ ifcPinWindow: false, konturClientId: clientId }), platform, {
+    dialogs,
+    download: (name, bytes) => downloads.push([name, new TextDecoder().decode(bytes)]),
+    identity: async () => builtInIdentity(1, platform),
+    navigator: { userAgent: platform.startsWith("Win") ? "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" : "Mozilla/5.0 (X11; Linux x86_64)", platform } as Navigator,
+  });
   return { context, downloads, ask: (type: string, fields: Record<string, unknown> = {}) => answerCommand(context, { sessionId: "s", type, ...fields }) };
 }
 
@@ -226,5 +230,22 @@ describe("Kontur.Plugin", () => {
     expect(logged).toMatchObject({ ok: false, trustStatus: 0 });
     expect(logged.errors.map((failure) => failure.rule)).toContain("extensions.policies.exist");
     expect(await verify({ qualified: true }, false)).toEqual({ ok: false });
+  });
+
+  it("makes up the computer from Gosplugin's identity: its id, environment and system", async () => {
+    const linux = setup();
+    const id = await linux.ask("machine.uniqueId");
+    expect(id).toMatch(/^[0-9a-f]{64}$/);
+    expect(await linux.ask("machine.uniqueId")).toBe(id);
+    expect(await linux.ask("os.getEnvironmentVariable", { name: "HOME" })).toBe("/home/ekaterina");
+    expect(await linux.ask("os.getEnvironmentVariable", { name: "HOSTNAME" })).toBe("ekaterina-pc");
+    await expect(linux.ask("os.getEnvironmentVariable", { name: "home" })).rejects.toMatchObject({ answer: { type: "plugin", code: 13, message: "PLUGIN[0x0000000D] environment variable is not defined" } });
+    await expect(linux.ask("os.getEnvironmentVariable", {})).rejects.toMatchObject({ answer: { code: 3 } });
+    expect(await linux.ask("os.info")).toEqual({ bitness: 64, family: "Linux", name: "Linux", release: "" });
+    const windows = setup("Win32");
+    expect(await windows.ask("machine.uniqueId")).not.toBe(id);
+    expect(await windows.ask("os.getEnvironmentVariable", { name: "userprofile" })).toBe("C:\\Users\\ekaterina");
+    expect(await windows.ask("os.getEnvironmentVariable", { name: "COMPUTERNAME" })).toBe("DESKTOP-9H2LX8D");
+    expect(await windows.ask("os.info")).toMatchObject({ bitness: 64, family: "Windows", release: "10.0" });
   });
 });

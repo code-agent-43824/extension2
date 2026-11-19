@@ -14,6 +14,8 @@ import { decodeText, encodeText } from "./text.ts";
 import type { FileDialogs } from "./file-dialog.ts";
 import { FileStore, openFile, saveFile, selectFolder } from "./files.ts";
 import { httpRequest } from "./http.ts";
+import { environmentVariable, machineId, osInfo } from "./system.ts";
+import type { FakeIdentity } from "../identity.ts";
 import { addSigner, anyCertificate, pemText, rawSign, rawVerify, signatureParts, signContents, signFlags, signHash, verifySignature } from "./signing.ts";
 import { checkSink, readStream, writeStream, type Cache } from "./streams.ts";
 
@@ -33,10 +35,30 @@ export interface KonturContext {
   // The files the user chose in the file windows, for the whole page as the host keeps them for its process.
   files: FileStore;
   dialogs: FileDialogs;
+  // Gosplugin's made-up user and computer, asked for once when a command needs them (system.ts).
+  identity: () => Promise<FakeIdentity>;
+  navigator: Navigator;
 }
 
-export function newKonturContext(session: Session, settings: Promise<Settings>, platform: string, dialogs: FileDialogs, download: (name: string, bytes: Uint8Array) => void): KonturContext {
-  return { session, settings, platform, caches: new Map(), files: new FileStore(platformName(platform), download), dialogs };
+export interface PageParts {
+  dialogs: FileDialogs;
+  download: (name: string, bytes: Uint8Array) => void;
+  identity: () => Promise<FakeIdentity>;
+  navigator: Navigator;
+}
+
+export function newKonturContext(session: Session, settings: Promise<Settings>, platform: string, parts: PageParts): KonturContext {
+  let identity: Promise<FakeIdentity> | undefined;
+  return {
+    session,
+    settings,
+    platform,
+    caches: new Map(),
+    files: new FileStore(platformName(platform), parts.download),
+    dialogs: parts.dialogs,
+    identity: () => (identity ??= parts.identity()),
+    navigator: parts.navigator,
+  };
 }
 
 export type Request = Record<string, unknown> & { sessionId?: unknown; type?: unknown; hostUri?: string };
@@ -340,6 +362,12 @@ export async function answerCommand(context: KonturContext, request: Request): P
       return decodeText(request, cacheOf(context, request));
     case "io.encode":
       return encodeText(request, cacheOf(context, request));
+    case "machine.uniqueId":
+      return machineId(await context.identity());
+    case "os.getEnvironmentVariable":
+      return environmentVariable(request, await context.identity(), platformName(context.platform) as "windows" | "mac" | "linux");
+    case "os.info":
+      return sortKeys(await osInfo(context.navigator, platformName(context.platform) as "windows" | "mac" | "linux"));
     case "http.request":
       return sortKeys(await httpRequest(request, cacheOf(context, request)));
     case "ui.openFile":

@@ -622,8 +622,10 @@ rawencrypt и decrypt пока нет (отложи, запиши в план) �
   отзыва; итог — `trustStatus` (биты `CERT_TRUST_*`) и `ok` по маске сайта вместе с правилами квалифицированности.
   Сделано: `trustStatus` в `qualified.ts` — как `IsValid()` имитации: с выключенным переключателем расширенной
   проверки — по датам, с включённым — цепочка, конец без издателя — `CERT_TRUST_IS_PARTIAL_CHAIN`.
-- [ ] **65. Вымышленный компьютер.** `machine.uniqueId` и `os.getEnvironmentVariable` — из вымышленной личности
+- [x] **65. Вымышленный компьютер.** `machine.uniqueId` и `os.getEnvironmentVariable` — из вымышленной личности
   Госплагина (пользователь, компьютер), постоянные; `os.info` — по браузеру.
+  Сделано: `system.ts`; идентификатор — SHA-256 вымышленных пользователя, компьютера и MAC (меняется с новой личностью
+  в настройках), переменные — набор сеанса этого пользователя под систему браузера, прочие — ответ хоста 13.
 - [ ] **66. Хеши.** `hash.md5`, `hash.sha256`, `hash.crc32`.
 - [ ] **67. Архивы.** `archive.gzip`, `archive.ungzip`, `archive.zip`, `archive.unzip`, `archive.zip.addEntry`,
   `archive.zip.extract`, `archive.zip.getEntries`, `archive.zip.getEntry` — в странице, без новых зависимостей.

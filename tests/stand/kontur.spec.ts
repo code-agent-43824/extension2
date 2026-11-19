@@ -283,6 +283,17 @@ test.describe("on the stand token", () => {
     }
   });
 
+  test("makes up the computer from Gosplugin's identity: its id, environment and system", async () => {
+    const id = (await ask(page, "machine.uniqueId")).result;
+    expect(id).toMatch(/^[0-9a-f]{64}$/);
+    expect((await ask(page, "machine.uniqueId")).result).toBe(id);
+    const home = (await ask(page, "os.getEnvironmentVariable", { name: "HOME" })).result;
+    const user = (await ask(page, "os.getEnvironmentVariable", { name: "USER" })).result;
+    expect(home).toBe(`/home/${user}`);
+    expect((await ask(page, "os.getEnvironmentVariable", { name: "NO_SUCH_VAR" })).error).toEqual({ code: 13, message: "PLUGIN[0x0000000D] environment variable is not defined", type: "plugin" });
+    expect((await ask(page, "os.info")).result).toMatchObject({ bitness: 64, family: "Linux" });
+  });
+
   test("checks trust as Kontur's client asks, by the extension's root store and its extended validity switch", async () => {
     const cert = { content: { type: "base64", data: Buffer.from(user.der).toString("base64") } };
     const client = { cert, trustStatus: 487, qualified: { log: true } };
