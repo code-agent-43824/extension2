@@ -11,6 +11,7 @@ import { caDir } from "../../scripts/provision-token.ts";
 import { kontur } from "../../scripts/setup-kontur.ts";
 import { stand, standDir, userPin, venvPython } from "../../scripts/setup-stand.ts";
 import { children, read } from "../../src/page/asn1.ts";
+import { QUALIFIED_CASES, SWITCH_CASES } from "../unit/kontur-certificates.ts";
 import { BUILTIN_ROOTS } from "../../src/extension/builtin-roots.ts";
 import { clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
 import { konturHost, type KonturAnswer, type KonturHost } from "./kontur.ts";
@@ -164,6 +165,71 @@ test("each side verifies the other's signatures, and both refuse the same mistak
     } finally {
       fresh.close();
     }
+  }
+});
+
+test("applies the qualified rules as the host, with its messages, and converts text alike", async () => {
+  for (const { label, der, rules } of QUALIFIED_CASES) {
+    const cert = { content: { type: "base64", data: Buffer.from(der).toString("base64") } };
+    const verify = { cert, qualified: { log: true } };
+    const their = outcome(await theirs("cert.verify", verify));
+    expect(their.result?.errors?.map((failure: { rule: string }) => failure.rule), `the host on ${label}`).toEqual(rules);
+    expect(outcome(await ours("cert.verify", verify)), label).toEqual(their);
+    const parse = { cert, properties: { qualified: true } };
+    expect(outcome(await ours("cert.parse", parse)), label).toEqual(outcome(await theirs("cert.parse", parse)));
+  }
+  for (const { label, der, rules, switches } of SWITCH_CASES) {
+    const verify = { cert: { content: { type: "base64", data: Buffer.from(der).toString("base64") } }, qualified: { log: true, rules: switches } };
+    const their = outcome(await theirs("cert.verify", verify));
+    expect(their.result?.errors?.map((failure: { rule: string }) => failure.rule), `the host on ${label}`).toEqual(rules);
+    expect(outcome(await ours("cert.verify", verify)), label).toEqual(their);
+  }
+  const user = { content: { type: "base64", data: readFileSync(join(standDir, "user.pem"), "utf8").replace(/-----[^-]+-----|\s/g, "") } };
+  const hex = (data: string) => ({ type: "hex", data });
+  for (const [type, request] of [
+    ["cert.verify", { cert: user, qualified: true }],
+    ["cert.verify", { cert: user, qualified: { log: false } }],
+    ["cert.verify", { cert: user, trustStatus: 487, qualified: { log: true } }],
+    ["cert.verify", { cert: user, qualified: { log: "yes" } }],
+    ["cert.verify", { cert: user, qualified: { log: true, rules: [] } }],
+    ["cert.verify", { cert: user, qualified: { log: true, rules: {} } }],
+    ["cert.verify", { cert: user, qualified: { log: true, rules: ["subject.cn.exist"] } }],
+    ["cert.verify", { cert: user, qualified: { log: true, rules: { "no.such.rule": true } } }],
+    ["cert.verify", { cert: user, qualified: { log: true, rules: { "subject.cn.exist": 1 } } }],
+    ["cert.verify", { cert: user, qualified: { log: true, rules: { "subject.type.valid": true } } }],
+    ["cert.verify", { cert: user, qualified: { log: true, rules: { "extensions.exist": false } } }],
+    ["cert.verify", { cert: { content: { type: "base64", data: "AAAA" } }, qualified: { log: true } }],
+    ["cert.verify", { cert: { hash: { type: "hex", data: "00" } }, qualified: { log: true } }],
+    ["cert.verify", {}],
+    ["cert.display", { cert: user }],
+    ["io.decode", { source: { type: "base64", data: "z/Do4uXy" }, codePage: 1251 }],
+    // Without a code page: what is certain (src/page/kontur/text.ts).
+    ["io.decode", { source: { type: "base64", data: "0J/RgNC40LLQtdGC" } }],
+    ["io.decode", { source: hex("c3") }],
+    ["io.decode", { source: hex("48656c6c6f") }],
+    ["io.decode", { source: hex("") }],
+    ["io.decode", { source: hex("fffe1f044004") }],
+    ["io.decode", { source: hex("ff98"), codePage: 1251 }],
+    ["io.decode", { source: hex("8fe0a8a2a5e2"), codePage: 866 }],
+    ["io.decode", { source: hex("f0d2c9d7c5d4"), codePage: 20866 }],
+    ["io.decode", { source: hex("1f0440043804"), codePage: 1200 }],
+    ["io.decode", { source: hex("cff0"), codePage: 28595 }],
+    ["io.decode", { source: hex("8081"), codePage: 1252 }],
+    ["io.decode", { source: hex("cff0"), codePage: 12345 }],
+    ["io.decode", { source: hex("cff0"), codePage: "1251" }],
+    ["io.encode", { value: "Привет", codePage: 1251, sink: { type: "base64" } }],
+    ["io.encode", { value: "Привет ё№", sink: { type: "hex" } }],
+    ["io.encode", { value: "Привет", codePage: 866, sink: { type: "hex" } }],
+    ["io.encode", { value: "Привет", codePage: 21866, sink: { type: "hex" } }],
+    ["io.encode", { value: "Привет", codePage: 1201, sink: { type: "hex" } }],
+    ["io.encode", { value: "€", codePage: 1252, sink: { type: "hex" } }],
+    ["io.encode", { value: "日本", codePage: 1251, sink: { type: "hex" } }],
+    ["io.encode", { value: "Привет", codePage: 10007, sink: { type: "hex" } }],
+    ["io.encode", { value: "Привет", codePage: 28591, sink: { type: "hex" } }],
+    ["io.encode", { value: 5, sink: { type: "hex" } }],
+    ["io.encode", { value: "x", codePage: 1251 }],
+  ] as const) {
+    expect(outcome(await ours(type, request)), `${type} ${JSON.stringify(request).slice(0, 120)}`).toEqual(outcome(await theirs(type, request)));
   }
 });
 

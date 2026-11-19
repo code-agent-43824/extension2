@@ -2,9 +2,10 @@
 
 Обновлено: 2026-11-19.
 
-**В работе — этап 9, Контур.Плагин** (действия 56–62 [`docs/PLAN.md`](docs/PLAN.md)). Сделаны 56–60. Следующий
-шаг — действие 61: поля и ответы хоста для `cert.verify`, `cert.display`, `io.decode`/`io.encode`, `http.request`,
-`ui.*` (хост на стенде — `node scripts/setup-kontur.ts`, разговор — `tests/stand/kontur.ts`, каждый ошибочный
+**В работе — этап 9, Контур.Плагин** (действия 56–62 [`docs/PLAN.md`](docs/PLAN.md)). Сделаны 56–60 и часть
+61 (`cert.verify`, `qualified`, `io.*`). Следующий шаг — окна файлов `ui.*` (поля и ответы хоста — `JOURNAL.md` будет
+дополнен: отмена — `""`, один файл — путь, несколько — `"папка|имя1|имя2"`, `resultFormat: "array"` — массив;
+`title`, `initialDir`, `filter: [{name, pattern}]`), файлы из них в потоках `file`, затем `http.request` (хост на стенде — `node scripts/setup-kontur.ts`, разговор — `tests/stand/kontur.ts`, каждый ошибочный
 запрос — в своём процессе хоста; ключи — только на копии токена). Копия токена `stand/kontur/home` — удалить после этапа. Этап 8 принят владельцем 2026-11-19.
 Состояние — [`docs/STATUS.md`](docs/STATUS.md).
 

@@ -101,7 +101,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   extension's own commands, `commands.ts` the host's commands, `errors.ts` its error answers, `streams.ts` its data
   sources and sinks, `certificate.ts` a certificate's fields as it names them, `signing.ts` its signatures and checks,
   `encryption.ts` its CMS encryption, made and opened in the page as the host does it on the stand's token,
-  `issuance.ts` the key and request, the certificate's install, CryptoAPI's stores' refusals),
+  `issuance.ts` the key and request, the certificate's install, CryptoAPI's stores' refusals, `qualified.ts` the
+  host's qualified certificate rules and cert.verify, `text.ts` io.decode and io.encode in code pages),
   `settings.ts` (asks the bridge for IFCPlugin's PIN switch and Kontur.Plugin's client id), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
@@ -174,7 +175,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   and functions, its signatures checked independently, key and request on a copy of the token; `gosplugin.spec.ts`
   Gosplugin's messages, loaded objects and methods, likewise; `kontur.spec.ts` Kontur.Plugin's page messages and
   commands, its signatures checked independently, keys and certificates on a copy of the token; `kontur-reference.spec.ts` (opt-in) the same requests to the real host
-  and to the extension; `gosplugins-reference.spec.ts` (opt-in) the same requests
+  and to the extension, the qualified rules on the certificates of `tests/unit/kontur-certificates.ts` included; `gosplugins-reference.spec.ts` (opt-in) the same requests
   to the real cores and to the extension, compared, each verifying the other's signatures; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `webtools.spec.ts` runs CryptoPro's `webtools.html`
   (readers and containers, signing with CAdES-T and XAdES, encryption); `openssl-gost.spec.ts` (opt-in) checks encryption against OpenSSL's GOST

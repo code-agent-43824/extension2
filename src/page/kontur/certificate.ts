@@ -5,6 +5,7 @@ import { children, decodeOid, read } from "../asn1.ts";
 import type { Name } from "../dn.ts";
 import { certificateKey } from "../objects/certificate.ts";
 import type { X509 } from "../x509.ts";
+import { isQualified } from "./qualified.ts";
 import { toBase64 } from "./streams.ts";
 
 // The host's short names; any other attribute goes by its OID (checked on the host with every one of these and seven
@@ -144,10 +145,8 @@ export function certificateFields(x509: X509, asked: Set<string>, place?: TokenP
       case "hasPrivateKey":
         fields.hasPrivateKey = place !== undefined;
         break;
-      // Kontur's qualification rules are not known yet (docs/PLAN.md, action 61): nothing is qualified, as the host
-      // answered for every certificate tried on the stand.
       case "qualified":
-        fields.qualified = false;
+        fields.qualified = isQualified(x509);
         break;
       case "extensions":
         fields.extensions = extensions(x509);

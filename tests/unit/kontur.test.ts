@@ -5,6 +5,10 @@ import { encode } from "../../src/page/asn1.ts";
 import { answerCommand, newKonturContext, sortKeys } from "../../src/page/kontur/commands.ts";
 import { isoTime, keyUsages, names } from "../../src/page/kontur/certificate.ts";
 import { storeCommand } from "../../src/page/kontur/issuance.ts";
+import { qualificationFailures } from "../../src/page/kontur/qualified.ts";
+import { decodeText, encodeText } from "../../src/page/kontur/text.ts";
+import { parseCertificate } from "../../src/page/x509.ts";
+import { QUALIFIED_CASES, SWITCH_CASES } from "./kontur-certificates.ts";
 import { pemText } from "../../src/page/kontur/signing.ts";
 import { fromBase64, readStream, writeStream } from "../../src/page/kontur/streams.ts";
 import { KonturError } from "../../src/page/kontur/errors.ts";
@@ -94,5 +98,45 @@ describe("Kontur.Plugin", () => {
     expect(answer({ cert: { hash: { type: "hex", data: "00" } }, store: { type: "cryptoApi" } }, false)).toEqual({ type: "plugin", code: 200, message: "PLUGIN[0x000000C8] certificate not found" });
     expect(answer({ cert: { content: { type: "base64", data: "AAAA" } }, store: { type: "cryptoApi" } })).toEqual({ type: "crypto", code: 1, context: "", message: "CRYPTO[0x00000001] wrong ASN1 value structure" });
     expect(answer({ cert: { content: name }, store: { type: "cryptoApi" } })).toEqual({ type: "asn1", code: 4, context: "", message: "ASN1[0x00000004] required collection element not found" });
+  });
+
+  for (const { label, der, rules } of QUALIFIED_CASES) {
+    it(`applies the host's qualified rules: ${label}`, () => {
+      expect(qualificationFailures(parseCertificate(der)).map((failure) => failure.rule)).toEqual(rules);
+    });
+  }
+
+  for (const { label, der, rules, switches } of SWITCH_CASES) {
+    it(`switches the host's qualified rules: ${label}`, () => {
+      expect(qualificationFailures(parseCertificate(der), switches).map((failure) => failure.rule)).toEqual(rules);
+    });
+  }
+
+  it("converts text in code pages as the host", () => {
+    const cache = new Map<string, Uint8Array>();
+    const hex = (data: string) => ({ type: "hex", data });
+    const answer = (call: () => unknown) => {
+      try {
+        return call();
+      } catch (error) {
+        return (error as KonturError).answer;
+      }
+    };
+    expect(decodeText({ source: { type: "base64", data: "z/Do4uXy" }, codePage: 1251 }, cache)).toBe("Привет");
+    expect(decodeText({ source: { type: "base64", data: "0J/RgNC40LLQtdGC" } }, cache)).toBe("Привет");
+    expect(decodeText({ source: hex("cff0"), codePage: 28595 }, cache)).toBe("Я№");
+    expect(answer(() => decodeText({ source: hex("c3") }, cache))).toEqual({ type: "plugin", code: 105, message: "PLUGIN[0x00000069] unable to determine the encoding" });
+    expect(answer(() => decodeText({ source: hex("ff98"), codePage: 1251 }, cache))).toEqual({ type: "babel", code: 2, context: "", message: "BABEL[0x00000002] invalid multibyte sequence has been encountered in the input" });
+    expect(answer(() => decodeText({ source: hex("cff0"), codePage: 12345 }, cache))).toEqual({ type: "babel", code: 1, context: "", message: "BABEL[0x00000001] unknown codepage" });
+    expect(answer(() => decodeText({ codePage: 1251 }, cache))).toMatchObject({ code: 3 });
+    expect(encodeText({ value: "Привет", codePage: 1251, sink: { type: "base64" } }, cache)).toEqual({ data: "z/Do4uXy", size: 6, type: "base64" });
+    expect(encodeText({ value: "Привет", sink: { type: "base64" } }, cache)).toEqual({ data: "0J/RgNC40LLQtdGC", size: 12, type: "base64" });
+    expect(encodeText({ value: "Привет", codePage: 866, sink: { type: "hex" } }, cache)).toEqual({ data: "8fe0a8a2a5e2", size: 6, type: "hex" });
+    expect(encodeText({ value: "Привет", codePage: 20866, sink: { type: "hex" } }, cache)).toEqual({ data: "f0d2c9d7c5d4", size: 6, type: "hex" });
+    expect(encodeText({ value: "Привет", codePage: 1200, sink: { type: "hex" } }, cache)).toEqual({ data: "1f0440043804320435044204", size: 12, type: "hex" });
+    expect(answer(() => encodeText({ value: "日本 ё", codePage: 1251, sink: { type: "hex" } }, cache))).toMatchObject({ type: "babel", code: 2 });
+    expect(answer(() => encodeText({ value: "Привет", codePage: 10007, sink: { type: "hex" } }, cache))).toEqual({ type: "babel", code: 5, context: "", message: "BABEL[0x00000005] conversion is not supported by the implementation" });
+    expect(answer(() => encodeText({ value: "Привет", codePage: "1251", sink: { type: "hex" } }, cache))).toMatchObject({ code: 3 });
+    expect(answer(() => encodeText({ value: 5, codePage: 1251, sink: { type: "hex" } }, cache))).toMatchObject({ code: 3 });
   });
 });

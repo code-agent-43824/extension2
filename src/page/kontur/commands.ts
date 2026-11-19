@@ -9,6 +9,8 @@ import { certificateFields, wanted, type TokenPlace } from "./certificate.ts";
 import { cryptoError, invalidStructure, KonturError, pluginError, unknownCommand } from "./errors.ts";
 import { checkAlgorithm, decrypt, encrypt, parseEnveloped } from "./encryption.ts";
 import { createCertRequest, installCert, storeCommand } from "./issuance.ts";
+import { checkVerifyOptions, isQualified, verifyCertificate } from "./qualified.ts";
+import { decodeText, encodeText } from "./text.ts";
 import { addSigner, anyCertificate, pemText, rawSign, rawVerify, signatureParts, signContents, signFlags, signHash, verifySignature } from "./signing.ts";
 import { checkSink, readStream, writeStream, type Cache } from "./streams.ts";
 
@@ -162,7 +164,7 @@ async function searchCertificates(context: KonturContext, request: Request): Pro
     if (typeof store.name === "string" && store.name !== TOKEN_MODEL) continue;
     if (isObject(filter.hash) && !sameHex(filter.hash.data, x509.thumbprint)) continue;
     if (isObject(filter.serialNumber) && !sameHex(filter.serialNumber.data, x509.serialNumber)) continue;
-    if (filter.qualified === true) continue;
+    if (filter.qualified === true && !isQualified(x509)) continue;
     if (filter.gost === true && !x509.publicKeyAlgorithm.startsWith("1.2.643.")) continue;
     const place: TokenPlace = { slot, token: TOKEN_MODEL };
     found.push(certificateFields(x509, asked, place));
@@ -314,6 +316,15 @@ export async function answerCommand(context: KonturContext, request: Request): P
       const cache = cacheOf(context, request);
       return sortKeys(parseEnveloped(cache, contentOf(request, cache), request.properties));
     }
+    case "cert.verify": {
+      checkVerifyOptions(request);
+      if (request.cert === undefined) throw invalidStructure();
+      return sortKeys(verifyCertificate(request, await anyCertificate(context, request.cert)));
+    }
+    case "io.decode":
+      return decodeText(request, cacheOf(context, request));
+    case "io.encode":
+      return encodeText(request, cacheOf(context, request));
     case "crypto.createCertRequest":
       return sortKeys(await createCertRequest(context, request, cacheOf(context, request), await tokens(context)));
     case "crypto.installCert":
