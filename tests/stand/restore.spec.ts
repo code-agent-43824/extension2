@@ -1,7 +1,7 @@
 // Tabs of an enabled site that the browser restores as it starts (docs/PLAN.md, action 40b): it loads them before it has
 // the extension's registered scripts, so they come up without page.js; the service worker reloads them.
 import { expect, test } from "@playwright/test";
-import { cpSync, rmSync } from "node:fs";
+import { cpSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { stand, standDir } from "../../scripts/setup-stand.ts";
 import { blankPage, clearSites, enableSite, launchStand, servePages, standExtension, type PageServer } from "./harness.ts";
@@ -15,6 +15,14 @@ test.beforeAll(async () => {
   // A profile of its own: the restored session must not leak into the other stand tests.
   rmSync(dir, { recursive: true, force: true });
   cpSync(stand.profile, join(dir, "profile"), { recursive: true, verbatimSymlinks: true });
+  // A stand browser that crashed earlier leaves the profile marked so, and Chromium then offers to restore the tabs
+  // instead of restoring them: the copy starts as closed normally.
+  const file = join(dir, "profile", "Default", "Preferences");
+  if (existsSync(file)) {
+    const preferences = JSON.parse(readFileSync(file, "utf8"));
+    preferences.profile = { ...preferences.profile, exit_type: "Normal" };
+    writeFileSync(file, JSON.stringify(preferences));
+  }
 });
 
 test.afterAll(async () => {
