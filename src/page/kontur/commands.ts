@@ -15,6 +15,7 @@ import type { FileDialogs } from "./file-dialog.ts";
 import { FileStore, openFile, saveFile, selectFolder } from "./files.ts";
 import { httpRequest } from "./http.ts";
 import { environmentVariable, machineId, osInfo } from "./system.ts";
+import { deleteStream, hashCommand, streamInfo, transfer } from "./io.ts";
 import type { FakeIdentity } from "../identity.ts";
 import { addSigner, anyCertificate, pemText, rawSign, rawVerify, signatureParts, signContents, signFlags, signHash, verifySignature } from "./signing.ts";
 import { checkSink, readStream, writeStream, type Cache } from "./streams.ts";
@@ -362,6 +363,16 @@ export async function answerCommand(context: KonturContext, request: Request): P
       return decodeText(request, cacheOf(context, request));
     case "io.encode":
       return encodeText(request, cacheOf(context, request));
+    case "hash.md5":
+    case "hash.sha256":
+    case "hash.crc32":
+      return hashCommand(request.type, request, cacheOf(context, request));
+    case "io.getInfo":
+      return sortKeys(streamInfo(request, cacheOf(context, request)));
+    case "io.transfer":
+      return transfer(request, cacheOf(context, request));
+    case "io.delete":
+      return deleteStream(request, cacheOf(context, request));
     case "machine.uniqueId":
       return machineId(await context.identity());
     case "os.getEnvironmentVariable":

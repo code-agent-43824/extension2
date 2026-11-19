@@ -62,6 +62,12 @@ export class FileStore {
     return this.#opened.get(path) ?? this.#written.get(path);
   }
 
+  // Forgets a file chosen or written; whether it knew it.
+  remove(path: string): boolean {
+    const known = this.#opened.delete(path) || this.#written.delete(path);
+    return known;
+  }
+
   // Writes a file the user chose to save, or one into a folder chosen: to the downloads, under its name.
   write(path: string, bytes: Uint8Array): void {
     if (this.#opened.has(path) || this.#written.has(path)) throw fileExists();

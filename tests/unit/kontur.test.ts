@@ -248,4 +248,19 @@ describe("Kontur.Plugin", () => {
     expect(await windows.ask("os.getEnvironmentVariable", { name: "COMPUTERNAME" })).toBe("DESKTOP-9H2LX8D");
     expect(await windows.ask("os.info")).toMatchObject({ bitness: 64, family: "Windows", release: "10.0" });
   });
+
+  it("hashes and moves streams as the host on the stand", async () => {
+    const { ask } = setup();
+    const data = { type: "base64", data: "aGVsbG8=" };
+    expect(await ask("hash.md5", { source: data, sink: { type: "hex" } })).toEqual({ data: "5d41402abc4b2a76b9719d911017c592", size: 16, type: "hex" });
+    expect(await ask("hash.sha256", { source: data, sink: { type: "base64" } })).toEqual({ data: "LPJNul+wow4m6DsqxbninhsWHlwfp0JecwQzYpOLmCQ=", size: 32, type: "base64" });
+    expect(await ask("hash.crc32", { source: data })).toBe(907060870);
+    expect(await ask("io.transfer", { source: data, sink: { type: "cache", name: "c" }, sinkOffset: 2 })).toEqual({ name: "c", size: 7, type: "cache" });
+    expect(await ask("io.transfer", { source: data, sink: { type: "cache", name: "c" }, sinkOffset: 3 })).toEqual({ name: "c", size: 8, type: "cache" });
+    expect(await ask("io.transfer", { source: { type: "cache", name: "c" }, sink: { type: "hex" } })).toEqual({ data: "00006868656c6c6f", size: 8, type: "hex" });
+    expect(await ask("io.getInfo", { source: { type: "cache", name: "c" } })).toEqual({ name: "c", size: 8, type: "cache" });
+    expect(await ask("io.delete", { source: { type: "cache", name: "c" } })).toBe(true);
+    expect(await ask("io.delete", { source: { type: "cache", name: "c" } })).toBe(false);
+    await expect(ask("io.transfer", { source: data, sink: { type: "hex" }, sourceOffset: 6 })).rejects.toMatchObject({ answer: { type: "iostreams", code: 6 } });
+  });
 });

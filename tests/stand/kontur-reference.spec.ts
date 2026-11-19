@@ -269,6 +269,35 @@ test("makes HTTP requests that reach the server alike, and fails alike", async (
   }
 });
 
+test("hashes, moves and deletes streams as the host, one command after another in one session", async () => {
+  const data = { type: "base64", data: "aGVsbG8=" };
+  const cache = (name: string) => ({ type: "cache", name });
+  for (const [type, request] of [
+    ["hash.md5", { source: data, sink: { type: "hex" } }],
+    ["hash.md5", { source: data }],
+    ["hash.sha256", { source: data, sink: { type: "base64" } }],
+    ["hash.crc32", { source: data }],
+    ["hash.crc32", { source: { type: "hex", data: "" } }],
+    ["io.transfer", { source: data, sink: cache("c") }],
+    ["io.getInfo", { source: cache("c") }],
+    ["io.transfer", { source: data, sink: cache("c"), sinkOffset: 3 }],
+    ["io.transfer", { source: cache("c"), sink: { type: "hex" } }],
+    ["io.transfer", { source: data, sink: cache("c"), sinkOffset: 10 }],
+    ["io.transfer", { source: cache("c"), sink: { type: "hex" }, sourceOffset: 2, count: 4 }],
+    ["io.transfer", { source: data, sink: { type: "hex" }, sinkOffset: 2 }],
+    ["io.transfer", { source: data, sink: { type: "hex" }, count: 100 }],
+    ["io.transfer", { source: data, sink: { type: "hex" }, sourceOffset: 5 }],
+    ["io.transfer", { source: data, sink: { type: "hex" }, sourceOffset: 6 }],
+    ["io.getInfo", { source: { type: "hex", data: "0102" } }],
+    ["io.delete", { source: cache("c") }],
+    ["io.getInfo", { source: cache("c") }],
+    ["io.delete", { source: cache("c") }],
+    ["io.delete", { source: data }],
+  ] as const) {
+    expect(outcome(await ours(type, request)), `${type} ${JSON.stringify(request)}`).toEqual(outcome(await theirs(type, request)));
+  }
+});
+
 // Keys and certificates are made on another copy of the token, removed afterwards, so the one above keeps its single
 // certificate. The browser above is closed first: the Rutoken adapter of a second one meanwhile does not answer.
 test.describe("on another copy of the token", () => {
