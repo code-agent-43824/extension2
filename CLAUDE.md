@@ -102,7 +102,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   sources and sinks, `certificate.ts` a certificate's fields as it names them, `signing.ts` its signatures and checks,
   `encryption.ts` its CMS encryption, made and opened in the page as the host does it on the stand's token,
   `issuance.ts` the key and request, the certificate's install, CryptoAPI's stores' refusals, `qualified.ts` the
-  host's qualified certificate rules and cert.verify, `text.ts` io.decode and io.encode in code pages),
+  host's qualified certificate rules and cert.verify, `text.ts` io.decode and io.encode in code pages, `files.ts` the
+  files chosen in `file-dialog.ts`'s windows and saved to the downloads, `http.ts` http.request on the page's fetch),
   `settings.ts` (asks the bridge for IFCPlugin's PIN switch and Kontur.Plugin's client id), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the

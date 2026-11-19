@@ -14,7 +14,7 @@ import { children, read } from "../../src/page/asn1.ts";
 import { QUALIFIED_CASES, SWITCH_CASES } from "../unit/kontur-certificates.ts";
 import { BUILTIN_ROOTS } from "../../src/extension/builtin-roots.ts";
 import { clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
-import { konturHost, type KonturAnswer, type KonturHost } from "./kontur.ts";
+import { echoServer, konturHost, type KonturAnswer, type KonturHost } from "./kontur.ts";
 
 test.skip(!process.env.STAND_KONTUR || !existsSync(kontur.home), "needs the real host: node scripts/setup-kontur.ts, then STAND_KONTUR=1");
 
@@ -230,6 +230,42 @@ test("applies the qualified rules as the host, with its messages, and converts t
     ["io.encode", { value: "x", codePage: 1251 }],
   ] as const) {
     expect(outcome(await ours(type, request)), `${type} ${JSON.stringify(request).slice(0, 120)}`).toEqual(outcome(await theirs(type, request)));
+  }
+});
+
+test("makes HTTP requests that reach the server alike, and fails alike", async () => {
+  const echo = await echoServer();
+  try {
+    const gzipped = "H4sIADgv/2oC/8tIzcnJBwCGphA2BQAAAA==";
+    // What the server got and what came back, without what only one side sends (the browser's own headers).
+    const seen = (answer: KonturAnswer) => {
+      if ("error" in answer) return { error: answer.error };
+      const sent = JSON.parse(Buffer.from(answer.result.content.data, "base64").toString("latin1"));
+      const type = String(sent.headers["content-type"] ?? "").replace(/boundary=.*/, "boundary=");
+      return { status: answer.result.statusCode, reason: answer.result.statusLine.reasonPhrase, method: sent.method, path: sent.path, type, body: type.startsWith("multipart") ? undefined : sent.body };
+    };
+    for (const request of [
+      { uri: `${echo.url}/get`, method: "GET" },
+      { uri: `${echo.url}/q?x=1`, query: [{ name: "y", value: "2 3" }, { name: "я", value: "&" }], method: "DELETE" },
+      { uri: `${echo.url}/form`, method: "PUT", body: { type: "form", data: [{ name: "a", value: "1 2" }, { name: "б", value: "в~!'()*" }] } },
+      { uri: `${echo.url}/plain`, method: "POST", body: { type: "plain", data: { type: "base64", data: "aGVsbG8=" } } },
+      { uri: `${echo.url}/plain`, method: "POST", header: [{ name: "Content-Type", value: "text/xml" }], body: { type: "plain", data: { type: "base64", data: "aGVsbG8=" } } },
+      { uri: `${echo.url}/gzip`, method: "POST", body: { type: "plain", data: { type: "base64", data: gzipped }, compression: "gzip" } },
+      { uri: `${echo.url}/multi`, method: "POST", body: { type: "form-data", data: [{ name: "a", value: "1" }, { name: "f", source: { type: "base64", data: "aGVsbG8=" }, filename: "f.txt" }] } },
+      { uri: `${echo.url}/missing`, method: "GET" },
+      { uri: `${echo.url}/slow`, method: "GET", timeout: 1 },
+      { uri: `${echo.url}/plain`, method: "POST", body: { type: "plain", data: { type: "base64", data: "aGVsbG8=" }, compression: "gzip" } },
+      { uri: "http://127.0.0.1:1/x", method: "GET" },
+      { uri: "notaurl", method: "GET" },
+      { uri: `${echo.url}/x`, method: "get" },
+      { uri: `${echo.url}/x` },
+      { uri: `${echo.url}/x`, method: "POST", body: { type: "json" } },
+      { uri: `${echo.url}/x`, method: "PUT" },
+    ]) {
+      expect(seen(await ours("http.request", request)), JSON.stringify(request)).toEqual(seen(await theirs("http.request", request)));
+    }
+  } finally {
+    await echo.close();
   }
 });
 

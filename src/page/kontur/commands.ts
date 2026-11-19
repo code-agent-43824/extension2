@@ -11,6 +11,9 @@ import { checkAlgorithm, decrypt, encrypt, parseEnveloped } from "./encryption.t
 import { createCertRequest, installCert, storeCommand } from "./issuance.ts";
 import { checkVerifyOptions, isQualified, verifyCertificate } from "./qualified.ts";
 import { decodeText, encodeText } from "./text.ts";
+import type { FileDialogs } from "./file-dialog.ts";
+import { FileStore, openFile, saveFile, selectFolder } from "./files.ts";
+import { httpRequest } from "./http.ts";
 import { addSigner, anyCertificate, pemText, rawSign, rawVerify, signatureParts, signContents, signFlags, signHash, verifySignature } from "./signing.ts";
 import { checkSink, readStream, writeStream, type Cache } from "./streams.ts";
 
@@ -27,10 +30,13 @@ export interface KonturContext {
   platform: string;
   // The host keeps "cache" streams per connection: here per page session id, by name.
   caches: Map<string, Cache>;
+  // The files the user chose in the file windows, for the whole page as the host keeps them for its process.
+  files: FileStore;
+  dialogs: FileDialogs;
 }
 
-export function newKonturContext(session: Session, settings: Promise<Settings>, platform: string): KonturContext {
-  return { session, settings, platform, caches: new Map() };
+export function newKonturContext(session: Session, settings: Promise<Settings>, platform: string, dialogs: FileDialogs, download: (name: string, bytes: Uint8Array) => void): KonturContext {
+  return { session, settings, platform, caches: new Map(), files: new FileStore(platformName(platform), download), dialogs };
 }
 
 export type Request = Record<string, unknown> & { sessionId?: unknown; type?: unknown; hostUri?: string };
@@ -47,7 +53,7 @@ function platformName(platform: string): string {
 function cacheOf(context: KonturContext, request: Request): Cache {
   const id = String(request.sessionId);
   let cache = context.caches.get(id);
-  if (!cache) context.caches.set(id, (cache = new Map()));
+  if (!cache) context.caches.set(id, (cache = Object.assign(new Map<string, Uint8Array>(), { files: context.files })));
   return cache;
 }
 
@@ -325,6 +331,14 @@ export async function answerCommand(context: KonturContext, request: Request): P
       return decodeText(request, cacheOf(context, request));
     case "io.encode":
       return encodeText(request, cacheOf(context, request));
+    case "http.request":
+      return sortKeys(await httpRequest(request, cacheOf(context, request)));
+    case "ui.openFile":
+      return openFile({ files: context.files, dialogs: context.dialogs, origin: context.session.origin }, request);
+    case "ui.saveFile":
+      return saveFile({ files: context.files, dialogs: context.dialogs, origin: context.session.origin }, request);
+    case "ui.selectFolder":
+      return selectFolder({ files: context.files, dialogs: context.dialogs, origin: context.session.origin }, request);
     case "crypto.createCertRequest":
       return sortKeys(await createCertRequest(context, request, cacheOf(context, request), await tokens(context)));
     case "crypto.installCert":

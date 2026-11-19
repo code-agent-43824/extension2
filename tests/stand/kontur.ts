@@ -4,6 +4,8 @@
 // come in chunks ({isChunked, id, data, isFinalChunk}) that are joined here, as the extension's background joins them.
 // The host is a GTK program: it runs on the X display the stand starts (Xvfb).
 import { spawn, type ChildProcess } from "node:child_process";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { kontur } from "../../scripts/setup-kontur.ts";
 import { display, startDisplay } from "./gosplugins.ts";
 
@@ -81,4 +83,33 @@ export function konturHost(sessionId = "s-stand", home = kontur.home): KonturHos
       child.kill();
     },
   };
+}
+
+// An HTTP server for http.request: it answers with what it got (method, path, headers, body as Latin-1) as JSON, with
+// CORS for any page; /missing is 404 "Not Here", /slow waits three seconds.
+export async function echoServer(): Promise<{ url: string; close: () => Promise<void> }> {
+  const server = createServer((request, response) => {
+    const chunks: Buffer[] = [];
+    request.on("data", (chunk: Buffer) => chunks.push(chunk));
+    request.on("end", () => {
+      const reply = () => {
+        const body = JSON.stringify({ method: request.method, path: request.url, headers: request.headers, body: Buffer.concat(chunks).toString("latin1") });
+        const missing = request.url?.startsWith("/missing");
+        response.writeHead(missing ? 404 : 200, missing ? "Not Here" : "OK", {
+          "Content-Type": "application/json",
+          "X-Echo": "1",
+          "Access-Control-Allow-Origin": String(request.headers.origin ?? "*"),
+          "Access-Control-Allow-Credentials": "true",
+          "Access-Control-Allow-Headers": "*",
+          "Access-Control-Allow-Methods": "*",
+          "Access-Control-Expose-Headers": "*",
+        });
+        response.end(request.method === "HEAD" ? undefined : body);
+      };
+      if (request.url?.startsWith("/slow")) setTimeout(reply, 3000);
+      else reply();
+    });
+  });
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+  return { url: `http://127.0.0.1:${(server.address() as AddressInfo).port}`, close: () => new Promise((resolve) => server.close(() => resolve())) };
 }

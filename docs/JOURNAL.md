@@ -2,6 +2,44 @@
 
 Новые записи сверху.
 
+## 2026-11-19 — Контур.Плагин: окна файлов, файлы и `http.request` у хоста
+
+**Вопрос.** Что отвечают `ui.openFile`, `ui.saveFile`, `ui.selectFolder`, как хост пускает к файлам и как делает
+`http.request` (действие 61).
+
+**Что сделали.** Окна хоста (GTK на Xvfb) закрывались и заполнялись `xdotool`; поля — строки хоста
+(`InitializeFileDialog`, `parse_http::*`); HTTP — запросы хоста к эхо-серверу на стенде.
+
+**Что показала проверка.**
+- `ui.openFile {title?, multiple?, resultFormat?, filter?, filterIndex?, initialDir?}`: отмена — `""`; один файл —
+  путь; `multiple: true` — `"<папка>|<имя>|<имя>…"` (и для одного файла); `resultFormat: "array"` — массив путей,
+  отмена — всё равно `""`. Заголовок окна — `title`, иначе «Выберите файл»/«Выберите файлы»; `filter` —
+  `[{name, pattern}]`, строка или иные поля — код 3; `multiple` не булево — 3. `ui.saveFile {title?, filename?…}` —
+  путь или `""` («Сохранить файл как»), `ui.selectFolder {title?, initialDir?}` — папка или `""` («Выберите папку»).
+- Файлы: для домена Контура хост читает и пишет любой путь, и до окна; запись — `{path, size, type: "file"}`, в
+  существующий файл — `system` 17 «open File exists». Хост ведёт учёт путей из окон (`FileDialogNotifier`,
+  политики доступа по уровню авторизации сайта).
+- `cert.display` под Linux — «unknown command»; `os.info`, `machine.uniqueId` отвечают (их владелец не выбирал).
+- `http.request {uri, query?, method, header?, body?, timeout?, responseContent?, verifySslCertificate?,
+  properties?}`: `method` — GET, DELETE, HEAD, POST, PUT (иное, и строчными, — 3); `query` заменяет строку запроса
+  URI, экранируя как `encodeURI`; `header` — `[{name, value}]`; `body` — `{type: "plain", data: поток, compression?}`
+  (тип всегда `application/octet-stream`, если не задан заголовком; `compression: "gzip"` — данные уже сжаты, хост их
+  распаковывает, иначе `zlib` −3 «inflate incorrect header check»), `{type: "form", data: [{name, value}]}` (пробел —
+  `+`, кроме букв, цифр и `!()*-._` — `%xx` строчными), `{type: "form-data", data: [{name, value} | {name, source,
+  filename?, contentType?}]}`; иной тип — тело не шлётся; POST без тела — пустая форма; GET с телом — шлёт.
+  `timeout` — секунды, истёк — `libcurl` 28 «Timeout was reached»; нет соединения — `libcurl` 7 «Could not connect to
+  server»; не URL — `libhttp` 25. Ответ: `{content, header: [{name, value}], properties: {}, statusCode, statusLine:
+  {httpVersion, reasonPhrase, statusCode}}`, `content` — в `responseContent` (по умолчанию base64).
+
+**Вывод.** Окна — свои, в странице (`file-dialog.ts`): выбранный файл читается при выборе и доступен странице по
+выданному пути (`/browser/opened-<n>/<имя>`, в Windows `C:\Browser\…`), сохранённый и записанный в выбранную папку
+уходит в загрузки браузера; прочие пути — «access denied», как у хоста для недозволенных (браузер к диску не
+пускает). `http.request` — `fetch` страницы без cookies: сайту доступно лишь то, что и его скриптам (другой origin
+без CORS и http: со страницы https: — «Could not connect to server»); заголовки ответа — как их отдаёт fetch,
+версия HTTP — «HTTP/1.1». Сверка с хостом сравнивает то, что дошло до сервера, и ошибки. Загрузка в Chromium стенда
+закрывает страницу, а кириллическое имя загрузки он заменяет на «download» (локаль без UTF-8) — тест ловит ссылку
+загрузки в странице.
+
 ## 2026-11-19 — Контур.Плагин: правила квалифицированного сертификата, `cert.verify`, `io.*`
 
 **Вопрос.** Как хост 4.15.1 отвечает на `cert.verify`, что значит свойство `qualified` и как он перекодирует текст

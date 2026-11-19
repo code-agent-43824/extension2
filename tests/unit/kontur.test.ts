@@ -15,13 +15,28 @@ import { KonturError } from "../../src/page/kontur/errors.ts";
 import { extensionInfo, isKonturHost } from "../../src/page/kontur/kontur-plugin.ts";
 import { CadesError } from "../../src/page/errors.ts";
 import { SCARD_W_CANCELLED_BY_USER } from "../../src/page/token-login.ts";
+import type { ChosenFile, FileDialogs } from "../../src/page/kontur/file-dialog.ts";
 import { fakePlugin, FakePinDialog, fakeSession } from "./fakes.ts";
 
 const clientId = "0b3c3f5e-2d7a-4a8b-9c1d-112233445566";
 
-function setup(platform = "Linux x86_64") {
-  const context = newKonturContext(fakeSession(fakePlugin(), new FakePinDialog([])), Promise.resolve({ ifcPinWindow: false, konturClientId: clientId }), platform);
-  return { context, ask: (type: string, fields: Record<string, unknown> = {}) => answerCommand(context, { sessionId: "s", type, ...fields }) };
+// File windows that answer as told: the files to choose, the name to save under, the folder's yes.
+function fakeDialogs(answers: { files?: ChosenFile[] | null; name?: string | null; folder?: boolean } = {}): FileDialogs & { asked: unknown[] } {
+  const asked: unknown[] = [];
+  return {
+    asked,
+    open: async (options) => (asked.push(options), answers.files ?? null),
+    save: async (options) => (asked.push(options), answers.name ?? null),
+    folder: async (options) => (asked.push(options), answers.folder ?? false),
+  };
+}
+
+function setup(platform = "Linux x86_64", dialogs: FileDialogs = fakeDialogs()) {
+  const downloads: [string, string][] = [];
+  const context = newKonturContext(fakeSession(fakePlugin(), new FakePinDialog([])), Promise.resolve({ ifcPinWindow: false, konturClientId: clientId }), platform, dialogs, (name, bytes) =>
+    downloads.push([name, new TextDecoder().decode(bytes)]),
+  );
+  return { context, downloads, ask: (type: string, fields: Record<string, unknown> = {}) => answerCommand(context, { sessionId: "s", type, ...fields }) };
 }
 
 describe("Kontur.Plugin", () => {
@@ -138,5 +153,51 @@ describe("Kontur.Plugin", () => {
     expect(answer(() => encodeText({ value: "Привет", codePage: 10007, sink: { type: "hex" } }, cache))).toEqual({ type: "babel", code: 5, context: "", message: "BABEL[0x00000005] conversion is not supported by the implementation" });
     expect(answer(() => encodeText({ value: "Привет", codePage: "1251", sink: { type: "hex" } }, cache))).toMatchObject({ code: 3 });
     expect(answer(() => encodeText({ value: 5, codePage: 1251, sink: { type: "hex" } }, cache))).toMatchObject({ code: 3 });
+  });
+
+  it("opens the files the user chose and saves to the downloads, refusing any other path", async () => {
+    const files = [
+      { name: "a.txt", bytes: new TextEncoder().encode("первый") },
+      { name: "b.txt", bytes: new TextEncoder().encode("второй") },
+    ];
+    const dialogs = fakeDialogs({ files, name: "подпись.sig", folder: true });
+    const { ask, downloads } = setup("Linux x86_64", dialogs);
+    const first = await ask("ui.openFile", { filter: [{ name: "Текст", pattern: "*.txt;*.xml" }] });
+    expect(first).toBe("/browser/opened-1/a.txt");
+    expect(dialogs.asked[0]).toMatchObject({ title: "Выберите файл", multiple: false, accept: ".txt,.xml" });
+    expect(await ask("ui.openFile", { multiple: true, title: "Документы" })).toBe("/browser/opened-2|a.txt|b.txt");
+    expect(await ask("ui.openFile", { multiple: true, resultFormat: "array" })).toEqual(["/browser/opened-3/a.txt", "/browser/opened-3/b.txt"]);
+    expect(await ask("io.decode", { source: { type: "file", path: "/browser/opened-2/b.txt" }, codePage: 65001 })).toBe("второй");
+    const saved = await ask("ui.saveFile", { filename: "x.sig" });
+    expect(saved).toBe("/browser/saved-4/подпись.sig");
+    expect(await ask("io.encode", { value: "подпись", sink: { type: "file", path: saved } })).toEqual({ path: saved, size: 14, type: "file" });
+    expect(await ask("io.decode", { source: { type: "file", path: saved }, codePage: 65001 })).toBe("подпись");
+    const folder = await ask("ui.selectFolder");
+    expect(folder).toBe("/browser/saved-5");
+    await ask("io.encode", { value: "в папке", sink: { type: "file", path: `${folder}/c.txt` } });
+    expect(downloads).toEqual([["подпись.sig", "подпись"], ["c.txt", "в папке"]]);
+    const answer = async (type: string, fields: Record<string, unknown>) => {
+      try {
+        await ask(type, fields);
+      } catch (error) {
+        return (error as KonturError).answer;
+      }
+      throw new Error("no error");
+    };
+    expect(await answer("io.encode", { value: "x", sink: { type: "file", path: saved } })).toEqual({ type: "system", code: 17, context: "open", message: "POSIX[0x00000011]open File exists" });
+    expect(await answer("io.encode", { value: "x", sink: { type: "file", path: first } })).toMatchObject({ code: 17 });
+    expect(await answer("io.decode", { source: { type: "file", path: "/etc/passwd" }, codePage: 65001 })).toMatchObject({ code: 16 });
+    expect(await answer("io.encode", { value: "x", sink: { type: "file", path: "/tmp/x" } })).toMatchObject({ code: 16 });
+    expect(await answer("ui.openFile", { filter: "x" })).toMatchObject({ code: 3 });
+    expect(await answer("ui.openFile", { multiple: "yes" })).toMatchObject({ code: 3 });
+    expect(await answer("ui.saveFile", { filename: 5 })).toMatchObject({ code: 3 });
+  });
+
+  it("answers an empty path when the user cancels a file window, Windows paths in Windows", async () => {
+    const { ask } = setup("Win32", fakeDialogs({ files: [{ name: "a.txt", bytes: new Uint8Array() }] }));
+    expect(await ask("ui.openFile", {})).toBe("C:\\Browser\\opened-1\\a.txt");
+    expect(await ask("ui.saveFile", {})).toBe("");
+    expect(await ask("ui.selectFolder", {})).toBe("");
+    expect(await setup().ask("ui.openFile", { resultFormat: "array" })).toBe("");
   });
 });

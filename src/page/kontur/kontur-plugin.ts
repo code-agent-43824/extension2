@@ -8,6 +8,7 @@ import type { Clock } from "../rutoken.ts";
 import { pageSettings } from "../settings.ts";
 import { answerCommand, newKonturContext, sortKeys, type KonturContext } from "./commands.ts";
 import { KonturError } from "./errors.ts";
+import { pageDownload, pageFileDialogs } from "./file-dialog.ts";
 
 export const REQUEST_TYPE = "kontur-toolbox-request";
 export const RESPONSE_TYPE = "kontur-toolbox-response";
@@ -41,7 +42,8 @@ export function startKonturPlugin(win: Win, clock: Clock): void {
   const info = extensionInfo(win.navigator.userAgent);
   const post = (response: Record<string, unknown>) => win.postMessage({ type: RESPONSE_TYPE, response }, "*");
   let context: Promise<KonturContext> | undefined;
-  const getContext = () => (context ??= pageSession(win, clock).then((session) => newKonturContext(session, pageSettings(win, clock), win.navigator.platform)));
+  const getContext = () =>
+    (context ??= pageSession(win, clock).then((session) => newKonturContext(session, pageSettings(win, clock), win.navigator.platform, pageFileDialogs(win.document), pageDownload(win.document))));
   // The host does one command at a time.
   let queue: Promise<unknown> = Promise.resolve();
 

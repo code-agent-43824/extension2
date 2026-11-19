@@ -595,12 +595,13 @@
   токен к своему ключу (`importCertificate`); `cryptoApi` и хранилища — ответы хоста под Linux без КриптоПро.
   Сделано: `issuance.ts`; RSA — отказ (выбор агента); стенд Контура — 9 из 9 (выпуск — на копии токена), сверка с
   хостом — 4 из 4.
-- [~] **61. Прочее.** `cert.verify`, `cert.display`, `io.decode`, `io.encode`, `http.request`, `ui.openFile`,
+- [x] **61. Прочее.** `cert.verify`, `cert.display`, `io.decode`, `io.encode`, `http.request`, `ui.openFile`,
   `ui.saveFile`, `ui.selectFolder`, `extension.close`, `extension.uninstall` — что из этого возможно в браузере и как,
   решить по эталону; где нельзя — ответ, как у хоста при отказе.
   Сделано: `cert.verify` и правила квалифицированности (`qualified.ts`, они же свойство `qualified`), `io.decode` и
-  `io.encode` (`text.ts`); `cert.display` под Linux у хоста нет — «unknown command», как у него. Дальше: окна файлов
-  (`ui.*`) и файлы, выбранные в них, `http.request` — запросом страницы (без обхода CORS).
+  `io.encode` (`text.ts`); `cert.display` под Linux у хоста нет — «unknown command», как у него; окна файлов `ui.*` —
+  свои, файлы из них — в потоках `file`, сохранение — в загрузки (`files.ts`, `file-dialog.ts`); `http.request` —
+  `fetch` страницы, без обхода CORS (`http.ts`). `fs.*`, `os.*`, `machine.uniqueId` не выбраны — «unknown command».
 - [ ] **62. Сверка и выпуск.** Опытная сверка с хостом по флагу, стенд, раздел ручной проверки, выпуск 1.17.0; пауза до
   проверки владельцем.
 

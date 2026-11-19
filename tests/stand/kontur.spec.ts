@@ -12,6 +12,7 @@ import { children, encode, read } from "../../src/page/asn1.ts";
 import { digest } from "../../src/page/gost.ts";
 import { parseCertificate, pemToDer } from "../../src/page/x509.ts";
 import { clearSites, enableSite, launchStand, openStandPage, servePages, standExtension, type PageServer } from "./harness.ts";
+import { echoServer } from "./kontur.ts";
 import { envelopedInfo, verifyCms, verifyRaw } from "./verify.ts";
 
 // A page as Kontur's client talks to the plug-in: one session, numbered commands, answers matched by commandId.
@@ -213,6 +214,67 @@ test.describe("on the stand token", () => {
     expect((await ask(page, "crypto.decrypt", { source: { type: "base64", data: "AAAA" }, sink: { type: "base64" } })).result).toEqual({ data: "", size: 0, type: "base64" });
     expect((await ask(page, "crypto.encrypt", { source: message, sink: { type: "base64" }, certs: [byHash], encryptionAlgorithm: "1.2.643.7.1.1.5.2.1" })).error).toMatchObject({ type: "crypto", code: 10 });
     expect((await ask(page, "crypto.encrypt", { source: message, sink: { type: "base64" }, certs: [byHash], encryptionAlgorithm: "GOST28147" })).error).toMatchObject({ type: "crypto", code: 24 });
+  });
+
+  test("opens a file the user chooses in the extension's window, signs it, saves the signature to the downloads", async () => {
+    const files = page.locator("#rutoken-cades-bridge-files [role=dialog]");
+    const data = Buffer.from("Документ для Контура");
+    const opening = ask(page, "ui.openFile", { title: "Документ" });
+    await expect(files.locator("h2")).toHaveText("Документ");
+    await files.locator("input[type=file]").setInputFiles({ name: "документ.txt", mimeType: "text/plain", buffer: data });
+    await files.locator("button[name=confirm]").click();
+    const path = (await opening).result;
+    expect(path).toMatch(/^\/browser\/opened-\d+\/документ\.txt$/);
+    const saving = ask(page, "ui.saveFile", { filename: "document.txt.sig" });
+    await expect(files.locator("input[name=filename]")).toHaveValue("document.txt.sig");
+    await files.locator("button[name=confirm]").click();
+    const target = (await saving).result;
+    expect(target).toMatch(/^\/browser\/saved-\d+\/document\.txt\.sig$/);
+    // The download's link, caught in the page: the stand's Chromium closes the page on a real download.
+    await page.evaluate(() => {
+      const caught: { name: string; url: string }[] = [];
+      (window as unknown as { downloads: typeof caught }).downloads = caught;
+      HTMLAnchorElement.prototype.click = function (this: HTMLAnchorElement) {
+        caught.push({ name: this.download, url: this.href });
+      };
+    });
+    const signed = await withPin(page, ask(page, "crypto.sign", { source: { type: "file", path }, sink: { type: "file", path: target }, certs: [byHash] }));
+    expect(signed.result).toEqual({ path: target, size: expect.any(Number), type: "file" });
+    const downloaded = await page.evaluate(async () => {
+      const [{ name, url }] = (window as unknown as { downloads: { name: string; url: string }[] }).downloads;
+      const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+      return { name, data: btoa(String.fromCharCode(...bytes)) };
+    });
+    expect(downloaded.name).toBe("document.txt.sig");
+    expect(verifyCms(downloaded.data, data)).toMatchObject({ valid: true, detached: true });
+    // Cancelled, and a path the user did not choose.
+    const folder = ask(page, "ui.selectFolder");
+    await files.locator("button[name=cancel]").click();
+    expect((await folder).result).toBe("");
+    expect((await ask(page, "io.decode", { source: { type: "file", path: "/etc/hostname" }, codePage: 65001 })).error).toEqual({ code: 16, message: "PLUGIN[0x00000010] access denied", type: "plugin" });
+  });
+
+  test("makes HTTP requests with the page's fetch, answered as the host answers them", async () => {
+    const echo = await echoServer();
+    try {
+      const sent = (answer: Answer) => JSON.parse(Buffer.from(answer.result.content.data, "base64").toString("latin1"));
+      const form = await ask(page, "http.request", { uri: `${echo.url}/form?x=1`, query: [{ name: "y", value: "2 3" }], method: "PUT", body: { type: "form", data: [{ name: "a", value: "1 2" }, { name: "б", value: "в" }] } });
+      expect(form.result).toMatchObject({ properties: {}, statusCode: 200, statusLine: { httpVersion: "HTTP/1.1", reasonPhrase: "OK", statusCode: 200 } });
+      expect(form.result.header).toContainEqual({ name: "x-echo", value: "1" });
+      expect(sent(form)).toMatchObject({ method: "PUT", path: "/form?y=2%203", body: "a=1+2&%d0%b1=%d0%b2", headers: { "content-type": "application/x-www-form-urlencoded" } });
+      const gzipped = Buffer.from("H4sIADgv/2oC/8tIzcnJBwCGphA2BQAAAA==", "base64").toString("base64");
+      const plain = await ask(page, "http.request", { uri: `${echo.url}/plain`, method: "POST", body: { type: "plain", data: { type: "base64", data: gzipped }, compression: "gzip" }, responseContent: { type: "cache", name: "reply" } });
+      expect(plain.result.content).toEqual({ name: "reply", size: expect.any(Number), type: "cache" });
+      const echoed = await ask(page, "io.decode", { source: { type: "cache", name: "reply" }, codePage: 65001 });
+      expect(JSON.parse(echoed.result)).toMatchObject({ body: "hello", headers: { "content-type": "application/octet-stream" } });
+      expect((await ask(page, "http.request", { uri: `${echo.url}/missing`, method: "GET" })).result).toMatchObject({ statusCode: 404, statusLine: { reasonPhrase: "Not Here" } });
+      expect((await ask(page, "http.request", { uri: `${echo.url}/slow`, method: "GET", timeout: 1 })).error).toEqual({ code: 28, context: "curl_easy_perform", message: "LIBCURL[0x0000001C]curl_easy_perform Timeout was reached", type: "libcurl" });
+      expect((await ask(page, "http.request", { uri: "http://127.0.0.1:1/x", method: "GET" })).error).toEqual({ code: 7, context: "curl_easy_perform", message: "LIBCURL[0x00000007]curl_easy_perform Could not connect to server", type: "libcurl" });
+      expect((await ask(page, "http.request", { uri: "notaurl", method: "GET" })).error).toMatchObject({ code: 25, type: "libhttp" });
+      expect((await ask(page, "http.request", { uri: `${echo.url}/x`, method: "get" })).error).toMatchObject({ code: 3 });
+    } finally {
+      await echo.close();
+    }
   });
 
   test("answers a cancelled PIN window as the host's cancelled one", async () => {

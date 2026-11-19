@@ -2,6 +2,7 @@
 // "base64", "hex", "cache" (bytes the host keeps by name for the connection) or "file" (a path on disk). A sink
 // answers {data, size, type} or, for the cache, {name, size, type}.
 import { cryptoError, invalidStructure, pluginError } from "./errors.ts";
+import type { FileStore } from "./files.ts";
 
 export interface Stream {
   type?: unknown;
@@ -13,12 +14,14 @@ export interface Stream {
 export interface StreamAnswer {
   data?: string;
   name?: string;
+  path?: string;
   size: number;
   type: string;
 }
 
-// The streams a page session keeps (KonturContext.caches, by session id).
-export type Cache = Map<string, Uint8Array>;
+// The streams a page session keeps (KonturContext.caches, by session id), and the files the user chose for the page
+// (files.ts).
+export type Cache = Map<string, Uint8Array> & { files?: FileStore };
 
 const isObject = (value: unknown): value is Stream => typeof value === "object" && value !== null && !Array.isArray(value);
 
@@ -44,7 +47,8 @@ export function fromHex(text: string): Uint8Array {
 
 export const toHex = (bytes: Uint8Array) => Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 
-// Files are the host's own business: a path the page names is refused, as the host refuses one it did not hand out.
+// A path the user did not choose in the extension's file windows is refused, as the host refuses a path it does not
+// allow (files.ts).
 const accessDenied = () => pluginError(16, "access denied");
 
 export function readStream(cache: Cache, stream: unknown): Uint8Array {
@@ -62,8 +66,12 @@ export function readStream(cache: Cache, stream: unknown): Uint8Array {
       if (!bytes) throw pluginError(101, "the stream with the specified name is not in the cache");
       return bytes;
     }
-    case "file":
-      throw accessDenied();
+    case "file": {
+      if (typeof stream.path !== "string") throw invalidStructure();
+      const bytes = cache.files?.read(stream.path);
+      if (!bytes) throw accessDenied();
+      return bytes;
+    }
   }
   throw invalidStructure();
 }
@@ -72,6 +80,7 @@ export function readStream(cache: Cache, stream: unknown): Uint8Array {
 export function checkSink(sink: unknown): void {
   if (!isObject(sink)) throw invalidStructure();
   if (sink.type === "cache" && typeof sink.name !== "string") throw invalidStructure();
+  if (sink.type === "file" && typeof sink.path !== "string") throw invalidStructure();
   if (!["base64", "hex", "cache", "file"].includes(String(sink.type))) throw invalidStructure();
 }
 
@@ -87,7 +96,9 @@ export function writeStream(cache: Cache, sink: unknown, bytes: Uint8Array): Str
       cache.set(String(target.name), bytes);
       return { name: String(target.name), size: bytes.length, type: "cache" };
   }
-  throw accessDenied();
+  if (!cache.files) throw accessDenied();
+  cache.files.write(String(target.path), bytes);
+  return { path: String(target.path), size: bytes.length, type: "file" };
 }
 
 // The host's answer for a hash of the wrong length (crypto.signHash).
