@@ -56,7 +56,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
 - `node scripts/setup-kontur.ts` — after `npm run stand`: fetch the real Kontur.Plugin package (an optional
   `vendor-lock.json` entry, never committed) and unpack its native host under `stand/kontur` on the fork, with a copy of
   the stand HOME, as the reference for emulating it (a GTK program: Xvfb as for Gosplugin); `tests/stand/kontur.ts` talks
-  to it over Native Messaging.
+  to it over Native Messaging. Then, after a build, `STAND_KONTUR=1 npx playwright test tests/stand/kontur-reference.spec.ts`
+  — the opt-in comparison of the extension's Kontur.Plugin with the real host on that token copy.
 - `node scripts/import-roots.ts <lsb-cprocsp-ca-certs .deb>` — regenerate `src/extension/builtin-roots.ts` from a new
   CryptoPro CSP release (the package comes with the CSP download, after logging in to CryptoPro's site).
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
@@ -97,7 +98,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   messages, `messages.ts` the extension's and the core's answers, `api.ts` the objects `loadScripts` puts on the page,
   `core.ts` the core's methods, `config.ts` its catalog, `xmldsig.ts`, `smev-transform.ts` for normalize), `kontur/`
   (Kontur.Plugin: `kontur-plugin.ts` the page's kontur-toolbox messages, the mark on Kontur's domains and the
-  extension's own commands, `commands.ts` the host's commands, `errors.ts` its error answers),
+  extension's own commands, `commands.ts` the host's commands, `errors.ts` its error answers, `streams.ts` its data
+  sources and sinks, `certificate.ts` a certificate's fields as it names them, `signing.ts` its signatures and checks),
   `settings.ts` (asks the bridge for IFCPlugin's PIN switch and Kontur.Plugin's client id), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
@@ -169,7 +171,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   certsrv calls offline on a copy of the token, with the question about the root; `ifc.spec.ts` IFCPlugin's protocol
   and functions, its signatures checked independently, key and request on a copy of the token; `gosplugin.spec.ts`
   Gosplugin's messages, loaded objects and methods, likewise; `kontur.spec.ts` Kontur.Plugin's page messages and
-  commands; `gosplugins-reference.spec.ts` (opt-in) the same requests
+  commands, its signatures checked independently; `kontur-reference.spec.ts` (opt-in) the same requests to the real host
+  and to the extension; `gosplugins-reference.spec.ts` (opt-in) the same requests
   to the real cores and to the extension, compared, each verifying the other's signatures; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `webtools.spec.ts` runs CryptoPro's `webtools.html`
   (readers and containers, signing with CAdES-T and XAdES, encryption); `openssl-gost.spec.ts` (opt-in) checks encryption against OpenSSL's GOST
@@ -179,7 +182,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   message, and starts `tsa.py`; `gosplugins.ts` talks to the Gosuslugi plug-ins' cores over Native Messaging and
   types into Gosplugin's PIN window on Xvfb.
 - `tests/tools/` — independent Python GOST tooling (`gost_ca.py` test CA, checking a request's signature, and its empty CRL, `verify_cms.py` CMS verifier with CAdES-T
-  timestamps, `tsa.py` RFC 3161 timestamp service with a certificate from the test CA, `verify_xmldsig.py` XMLDSig and XAdES
+  timestamps and signers without signed attributes, `tsa.py` RFC 3161 timestamp service with a certificate from the test CA, `verify_xmldsig.py` XMLDSig and XAdES
   verifier on lxml, `verify_raw.py` RawSignature's bare signatures, `enveloped_info.py` what an EnvelopedData is encrypted with and for), hash-pinned in
   `requirements.txt`.
 

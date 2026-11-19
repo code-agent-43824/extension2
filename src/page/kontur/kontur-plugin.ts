@@ -6,7 +6,7 @@
 import { pageSession } from "../page-session.ts";
 import type { Clock } from "../rutoken.ts";
 import { pageSettings } from "../settings.ts";
-import { answerCommand, newKonturContext, type KonturContext } from "./commands.ts";
+import { answerCommand, newKonturContext, sortKeys, type KonturContext } from "./commands.ts";
 import { KonturError } from "./errors.ts";
 
 export const REQUEST_TYPE = "kontur-toolbox-request";
@@ -87,10 +87,12 @@ export function startKonturPlugin(win: Win, clock: Clock): void {
         post({ sessionId, error: { type: "connect", message: "Specified native messaging host not found." } });
         return;
       }
+      // The host's envelope: its keys in order, no result key when there is nothing to answer.
       try {
-        post({ sessionId, commandId, result: await answerCommand(ready, { ...request, hostUri: event.origin }) });
+        const result = await answerCommand(ready, { ...request, hostUri: event.origin });
+        post(result === undefined ? { commandId, sessionId } : { commandId, result, sessionId });
       } catch (error) {
-        post({ sessionId, commandId, error: KonturError.of(error).answer });
+        post({ commandId, error: sortKeys(KonturError.of(error).answer), sessionId });
       }
     });
   };

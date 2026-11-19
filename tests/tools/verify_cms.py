@@ -3,7 +3,8 @@
 Shares no code with the extension or the Rutoken stack: its own DER walk, Streebog and
 GOST signatures from gostcrypto. Checks that
 - the Streebog digest of the content equals the messageDigest signed attribute;
-- the signature over the signed attributes verifies with the signer certificate's key;
+- the signature over the signed attributes verifies with the signer certificate's key, or, for a
+  signer without signed attributes (RFC 5652, 5.4), the signature over the content itself;
 - the signer certificate is signed by the given CA;
 - for a signature with a signature-time-stamp attribute (CAdES-T): the token's message imprint is
   the Streebog hash of the signature value, the token's own signature verifies with the TSA
@@ -171,6 +172,19 @@ def verify_timestamp(token_der, signature, ca_point, checks, report):
         checks["timestamp_tsa_by_ca"] = False
 
 
+def verify_bare(report, signer, certificates, signer_serial, content, ca_pem):
+    signature = signer[4][1]
+    cert = next(c for c in certificates if certificate_parts(c)[2] == signer_serial)
+    cert_tbs, cert_signature, _, point = certificate_parts(cert)
+    _, _, _, ca_point = certificate_parts(unpem(ca_pem))
+    checks = report["checks"]
+    checks["signature"] = gost_verify(point, content, signature)
+    checks["certificate_by_ca"] = gost_verify(ca_point, cert_tbs, cert_signature)
+    report["unsigned_attributes"] = []
+    report["valid"] = all(checks.values())
+    return report
+
+
 def verify(cms_b64, ca_pem, content=None):
     report = {"valid": False, "detached": None, "attributes": [], "checks": {}}
     data = base64.b64decode("".join(cms_b64.split()))
@@ -197,7 +211,8 @@ def verify(cms_b64, ca_pem, content=None):
     signer_serial = sid[1][1]
     attrs_tag, attrs_value, attrs_raw = signer[3]
     if attrs_tag != 0xA0:
-        raise ValueError("no signed attributes")
+        # RFC 5652, 5.4: without signed attributes the signature covers the content itself.
+        return verify_bare(report, signer, certificates, signer_serial, content, ca_pem)
     signature = signer[5][1]
 
     message_digest = None

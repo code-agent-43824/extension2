@@ -578,9 +578,12 @@
   расширения, `extension.uninstall` — отказ «bad request» (своё расширение не удаляется), `plugin.info` — `denied:
   false`, постоянный `clientId` (`KONTUR_CLIENT_ID_KEY`), `platform` по системе браузера (на хосте видели только
   «linux»); прочие ошибки — `plugin` с кодом 0 (выбор агента).
-- [ ] **58. Сертификаты и подпись.** Токены, провайдеры, контейнеры, `cert.search`, `cert.parse`, `crypto.sign`,
+- [x] **58. Сертификаты и подпись.** Токены, провайдеры, контейнеры, `cert.search`, `cert.parse`, `crypto.sign`,
   `crypto.verify`, `crypto.signHash`, `crypto.rawSign`, `crypto.rawVerify`, `crypto.signature.parse`,
   `crypto.signature.addSigner`; источники и приёмники данных (`base64`, `hex`, `cache`, `file`).
+  Сделано: `streams.ts`, `certificate.ts`, `signing.ts`; подписи — `sign()` Рутокен Плагина, без атрибутов и второй
+  подписант — своя CMS вокруг `rawSign`; файлы — «access denied», пока нет окон файлов (61); `qualified` — `false`,
+  правила — при `cert.verify` (61). Сверка с хостом (`kontur-reference.spec.ts`) — 3 из 3, правила — `JOURNAL.md`.
 - [ ] **59. Шифрование.** `crypto.encrypt`, `crypto.decrypt`, `crypto.encryption.parse`.
 - [ ] **60. Выпуск сертификата.** `crypto.createCertRequest`, `crypto.installCert`, `cert.store.install`,
   `cert.store.remove`.
