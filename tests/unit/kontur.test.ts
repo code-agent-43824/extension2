@@ -40,6 +40,8 @@ describe("Kontur.Plugin", () => {
     await expect(setup().ask("no.such")).rejects.toMatchObject({ answer: { type: "plugin", code: 2, message: "PLUGIN[0x00000002] unknown command" } });
     expect(KonturError.of(new CadesError("cancelled", SCARD_W_CANCELLED_BY_USER)).answer).toEqual({ type: "crypto", code: 51, context: "", message: "CRYPTO[0x00000033] the pkcs11 session is not authorized" });
     expect(KonturError.of(new Error("boom")).answer).toEqual({ type: "plugin", code: 0, message: "PLUGIN[0x00000000] boom" });
+    // The Rutoken Plugin rejects with an object whose message is its error code.
+    expect(KonturError.of({ message: 20 }).answer).toEqual({ type: "plugin", code: 0, message: "PLUGIN[0x00000000] Rutoken Plugin error 20" });
   });
 
   it("reads key usage bits as the host does, counting from the first one set (fourteen sets checked on the host)", () => {

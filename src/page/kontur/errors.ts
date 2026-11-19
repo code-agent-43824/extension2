@@ -1,6 +1,7 @@
 // Kontur.Plugin's errors as its host answers them (docs/JOURNAL.md, 2026-11-19): {type, code, message[, context]},
 // the message prefixed with the kind and the code in hex, "PLUGIN[0x00000003] invalid command structure".
 import { CadesError } from "../errors.ts";
+import { rutokenErrorCode } from "../rutoken.ts";
 import { SCARD_W_CANCELLED_BY_USER } from "../token-login.ts";
 
 export interface KonturErrorAnswer {
@@ -21,10 +22,12 @@ export class KonturError extends Error {
   }
 
   // Any failure as the host's error: the cancelled PIN window as the host's cancelled one, the rest as a plug-in
-  // error with code 0 (no such answer of the host was seen; the agent's choice).
+  // error with code 0 (no such answer of the host was seen; the agent's choice), the Rutoken Plugin's by its code.
   static of(error: unknown): KonturError {
     if (error instanceof KonturError) return error;
     if (error instanceof CadesError && error.number === SCARD_W_CANCELLED_BY_USER) return notAuthorized();
+    const code = rutokenErrorCode(error);
+    if (code !== undefined) return pluginError(0, `Rutoken Plugin error ${code}`);
     return pluginError(0, error instanceof Error ? error.message : String(error));
   }
 }
