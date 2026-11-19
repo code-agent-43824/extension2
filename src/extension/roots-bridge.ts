@@ -11,9 +11,18 @@ import { TSA_ACCESS_MESSAGE, TSA_FETCH_MESSAGE, type TsaAccessMessage, type TsaF
 import { SETTINGS_REQUEST, SETTINGS_RESPONSE, type SettingsRequest, type SettingsResponse } from "../page/settings.ts";
 import { IDENTITY_REQUEST, IDENTITY_RESPONSE, type IdentityRequest, type IdentityResponse } from "../page/identity.ts";
 import { IDENTITY_MESSAGE } from "./identity.ts";
-import { BRIDGE_MARKER, ifcPinWindow } from "./sites.ts";
+import { BRIDGE_MARKER, ifcPinWindow, KONTUR_CLIENT_ID_KEY } from "./sites.ts";
 
 const E_FAIL = 0x80004005;
+
+// Kontur.Plugin's client id: a UUID made the first time a site asks, then kept, as the real host keeps its own.
+async function konturClientId(): Promise<string> {
+  const stored = (await chrome.storage.local.get(KONTUR_CLIENT_ID_KEY))[KONTUR_CLIENT_ID_KEY];
+  if (typeof stored === "string") return stored;
+  const made = crypto.randomUUID();
+  await chrome.storage.local.set({ [KONTUR_CLIENT_ID_KEY]: made });
+  return made;
+}
 
 // For the service worker's check after the browser starts (sites.ts, reloadTabsWithoutScript).
 (globalThis as Record<string, unknown>)[BRIDGE_MARKER] = true;
@@ -43,7 +52,9 @@ window.addEventListener("message", (event: MessageEvent) => {
     };
     chrome.runtime.sendMessage({ type: IDENTITY_MESSAGE }).then(answer, () => answer(undefined));
   } else if (data.type === SETTINGS_REQUEST) {
-    void ifcPinWindow().then((asked) => window.postMessage({ type: SETTINGS_RESPONSE, id, ifcPinWindow: asked } satisfies SettingsResponse, "*"));
+    void Promise.all([ifcPinWindow(), konturClientId()]).then(([asked, clientId]) =>
+      window.postMessage({ type: SETTINGS_RESPONSE, id, ifcPinWindow: asked, konturClientId: clientId } satisfies SettingsResponse, "*"),
+    );
   } else if (data.type === ADD_REQUEST) {
     const { store, certificate } = data as Partial<AddRequest>;
     const answer = (result: AddResult) => window.postMessage({ type: ADD_RESPONSE, id, error: result?.error } satisfies AddResponse, "*");

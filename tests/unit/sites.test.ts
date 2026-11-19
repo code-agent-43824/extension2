@@ -293,7 +293,7 @@ describe("plug-ins of a site", () => {
 
   it("keeps a list per plug-in, CryptoPro's under the key of the single list before them", async () => {
     const chrome = fakeChrome();
-    expect(LIST_KEYS).toEqual({ cryptopro: "sites", ifc: "ifcSites", gos: "gosSites" });
+    expect(LIST_KEYS).toEqual({ cryptopro: "sites", ifc: "ifcSites", gos: "gosSites", kontur: "konturSites" });
     expect(await enableSite("https://a.example", chrome.api, undefined, ["ifc", "gos"])).toBe(true);
     expect(await enableSite("https://b.example", chrome.api)).toBe(true);
     expect(chrome.store).toMatchObject({ sites: ["https://b.example"], ifcSites: ["https://a.example"], gosSites: ["https://a.example"] });
@@ -313,9 +313,11 @@ describe("plug-ins of a site", () => {
     expect(shimScript(["cryptopro"])).toEqual({ id: SCRIPT_ID, js: ["page.js"] });
     expect(shimScript(["gos", "cryptopro"])).toEqual({ id: "shim-cryptopro-gos", js: ["modes/cryptopro.js", "modes/gos.js", "page.js"] });
     expect(shimScript(["ifc"])).toEqual({ id: "shim-ifc", js: ["modes/ifc.js", "page.js"] });
-    expect(new Set(SHIM_IDS).size).toBe(7);
+    expect(shimScript(["kontur"])).toEqual({ id: "shim-kontur", js: ["modes/kontur.js", "page.js"] });
+    expect(new Set(SHIM_IDS).size).toBe(15);
     expect(SHIM_IDS).toContain(SCRIPT_ID);
     expect(SHIM_IDS).toContain("shim-cryptopro-ifc-gos");
+    expect(SHIM_IDS).toContain("shim-cryptopro-ifc-gos-kontur");
   });
 
   it("registers page.js once per set of plug-ins in use, and the bridge on every enabled site", async () => {

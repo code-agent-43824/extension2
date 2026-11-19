@@ -23,7 +23,7 @@ import { IDENTITY_KEY, newIdentity, storedIdentity } from "./identity.ts";
 
 const byId = (id: string) => document.getElementById(id)!;
 
-const PLUGIN_NAMES: Record<Plugin, string> = { cryptopro: "КриптоПро", ifc: "Плагин Госуслуг (IFCPlugin)", gos: "Госплагин" };
+const PLUGIN_NAMES: Record<Plugin, string> = { cryptopro: "КриптоПро", ifc: "Плагин Госуслуг (IFCPlugin)", gos: "Госплагин", kontur: "Контур.Плагин" };
 
 // One address a line, with the button that undoes it, and before the button what `extra` adds.
 function renderList(listId: string, emptyId: string, items: string[], label: string, undo: (item: string) => Promise<void>, extra?: (item: string) => Promise<Node>): Promise<void> {

@@ -42,7 +42,7 @@ const bytes = (text: string) => Uint8Array.from(atob(text), (char) => char.charC
 function setup(overrides: Partial<RutokenPlugin> = {}, ifcPinWindow = false, dialog = new FakePinDialog([])) {
   const plugin = fakePlugin([pem], overrides);
   const frames: Record<string, unknown>[] = [];
-  const context = createContext(fakeSession(plugin, dialog), Promise.resolve({ ifcPinWindow }), (frame) => frames.push(frame));
+  const context = createContext(fakeSession(plugin, dialog), Promise.resolve({ ifcPinWindow, konturClientId: "00000000-0000-4000-8000-000000000000" }), (frame) => frames.push(frame));
   const ask = (func_name: string, params: Record<string, unknown> = {}) => answer(context, { func_name, params });
   return { plugin, context, frames, ask, dialog };
 }

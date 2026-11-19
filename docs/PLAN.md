@@ -572,8 +572,12 @@
   `hostUri`, чанки). Снять ответы и ошибки команд всех выбранных групп; итог — `JOURNAL.md`.
   Сделано: хост на стенде, транспорт, ответы каркаса, сертификатов, подписи, шифрования, `io` и PIN (`JOURNAL.md`,
   2026-11-19); запрос сертификата, установка, `http.request`, окна — при действиях 60–61.
-- [ ] **57. Включение «Контур.Плагин».** Четвёртый список сайтов и переключатель в окне кнопки и в настройках, флаговый
+- [x] **57. Включение «Контур.Плагин».** Четвёртый список сайтов и переключатель в окне кнопки и в настройках, флаговый
   скрипт page.js, метка и транспорт страницы, `plugin.info` и `extension.info`.
+  Сделано: `kontur` в `PLUGINS`, список `konturSites`, `src/page/kontur/`; `extension.info` — id и версия настоящего
+  расширения, `extension.uninstall` — отказ «bad request» (своё расширение не удаляется), `plugin.info` — `denied:
+  false`, постоянный `clientId` (`KONTUR_CLIENT_ID_KEY`), `platform` по системе браузера (на хосте видели только
+  «linux»); прочие ошибки — `plugin` с кодом 0 (выбор агента).
 - [ ] **58. Сертификаты и подпись.** Токены, провайдеры, контейнеры, `cert.search`, `cert.parse`, `crypto.sign`,
   `crypto.verify`, `crypto.signHash`, `crypto.rawSign`, `crypto.rawVerify`, `crypto.signature.parse`,
   `crypto.signature.addSigner`; источники и приёмники данных (`base64`, `hex`, `cache`, `file`).

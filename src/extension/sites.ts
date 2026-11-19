@@ -1,6 +1,6 @@
 // Which sites the page-world script runs on, and as which plug-ins: CryptoPro's, IFCPlugin (the old Gosuslugi
-// plug-in) and Gosplugin, each turned on by the user per site (docs/PLAN.md of stage 8). Each plug-in's list lives in
-// chrome.storage.local; access to a site is one optional host permission for all three, requested when the user turns
+// plug-in), Gosplugin and Kontur.Plugin, each turned on by the user per site (docs/PLAN.md of stages 8 and 9). Each
+// plug-in's list lives in chrome.storage.local; access to a site is one optional host permission for all of them, requested when the user turns
 // the first one on. page.js is registered only for sites that are both listed and accessible, so a site the user never
 // enabled sees nothing from us (docs/PLAN.md of stage 5). It learns which plug-ins to be from the flag scripts
 // registered before it (src/page/modes.ts).
@@ -18,7 +18,9 @@ export const BRIDGE_ID = "cades-roots";
 export const BRIDGE_MARKER = "rutokenCadesBridge";
 // The plug-ins' site lists. CryptoPro's keeps the key of the single list before stage 8.
 export const STORAGE_KEY = "sites";
-export const LIST_KEYS: Record<Plugin, string> = { cryptopro: STORAGE_KEY, ifc: "ifcSites", gos: "gosSites" };
+export const LIST_KEYS: Record<Plugin, string> = { cryptopro: STORAGE_KEY, ifc: "ifcSites", gos: "gosSites", kontur: "konturSites" };
+// Kontur.Plugin's client id, made once (src/page/kontur/kontur-plugin.ts).
+export const KONTUR_CLIENT_ID_KEY = "konturClientId";
 // What the user chose for the PIN a site passes to IFCPlugin: true — ask it in the extension's window instead.
 export const IFC_PIN_WINDOW_KEY = "ifcPinWindow";
 // The origins of the timestamp services the user let the extension reach (timestamps.ts).

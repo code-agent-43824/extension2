@@ -95,7 +95,7 @@ test("the button's popup switches the current site on and reloads it", async () 
   await popup.goto(`${await extensionOrigin(context)}/popup.html`);
   await expect(popup.locator("#site")).toHaveText(server.url);
   await expect(popup.getByRole("link", { name: "Настройки" })).toHaveAttribute("href", "options.html");
-  await expect(popup.locator("#plugins label")).toHaveText(["КриптоПро ЭЦП Browser plug-in", "Плагин Госуслуг (IFCPlugin)", "Госплагин"]);
+  await expect(popup.locator("#plugins label")).toHaveText(["КриптоПро ЭЦП Browser plug-in", "Плагин Госуслуг (IFCPlugin)", "Госплагин", "Контур.Плагин"]);
   const checkbox = popup.locator("input[name=cryptopro]");
   await expect(checkbox).not.toBeChecked();
   // click, not check(): the popup closes itself before check() could see the box ticked.

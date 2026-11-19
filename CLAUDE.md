@@ -53,6 +53,10 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   of the stand HOME, as the reference for emulating them (Gosplugin's PIN window needs `xvfb`, `xdotool`, `x11-utils` from apt).
   Then, after a build, `STAND_GOSPLUGINS=1 npx playwright test tests/stand/gosplugins-reference.spec.ts` — the opt-in
   comparison of the extension's IFCPlugin and Gosplugin with the real cores on that token copy.
+- `node scripts/setup-kontur.ts` — after `npm run stand`: fetch the real Kontur.Plugin package (an optional
+  `vendor-lock.json` entry, never committed) and unpack its native host under `stand/kontur` on the fork, with a copy of
+  the stand HOME, as the reference for emulating it (a GTK program: Xvfb as for Gosplugin); `tests/stand/kontur.ts` talks
+  to it over Native Messaging.
 - `node scripts/import-roots.ts <lsb-cprocsp-ca-certs .deb>` — regenerate `src/extension/builtin-roots.ts` from a new
   CryptoPro CSP release (the package comes with the CSP download, after logging in to CryptoPro's site).
 - `npx vitest run tests/unit/crx.test.ts` — a single test file; add `-t "<name>"` for one test.
@@ -64,8 +68,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   script: page.js is registered at run time for the enabled sites only.
 - `src/extension/` — the extension's own side, with Chrome types (`src/extension/tsconfig.json`): `browser.ts` (which
   browser the build is for, `__BROWSER__` from `scripts/build.ts`), `sites.ts` (the
-  enabled-site lists in `chrome.storage.local`, one per plug-in played — `LIST_KEYS`: CryptoPro's, IFCPlugin, Gosplugin
-  —, one optional host permission per site for all — in Firefox without the port, its
+  enabled-site lists in `chrome.storage.local`, one per plug-in played — `LIST_KEYS`: CryptoPro's, IFCPlugin, Gosplugin,
+  Kontur.Plugin —, one optional host permission per site for all — in Firefox without the port, its
   patterns with one inject nothing —, the confirmed timestamp services' list, taking access back only when nothing
   listed needs it, registering page.js once per set of plug-ins in use (`shimScript`: CryptoPro's alone keeps
   `cades-shim` without a flag script), changed in place, a site moving between sets added before it is removed;
@@ -78,7 +82,7 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `chrome.storage.local`: the built-in roots, and the roots of other CAs and intermediates added from files, a
   self-signed one counting as a root) + `roots-view.ts` (their tabs and cards on the options page) + `roots-bridge.ts`
   (isolated-world content script registered beside page.js, handing it the enabled roots, intermediates, the
-  extended validity switch and IFCPlugin's PIN switch over postMessage, and passing Store.Add and XAdES-T's timestamp requests on to the service
+  extended validity switch, IFCPlugin's PIN switch and Kontur.Plugin's client id (`KONTUR_CLIENT_ID_KEY`, made once) over postMessage, and passing Store.Add and XAdES-T's timestamp requests on to the service
   worker) + `install.ts` (Store.Add in the service worker: a root only after the user's yes in `confirm.*`, the
   extension's own window worded after Windows' root warning) + `timestamps.ts` (XAdES-T's request to a timestamp
   service, posted by the service worker only to the services the user confirmed in `tsa-access.*`, which also makes
@@ -91,8 +95,10 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   `openssl-text.ts` a certificate printed as the core's OpenSSL prints it, `ws-security.ts` sign_xml's template,
   `request.ts` req_gen's PKCS#10; `cp1251.ts` the container names), `gos/` (Gosplugin: `gos-plugin.ts` the page's
   messages, `messages.ts` the extension's and the core's answers, `api.ts` the objects `loadScripts` puts on the page,
-  `core.ts` the core's methods, `config.ts` its catalog, `xmldsig.ts`, `smev-transform.ts` for normalize),
-  `settings.ts` (asks the bridge for IFCPlugin's PIN switch), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
+  `core.ts` the core's methods, `config.ts` its catalog, `xmldsig.ts`, `smev-transform.ts` for normalize), `kontur/`
+  (Kontur.Plugin: `kontur-plugin.ts` the page's kontur-toolbox messages, the mark on Kontur's domains and the
+  extension's own commands, `commands.ts` the host's commands, `errors.ts` its error answers),
+  `settings.ts` (asks the bridge for IFCPlugin's PIN switch and Kontur.Plugin's client id), `identity.ts` (Gosplugin's made-up user, computer and network adapters, from the bridge), `cadesplugin.ts`
   (the `window.cadesplugin` promise, callbacks, timeouts, postMessage answers) + `spawn.ts` (`async_spawn` for sites
   driving the API through generators), `rutoken.ts` (waiting for the
   Rutoken adapter object and loading the plugin), `objects/` (emulated CAdESCOM objects, looked up
@@ -126,7 +132,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   PINs, paths), `provision-token.ts` (key + certificate on the fake token; `provisionKey` for a 512-bit key or a copy of the HOME), `setup-cryptopro-csp.ts` (the real
   CryptoPro CSP + plug-in, a key in a CryptoPro file container, a stand profile copy with CryptoPro's native host),
   `setup-gosplugins.ts` (the Gosuslugi plug-ins' cores and their HOME; keys without a zero byte or "/" in `CKA_ID`:
-  IFCPlugin's core reads it as a C string and splits its container ids on "/").
+  IFCPlugin's core reads it as a C string and splits its container ids on "/"), `setup-kontur.ts` (Kontur.Plugin's
+  host and its HOME).
 - `tools/` — pasted by hand into the DevTools console on a cadesplugin page, with CryptoPro or with ours
   (`docs/MANUAL-CHECK.md`, the manual install and checklist): `dump-fields.js` dumps the plug-in and certificate
   fields and what `Find` picks as JSON, without a PIN, and `scripts/compare-fields.ts` diffs a real-CryptoPro dump
@@ -161,7 +168,8 @@ point and the CAdESCOM-to-CryptoPlugin mapping are in `docs/ANALYSIS.md`; stages
   on the options page; `validity.spec.ts` the extended validity check and the demo page adding its root; `enrollment.spec.ts` the
   certsrv calls offline on a copy of the token, with the question about the root; `ifc.spec.ts` IFCPlugin's protocol
   and functions, its signatures checked independently, key and request on a copy of the token; `gosplugin.spec.ts`
-  Gosplugin's messages, loaded objects and methods, likewise; `gosplugins-reference.spec.ts` (opt-in) the same requests
+  Gosplugin's messages, loaded objects and methods, likewise; `kontur.spec.ts` Kontur.Plugin's page messages and
+  commands; `gosplugins-reference.spec.ts` (opt-in) the same requests
   to the real cores and to the extension, compared, each verifying the other's signatures; `with-cryptopro-csp.spec.ts` (opt-in)
   does the same with the real CryptoPro plug-in behind it; `webtools.spec.ts` runs CryptoPro's `webtools.html`
   (readers and containers, signing with CAdES-T and XAdES, encryption); `openssl-gost.spec.ts` (opt-in) checks encryption against OpenSSL's GOST

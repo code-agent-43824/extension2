@@ -4,6 +4,7 @@
 import { createCadesplugin } from "./cadesplugin.ts";
 import { startGosplugin } from "./gos/gos-plugin.ts";
 import { startIfcPlugin } from "./ifc/ifc-plugin.ts";
+import { startKonturPlugin } from "./kontur/kontur-plugin.ts";
 import { takePlugins } from "./modes.ts";
 
 const page = window as unknown as Window & Record<string | symbol, unknown>;
@@ -17,4 +18,5 @@ if (!page[RUNNING]) {
   if (plugins.includes("cryptopro") && !page.cadesplugin) page.cadesplugin = createCadesplugin(page, clock);
   if (plugins.includes("ifc")) startIfcPlugin(page, clock);
   if (plugins.includes("gos")) startGosplugin(page, clock);
+  if (plugins.includes("kontur")) startKonturPlugin(page, clock);
 }
