@@ -2,6 +2,36 @@
 
 Новые записи сверху.
 
+## 2026-11-19 — Контур.Плагин: хранилище `My` CryptoAPI, места хранилищ и команды хоста под Linux
+
+**Вопрос.** Владелец: «да так же как для госплагина» — сертификаты токенов в хранилище `My` CryptoAPI. Заодно — какие
+ещё команды есть у хоста 4.15.1 под Linux, чтобы предложить их владельцу.
+
+**Что сделали.** `cert.search` по хранилищам `cryptoApi` и пустой запрос каждой команды из списка хоста — у хоста
+стенда; вызовы в клиенте Контура (диагностика `install.kontur.ru`).
+
+**Что показала проверка.**
+- Клиент Контура ищет в CryptoAPI так: `cert.search {filter: {store: {storeType: "cryptoApi", name, location}}}`, имена
+  `My`, `Root`, `CA`, `AddressBook`, места — `"user"` и `"machine"`. Хост под Linux на них — `[]`, в том числе для
+  `My`; иное место — «invalid enumeration value». Прежде мы так отвечали на любое место — ошибка, исправлена.
+- `cert.verify` клиент зовёт при показе списка сертификатов и по ответу ставит сертификату пометку КЭП (`ok`);
+  ошибку он глотает (`.anyway`), и сертификат остаётся в списке без пометки.
+- Команды хоста под Linux, кроме сделанных: «unknown command» и у него — `cert.select`, `cert.display`,
+  `fs.getShellLinkInfo`, `fs.getMountedVolumes`, `os.userInfo`, `os.smbConnect`, `os.getStandardFolders`,
+  `addon.info`; отвечают — `machine.uniqueId` (строка из 64 hex), `os.info` (`{bitness, family, name, release}`);
+  ждут поля (код 3 на пустой запрос) — `plugin.config.set`, `cert.copyContainer`, `io.delete`, `io.transfer`,
+  `io.getInfo`, `fs.ls`, `fs.getFileInfo`, `fs.getDiskFreeSpace`, `crypto.rawEncrypt`, `crypto.rawDecrypt`,
+  `crypto.provider.getCarriers`, `cryptopro.carriers`, `archive.zip`/`unzip`/`gzip`/`ungzip`/`zip.addEntry`/
+  `zip.extract`/`zip.getEntries`/`zip.getEntry`, `os.getEnvironmentVariable`, `os.openDocument`,
+  `crypto.provider.deleteContainer`, `crypto.container.getProperties`, `crypto.container.cryptopro.setExtension`/
+  `getExtension`, `hash.md5`/`sha256`/`crc32`; лицензия КриптоПро (`cryptopro.getLicense`,
+  `crypto.provider.cryptopro.getLicense`/`licenseInfo`) — `plugin` 207 «invalid cryptopro license». В диагностике
+  Контура вызываются `machine.uniqueId`, `crypto.provider.cryptopro.getLicense`,
+  `crypto.container.cryptopro.getExtension`.
+
+**Вывод.** `My` CryptoAPI отдаёт сертификаты токенов, как `pkcs11` (решение владельца, `CLAUDE.md`), прочие
+хранилища пусты; места `user` и `machine` принимаются. Список остальных команд — на выбор владельцу.
+
 ## 2026-11-19 — Контур.Плагин: окна файлов, файлы и `http.request` у хоста
 
 **Вопрос.** Что отвечают `ui.openFile`, `ui.saveFile`, `ui.selectFolder`, как хост пускает к файлам и как делает

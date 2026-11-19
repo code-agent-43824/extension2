@@ -90,7 +90,8 @@ test("lists the token, the provider, containers and certificates as the host doe
   const certificates = (answer: KonturAnswer) =>
     answer.result.map(({ containerInfo, ...rest }: Record<string, any>) => ({ ...rest, containerInfo: { ...containerInfo, containerName: undefined } })).sort((a: any, b: any) => a.hash.data.localeCompare(b.hash.data));
   expect(certificates(await ours("cert.search", search))).toEqual(certificates(await theirs("cert.search", search)));
-  for (const filter of [{ store: { storeType: "pkcs11", slot: "nope" } }, { store: { storeType: "pkcs11" }, qualified: true }, { store: { storeType: "cryptoApi", name: "My" } }]) {
+  // Not CryptoAPI's My: the tokens' certificates are there on purpose (CLAUDE.md), the host has none.
+  for (const filter of [{ store: { storeType: "pkcs11", slot: "nope" } }, { store: { storeType: "pkcs11" }, qualified: true }, { store: { storeType: "cryptoApi", name: "Root", location: "user" } }, { store: { storeType: "cryptoApi", name: "My", location: "other" } }]) {
     expect(outcome(await ours("cert.search", { filter, properties: {} })), JSON.stringify(filter)).toEqual(outcome(await theirs("cert.search", { filter, properties: {} })));
   }
 });

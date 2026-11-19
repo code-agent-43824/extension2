@@ -137,7 +137,13 @@ test.describe("on the stand token", () => {
     expect(found.subject).toContainEqual({ СНИЛС: "00000000000" });
     expect((await ask(page, "cert.search", { filter: { store: { storeType: "pkcs11" } }, properties: {} })).result).toEqual([{ hash: byHash.hash }]);
     // CryptoAPI's stores: none on Linux, and no location taken, as the host there answers.
-    expect((await ask(page, "cert.search", { filter: { store: { storeType: "cryptoApi", name: "My" } }, properties: {} })).result).toEqual([]);
+    // CryptoAPI's personal store holds the token's certificate (the owner's decision), the others nothing.
+    for (const store of [{ name: "My" }, { name: "my", location: "user" }, { name: "My", location: "machine" }, { storeName: "My", storeLocation: "user" }]) {
+      expect((await ask(page, "cert.search", { filter: { store: { storeType: "cryptoApi", ...store } }, properties: {} })).result, JSON.stringify(store)).toEqual([{ hash: byHash.hash }]);
+    }
+    expect((await ask(page, "cert.search", { filter: { storeName: "My", storeLocation: "user" }, properties: {} })).result).toEqual([{ hash: byHash.hash }]);
+    expect((await ask(page, "cert.search", { filter: { store: { storeType: "cryptoApi", name: "Root", location: "user" } }, properties: {} })).result).toEqual([]);
+    expect((await ask(page, "cert.search", { filter: { store: { storeType: "cryptoApi", location: "user" } }, properties: {} })).result).toEqual([]);
     expect((await ask(page, "cert.search", { filter: { store: { storeType: "cryptoApi", name: "My", location: "CurrentUser" } }, properties: {} })).error).toEqual({ message: "invalid enumeration value" });
     const parsed = (await ask(page, "cert.parse", { cert: { content: { type: "base64", data: Buffer.from(user.der).toString("base64") } }, properties: { hasPrivateKey: true, containerInfo: true } })).result;
     expect(parsed).toEqual({ containerInfo: {}, hasPrivateKey: false, hash: byHash.hash });

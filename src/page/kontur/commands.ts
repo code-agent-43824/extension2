@@ -146,28 +146,37 @@ async function containers(context: KonturContext, request: Request): Promise<unk
 
 const sameHex = (a: unknown, b: string) => typeof a === "string" && a.replace(/[^0-9a-f]/gi, "").toLowerCase() === b.toLowerCase();
 
+// CryptoAPI's store locations as Kontur's client names them.
+function checkLocation(location: unknown): void {
+  if (location !== undefined && location !== "user" && location !== "machine") throw invalidEnumeration();
+}
+
+// Windows' store names are not case-sensitive, nor is this one.
+const isMyStore = (name: unknown) => typeof name === "string" && name.toLowerCase() === "my";
+
 async function searchCertificates(context: KonturContext, request: Request): Promise<unknown[]> {
   const filter = request.filter;
   if (!isObject(filter)) throw invalidStructure();
-  // CryptoAPI's stores, named in `store` or in the older storeName and storeLocation: the host on Linux has none to
-  // read, and takes no location it is given (docs/JOURNAL.md, 2026-11-19).
+  // CryptoAPI's stores, named in `store` or in the older storeName and storeLocation, in the locations "user" and
+  // "machine": the host on Linux has none to read and answers []; here the personal store `My` holds the tokens'
+  // certificates, as the owner decided (CLAUDE.md), and the others stay empty.
   const store = filter.store;
+  let pkcs11Store: Record<string, unknown> | undefined;
   if (!isObject(store)) {
     if (filter.storeName === undefined) throw invalidStructure();
-    if (filter.storeLocation !== undefined) throw invalidEnumeration();
-    return [];
-  }
-  if (store.storeType === "cryptoApi") {
-    if (store.location !== undefined) throw invalidEnumeration();
-    return [];
-  }
-  if (store.storeType !== "pkcs11") throw invalidStructure();
+    checkLocation(filter.storeLocation);
+    if (!isMyStore(filter.storeName)) return [];
+  } else if (store.storeType === "cryptoApi") {
+    checkLocation(store.location ?? store.storeLocation);
+    if (!isMyStore(store.name ?? store.storeName)) return [];
+  } else if (store.storeType === "pkcs11") pkcs11Store = store;
+  else throw invalidStructure();
   const asked = wanted(request.properties);
   const found = [];
   for (const { certificate, slot } of await tokenCertificates(context)) {
     const x509 = certificate.x509;
-    if (typeof store.slot === "string" && store.slot !== slot) continue;
-    if (typeof store.name === "string" && store.name !== TOKEN_MODEL) continue;
+    if (typeof pkcs11Store?.slot === "string" && pkcs11Store.slot !== slot) continue;
+    if (typeof pkcs11Store?.name === "string" && pkcs11Store.name !== TOKEN_MODEL) continue;
     if (isObject(filter.hash) && !sameHex(filter.hash.data, x509.thumbprint)) continue;
     if (isObject(filter.serialNumber) && !sameHex(filter.serialNumber.data, x509.serialNumber)) continue;
     if (filter.qualified === true && !isQualified(x509)) continue;
